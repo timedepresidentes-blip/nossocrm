@@ -42,6 +42,7 @@ dev_server.log
 .jules/
 .specify/
 .claude/
+.mcp.json
 
 # Temporary files
 tmp/
@@ -91,3 +92,4 @@ test/*.md
 .sb-pentest-*.json
 .sb-pentest-*.log
 debug_navigation_failed_*.png
+.env*.local
