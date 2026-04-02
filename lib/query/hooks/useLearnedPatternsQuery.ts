@@ -75,7 +75,7 @@ export function useLearnMutation() {
 
       return response.json();
     },
-    onSuccess: () => {
+    onSettled: () => {
       // Invalidar queries relacionadas
       queryClient.invalidateQueries({ queryKey: ['ai', 'learnedPatterns'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.ai.orgConfig() });
@@ -103,7 +103,7 @@ export function useClearPatternsMutation() {
 
       return response.json();
     },
-    onSuccess: () => {
+    onSettled: () => {
       // Invalidar queries relacionadas
       queryClient.invalidateQueries({ queryKey: ['ai', 'learnedPatterns'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.ai.orgConfig() });

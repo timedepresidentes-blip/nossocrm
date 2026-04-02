@@ -125,7 +125,7 @@ export function useUpdateAIConfigMutation() {
 
       return data;
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.ai.orgConfig() });
     },
   });
@@ -187,7 +187,7 @@ export function useProvisionStagesMutation() {
 
       return response.json();
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.ai.all });
     },
   });

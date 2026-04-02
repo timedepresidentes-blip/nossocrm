@@ -206,14 +206,16 @@ export function useCreateMessagingChannel() {
 
       return transformChannel(data);
     },
-    onSuccess: (channel) => {
+    onSettled: (channel) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.messagingChannels.all });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.messagingChannels.byUnit(channel.businessUnitId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.messagingChannels.byType(channel.channelType),
-      });
+      if (channel) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.messagingChannels.byUnit(channel.businessUnitId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.messagingChannels.byType(channel.channelType),
+        });
+      }
     },
   });
 }
@@ -247,11 +249,13 @@ export function useUpdateMessagingChannel() {
 
       return transformChannel(data);
     },
-    onSuccess: (channel) => {
+    onSettled: (channel) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.messagingChannels.all });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.messagingChannels.detail(channel.id),
-      });
+      if (channel) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.messagingChannels.detail(channel.id),
+        });
+      }
     },
   });
 }
@@ -294,7 +298,7 @@ export function useUpdateChannelStatus() {
 
       if (error) throw error;
     },
-    onSuccess: (_, { channelId }) => {
+    onSettled: (_, _err, { channelId }) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.messagingChannels.detail(channelId),
       });
@@ -325,7 +329,7 @@ export function useDeleteMessagingChannel() {
 
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.messagingChannels.all });
     },
   });

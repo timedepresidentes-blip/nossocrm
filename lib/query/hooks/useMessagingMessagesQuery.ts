@@ -229,7 +229,7 @@ export function useSendMessage() {
         queryClient.setQueryData(context.queryKey, context.previousMessages);
       }
     },
-    onSuccess: (message, input, context) => {
+    onSuccess: (message, _input, context) => {
       // Replace optimistic message with real one
       queryClient.setQueryData<MessagingMessage[]>(context?.queryKey, (old) => {
         if (!old) return [message];
@@ -237,8 +237,9 @@ export function useSendMessage() {
           m.id === context?.optimisticMessage.id ? message : m
         );
       });
-
-      // Also invalidate conversation to update last_message
+    },
+    onSettled: (_, _err, input) => {
+      // Invalidate conversation to update last_message (runs on both success and error)
       queryClient.invalidateQueries({
         queryKey: queryKeys.messagingConversations.detail(input.conversationId),
       });
@@ -319,7 +320,7 @@ export function useUpdateMessageStatus() {
 
       if (error) throw error;
     },
-    onSuccess: (_, { messageId }) => {
+    onSettled: (_, _err, { messageId }) => {
       // Invalidate the message
       queryClient.invalidateQueries({
         queryKey: queryKeys.messagingMessages.detail(messageId),
@@ -349,10 +350,12 @@ export function useRetryMessage() {
 
       return response.json();
     },
-    onSuccess: (message) => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.messagingMessages.byConversation(message.conversationId),
-      });
+    onSettled: (message) => {
+      if (message) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.messagingMessages.byConversation(message.conversationId),
+        });
+      }
     },
   });
 }

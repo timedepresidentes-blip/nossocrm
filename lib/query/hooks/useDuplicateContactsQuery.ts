@@ -78,7 +78,7 @@ export function useMergeContactsMutation() {
 
       return response.json();
     },
-    onSuccess: () => {
+    onSettled: () => {
       // Full invalidation list — merge touches 8+ tables
       queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.contacts.lists() });

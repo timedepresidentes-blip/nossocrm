@@ -244,7 +244,7 @@ export function useCreateLeadRoutingRule() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.leadRoutingRules.all,
       });
@@ -282,7 +282,7 @@ export function useUpdateLeadRoutingRule() {
       if (error) throw error;
       return { ruleId };
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.leadRoutingRules.all,
       });
@@ -306,7 +306,7 @@ export function useDeleteLeadRoutingRule() {
       if (error) throw error;
       return { ruleId };
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.leadRoutingRules.all,
       });

@@ -152,7 +152,7 @@ export function useTemplateSyncMutation() {
 
       return response.json();
     },
-    onSuccess: (data, channelId) => {
+    onSettled: (_, _err, channelId) => {
       // Invalidate templates queries for this channel
       queryClient.invalidateQueries({
         queryKey: queryKeys.messagingTemplates.byChannel(channelId),
@@ -186,7 +186,7 @@ export function useSendTemplateMutation() {
 
       return response.json();
     },
-    onSuccess: (data, variables) => {
+    onSettled: (_, _err, variables) => {
       // Invalidate messages for the conversation
       queryClient.invalidateQueries({
         queryKey: queryKeys.messagingMessages.byConversation(variables.conversationId),

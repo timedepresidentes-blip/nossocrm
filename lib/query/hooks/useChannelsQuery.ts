@@ -155,7 +155,7 @@ export function useCreateChannelMutation() {
 
       return transformChannel(data as DbMessagingChannel);
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.messagingChannels.all });
     },
   });
@@ -191,9 +191,11 @@ export function useUpdateChannelMutation() {
 
       return transformChannel(data as DbMessagingChannel);
     },
-    onSuccess: (data) => {
+    onSettled: (data) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.messagingChannels.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.messagingChannels.detail(data.id) });
+      if (data) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.messagingChannels.detail(data.id) });
+      }
     },
   });
 }
@@ -216,7 +218,7 @@ export function useDeleteChannelMutation() {
 
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.messagingChannels.all });
     },
   });
@@ -250,9 +252,11 @@ export function useToggleChannelStatusMutation() {
 
       return transformChannel(data as DbMessagingChannel);
     },
-    onSuccess: (data) => {
+    onSettled: (data) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.messagingChannels.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.messagingChannels.detail(data.id) });
+      if (data) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.messagingChannels.detail(data.id) });
+      }
       queryClient.invalidateQueries({ queryKey: queryKeys.messagingChannels.connected() });
     },
   });

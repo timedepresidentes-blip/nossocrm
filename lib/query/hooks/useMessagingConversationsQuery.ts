@@ -326,15 +326,17 @@ export function useUpdateConversation() {
 
       return transformConversation(data);
     },
-    onSuccess: (conversation) => {
+    onSettled: (conversation) => {
       // Invalidate filtered queries
       queryClient.invalidateQueries({
         queryKey: queryKeys.messagingConversations.all,
       });
       // Update detail cache
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.messagingConversations.detail(conversation.id),
-      });
+      if (conversation) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.messagingConversations.detail(conversation.id),
+        });
+      }
     },
   });
 }
@@ -355,7 +357,7 @@ export function useMarkConversationRead() {
 
       if (error) throw error;
     },
-    onSuccess: (_, conversationId) => {
+    onSettled: (_, _err, conversationId) => {
       // Update conversation detail
       queryClient.invalidateQueries({
         queryKey: queryKeys.messagingConversations.detail(conversationId),
@@ -389,9 +391,11 @@ export function useResolveConversation() {
       if (error) throw error;
       return transformConversation(data);
     },
-    onSuccess: (conversation) => {
+    onSettled: (conversation) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.messagingConversations.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.messagingConversations.detail(conversation.id) });
+      if (conversation) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.messagingConversations.detail(conversation.id) });
+      }
     },
   });
 }
@@ -413,9 +417,11 @@ export function useReopenConversation() {
       if (error) throw error;
       return transformConversation(data);
     },
-    onSuccess: (conversation) => {
+    onSettled: (conversation) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.messagingConversations.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.messagingConversations.detail(conversation.id) });
+      if (conversation) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.messagingConversations.detail(conversation.id) });
+      }
     },
   });
 }
@@ -447,9 +453,11 @@ export function useAssignConversation() {
       if (error) throw error;
       return transformConversation(data);
     },
-    onSuccess: (conversation) => {
+    onSettled: (conversation) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.messagingConversations.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.messagingConversations.detail(conversation.id) });
+      if (conversation) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.messagingConversations.detail(conversation.id) });
+      }
     },
   });
 }
@@ -480,7 +488,7 @@ export function useLinkConversationToContact() {
 
       if (error) throw error;
     },
-    onSuccess: (_, { conversationId, contactId }) => {
+    onSettled: (_, _err, { conversationId, contactId }) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.messagingConversations.detail(conversationId),
       });

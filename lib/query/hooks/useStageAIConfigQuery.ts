@@ -149,9 +149,11 @@ export function useUpsertStageAIConfigMutation() {
         return data as StageAIConfig;
       }
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.ai.stageConfigs(data.board_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.ai.stageConfig(data.stage_id) });
+    onSettled: (data) => {
+      if (data) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.ai.stageConfigs(data.board_id) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.ai.stageConfig(data.stage_id) });
+      }
     },
   });
 }
@@ -172,7 +174,7 @@ export function useDeleteStageAIConfigMutation() {
       if (error) throw error;
       return { configId, boardId };
     },
-    onSuccess: ({ boardId }) => {
+    onSettled: (_, _err, { boardId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.ai.stageConfigs(boardId) });
     },
   });
@@ -233,9 +235,11 @@ export function useToggleStageAIMutation() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.ai.stageConfigs(data.board_id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.ai.stageConfig(data.stage_id) });
+    onSettled: (data) => {
+      if (data) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.ai.stageConfigs(data.board_id) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.ai.stageConfig(data.stage_id) });
+      }
     },
   });
 }

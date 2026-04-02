@@ -139,14 +139,15 @@ export function useResolvePendingAdvanceMutation() {
       return response.json();
     },
     onSuccess: (data) => {
-      // Invalidar lista de pending advances
-      queryClient.invalidateQueries({ queryKey: queryKeys.ai.pendingAdvances() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.ai.pendingAdvanceCount() });
-
       // Se foi aprovado, invalidar deals também
-      if (data.newStageId) {
+      if (data?.newStageId) {
         queryClient.invalidateQueries({ queryKey: queryKeys.deals.all });
       }
+    },
+    onSettled: () => {
+      // Invalidar lista de pending advances (runs on both success and error)
+      queryClient.invalidateQueries({ queryKey: queryKeys.ai.pendingAdvances() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.ai.pendingAdvanceCount() });
     },
   });
 }

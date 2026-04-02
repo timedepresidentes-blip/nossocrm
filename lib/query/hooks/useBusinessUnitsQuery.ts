@@ -222,7 +222,7 @@ export function useCreateBusinessUnit() {
 
       return transform(data);
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.businessUnits.all });
     },
   });
@@ -257,7 +257,7 @@ export function useUpdateBusinessUnit() {
 
       return transform(data);
     },
-    onSuccess: (_, { unitId }) => {
+    onSettled: (_, _err, { unitId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.businessUnits.all });
       queryClient.invalidateQueries({
         queryKey: queryKeys.businessUnits.detail(unitId),
@@ -283,7 +283,7 @@ export function useDeleteBusinessUnit() {
 
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.businessUnits.all });
     },
   });
@@ -316,7 +316,7 @@ export function useAddBusinessUnitMembers() {
 
       if (error) throw error;
     },
-    onSuccess: (_, { unitId }) => {
+    onSettled: (_, _err, { unitId }) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.businessUnits.members(unitId),
       });
@@ -351,7 +351,7 @@ export function useRemoveBusinessUnitMembers() {
 
       if (error) throw error;
     },
-    onSuccess: (_, { unitId }) => {
+    onSettled: (_, _err, { unitId }) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.businessUnits.members(unitId),
       });
