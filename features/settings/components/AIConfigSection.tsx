@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useCRM } from '@/context/CRMContext';
-import { Bot, Key, Cpu, CheckCircle, AlertCircle, Loader2, Save, Trash2, ChevronDown, ChevronUp, Shield } from 'lucide-react';
+import { useOrgSettings, useUpdateAISettings, useUpdateUserSettings } from '@/lib/query/hooks/useOrgSettingsQuery';
+import { Bot, Key, Cpu, CheckCircle, AlertCircle, Loader2, Save, Trash2, ChevronDown, ChevronUp, Shield, Brain } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 import { useAuth } from '@/context/AuthContext';
+import { useAIConfigQuery, useUpdateAIConfigMutation } from '@/lib/query/hooks';
 
 // Performance: keep provider/model catalog outside the component to avoid reallocations on every render.
 const AI_PROVIDERS = [
@@ -126,6 +127,76 @@ async function validateApiKey(provider: string, apiKey: string, model: string): 
 }
 
 /**
+ * Componente para configurar o modo de aprovação de avanço de estágio (HITL).
+ * Permite alternar entre modo autônomo e supervisionado.
+ */
+const HITLConfigSection: React.FC = () => {
+    const { data: aiConfig, isLoading } = useAIConfigQuery();
+    const updateMutation = useUpdateAIConfigMutation();
+
+    // HITL threshold: 0.85 = supervisionado (pede confirmação 70-85%)
+    // HITL threshold: 0.70 = autônomo (tudo >=70% é automático)
+    const isAutonomous = (aiConfig?.ai_hitl_threshold ?? 0.85) <= 0.70;
+
+    const handleToggle = async () => {
+        const newThreshold = isAutonomous ? 0.85 : 0.70;
+        try {
+            await updateMutation.mutateAsync({ ai_hitl_threshold: newThreshold });
+        } catch (error) {
+            console.error('Failed to update HITL threshold:', error);
+        }
+    };
+
+    if (isLoading) {
+        return null;
+    }
+
+    return (
+        <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-500/20 rounded-lg p-3 animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h3 className="font-medium text-amber-900 dark:text-amber-100 flex items-center gap-2">
+                        <Brain size={18} className="text-amber-600" />
+                        Avanço de Estágio por IA
+                    </h3>
+                    <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                        {isAutonomous ? (
+                            <span><strong>Modo Autônomo:</strong> Leads avançam automaticamente quando a IA tem ≥70% de confiança.</span>
+                        ) : (
+                            <span><strong>Modo Supervisionado:</strong> Você aprova avanços quando a IA tem 70-85% de confiança.</span>
+                        )}
+                    </p>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={isAutonomous}
+                            onChange={handleToggle}
+                            disabled={updateMutation.isPending}
+                            className="sr-only peer"
+                            aria-label="Alternar modo autônomo"
+                        />
+                        <div className="w-11 h-6 bg-amber-500 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-300 dark:peer-focus:ring-amber-800 rounded-full peer dark:bg-amber-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500 dark:peer-checked:bg-green-600"></div>
+                    </label>
+                    <span className="text-xs text-amber-600 dark:text-amber-400">
+                        {isAutonomous ? 'Autônomo' : 'Supervisionado'}
+                    </span>
+                </div>
+            </div>
+            {!isAutonomous && (
+                <div className="mt-2 pt-2 border-t border-amber-200 dark:border-amber-500/20">
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                        💡 No modo supervisionado, você verá notificações no <strong>Inbox</strong> quando a IA sugerir avanços.
+                        Avanços com &gt;85% de confiança ainda são automáticos.
+                    </p>
+                </div>
+            )}
+        </div>
+    );
+};
+
+/**
  * Componente React `AIConfigSection`.
  * @returns {Element} Retorna um valor do tipo `Element`.
  */
@@ -133,15 +204,51 @@ export const AIConfigSection: React.FC = () => {
     const { profile } = useAuth();
     const isAdmin = profile?.role === 'admin';
 
-    const {
-        aiProvider, setAiProvider,
-        aiApiKey, setAiApiKey,
-        aiModel, setAiModel,
-        aiKeyConfigured,
-        aiThinking, setAiThinking,
-        aiSearch, setAiSearch,
-        aiAnthropicCaching, setAiAnthropicCaching
-    } = useCRM();
+    const { data: orgSettings } = useOrgSettings();
+    const updateAISettings = useUpdateAISettings();
+    const updateUserSettings = useUpdateUserSettings();
+
+    // Derived values from TanStack Query data
+    const aiProvider = (orgSettings?.aiProvider ?? 'google') as 'google' | 'openai' | 'anthropic';
+    const aiModel = orgSettings?.aiModel ?? '';
+    const aiKeyConfigured = orgSettings?.aiKeyConfigured ?? false;
+    const aiThinking = orgSettings?.aiThinking ?? true;
+    const aiSearch = orgSettings?.aiSearch ?? true;
+    const aiAnthropicCaching = orgSettings?.aiAnthropicCaching ?? false;
+
+    // Computed: current API key for the active provider
+    const aiApiKey = (() => {
+        switch (aiProvider) {
+            case 'google': return orgSettings?.aiGoogleKey ?? '';
+            case 'openai': return orgSettings?.aiOpenaiKey ?? '';
+            case 'anthropic': return orgSettings?.aiAnthropicKey ?? '';
+            default: return '';
+        }
+    })();
+
+    // Replacement setters using TanStack Query mutations
+    const setAiProvider = async (provider: 'google' | 'openai' | 'anthropic') => {
+        await updateAISettings.mutateAsync({ aiProvider: provider });
+    };
+    const setAiApiKey = async (key: string) => {
+        switch (aiProvider) {
+            case 'google': await updateAISettings.mutateAsync({ aiGoogleKey: key }); break;
+            case 'openai': await updateAISettings.mutateAsync({ aiOpenaiKey: key }); break;
+            case 'anthropic': await updateAISettings.mutateAsync({ aiAnthropicKey: key }); break;
+        }
+    };
+    const setAiModel = async (model: string) => {
+        await updateAISettings.mutateAsync({ aiModel: model });
+    };
+    const setAiThinking = async (enabled: boolean) => {
+        await updateUserSettings.mutateAsync({ aiThinking: enabled });
+    };
+    const setAiSearch = async (enabled: boolean) => {
+        await updateUserSettings.mutateAsync({ aiSearch: enabled });
+    };
+    const setAiAnthropicCaching = async (enabled: boolean) => {
+        await updateUserSettings.mutateAsync({ aiAnthropicCaching: enabled });
+    };
 
     const { showToast } = useToast();
 
@@ -276,6 +383,7 @@ export const AIConfigSection: React.FC = () => {
                 const recommended = providerData.models.find(m => m.description.includes('Recomendado')) || providerData.models[0];
                 await setAiModel(recommended.id);
             }
+            showToast('Provedor atualizado!', 'success');
         } catch (err) {
             showToast(err instanceof Error ? err.message : 'Falha ao atualizar provedor de IA', 'error');
         }
@@ -363,6 +471,7 @@ export const AIConfigSection: React.FC = () => {
                                         await setAiModel(next);
                                         setCustomModelDraft('');
                                         setCustomModelDirty(false);
+                                        showToast('Modelo salvo!', 'success');
                                     } catch (err) {
                                         showToast(err instanceof Error ? err.message : 'Falha ao atualizar modelo', 'error');
                                     }
@@ -524,6 +633,9 @@ export const AIConfigSection: React.FC = () => {
                         </div>
                     </div>
                 )}
+
+                {/* HITL Stage Advancement Config */}
+                <HITLConfigSection />
 
                 {/* API Key */}
                 <div className="space-y-2">

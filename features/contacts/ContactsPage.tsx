@@ -1,4 +1,7 @@
+'use client'
+
 import React from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Trash2, X } from 'lucide-react';
 import { useContactsController } from './hooks/useContactsController';
@@ -7,12 +10,31 @@ import { ContactsFilters } from './components/ContactsFilters';
 import { ContactsTabs } from './components/ContactsTabs';
 import { ContactsStageTabs } from './components/ContactsStageTabs';
 import { ContactsList } from './components/ContactsList';
-import { ContactFormModal } from './components/ContactFormModal';
-import { CompanyFormModal } from './components/CompanyFormModal';
-import { SelectBoardModal } from './components/SelectBoardModal';
 import { PaginationControls } from './components/PaginationControls';
-import { ContactsImportExportModal } from './components/ContactsImportExportModal';
-import ConfirmModal from '@/components/ConfirmModal';
+import { DuplicatesBanner } from './components/DuplicatesBanner';
+import { useDuplicateContactsQuery, useMergeContactsMutation } from '@/lib/query/hooks';
+import { ConfirmDialog as ConfirmModal } from '@/components/ui/confirm-dialog';
+
+const ContactFormModal = dynamic(
+    () => import('./components/ContactFormModal').then(m => ({ default: m.ContactFormModal })),
+    { ssr: false }
+);
+const CompanyFormModal = dynamic(
+    () => import('./components/CompanyFormModal').then(m => ({ default: m.CompanyFormModal })),
+    { ssr: false }
+);
+const SelectBoardModal = dynamic(
+    () => import('./components/SelectBoardModal').then(m => ({ default: m.SelectBoardModal })),
+    { ssr: false }
+);
+const ContactsImportExportModal = dynamic(
+    () => import('./components/ContactsImportExportModal').then(m => ({ default: m.ContactsImportExportModal })),
+    { ssr: false }
+);
+const MergeContactsModal = dynamic(
+    () => import('./components/MergeContactsModal').then(m => ({ default: m.MergeContactsModal })),
+    { ssr: false }
+);
 
 /**
  * Componente React `ContactsPage`.
@@ -22,6 +44,18 @@ export const ContactsPage: React.FC = () => {
     const controller = useContactsController();
     const router = useRouter();
     const [isImportExportOpen, setIsImportExportOpen] = React.useState(false);
+    const [isMergeModalOpen, setIsMergeModalOpen] = React.useState(false);
+
+    const { data: duplicateGroups = [] } = useDuplicateContactsQuery();
+    const mergeMutation = useMergeContactsMutation();
+
+    const duplicateContactIds = React.useMemo(() => {
+        const ids = new Set<string>();
+        for (const group of duplicateGroups) {
+            for (const id of group.contact_ids) ids.add(id);
+        }
+        return ids;
+    }, [duplicateGroups]);
 
     const goToDeal = (dealId: string) => {
         controller.setDeleteWithDeals(null);
@@ -69,6 +103,13 @@ export const ContactsPage: React.FC = () => {
                 onStageChange={controller.setStageFilter}
                 counts={controller.stageCounts}
             />
+
+            {duplicateGroups.length > 0 && (
+                <DuplicatesBanner
+                    count={duplicateGroups.length}
+                    onResolve={() => setIsMergeModalOpen(true)}
+                />
+            )}
 
             <ContactsTabs
                 viewMode={controller.viewMode}
@@ -121,6 +162,8 @@ export const ContactsPage: React.FC = () => {
                 sortBy={controller.sortBy}
                 sortOrder={controller.sortOrder}
                 onSort={controller.handleSort}
+                duplicateContactIds={duplicateContactIds}
+                onAddContact={controller.openCreateModal}
             />
 
             {/* T021: Pagination Controls */}
@@ -233,6 +276,14 @@ export const ContactsPage: React.FC = () => {
                 }
                 confirmText={`Excluir ${controller.selectedIds.size} ${controller.viewMode === 'people' ? 'contato(s)' : 'empresa(s)'}`}
                 variant="danger"
+            />
+
+            <MergeContactsModal
+                isOpen={isMergeModalOpen}
+                onClose={() => setIsMergeModalOpen(false)}
+                groups={duplicateGroups}
+                contacts={controller.contacts}
+                onMerge={(sourceId, targetId) => mergeMutation.mutateAsync({ sourceId, targetId })}
             />
         </div>
     );

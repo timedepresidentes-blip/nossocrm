@@ -41,6 +41,11 @@ dev_server.log
 # Other AI/dev tools (local configs)
 .jules/
 .specify/
+.claude/
+.mcp.json
+
+# Temporary files
+tmp/
 
 # testsprite generated artifacts (may contain PII)
 testsprite_tests/tmp/
@@ -82,3 +87,9 @@ scripts/
 
 # Test documentation (test code stays, docs are local)
 test/*.md
+
+# Security audit artifacts
+.sb-pentest-*.json
+.sb-pentest-*.log
+debug_navigation_failed_*.png
+.env*.local

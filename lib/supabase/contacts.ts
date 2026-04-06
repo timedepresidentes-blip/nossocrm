@@ -17,6 +17,18 @@ import { Contact, CRMCompany, OrganizationId, PaginationState, PaginatedResponse
 import { sanitizeUUID, sanitizeText, sanitizeNumber } from './utils';
 import { normalizePhoneE164 } from '@/lib/phone';
 
+async function getCurrentOrganizationId(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('organization_id')
+    .eq('id', user.id)
+    .maybeSingle();
+  return (profile as any)?.organization_id ?? null;
+}
+
 // ============================================
 // CONTACTS SERVICE
 // ============================================
@@ -67,6 +79,8 @@ export interface DbContact {
   updated_at: string;
   /** ID do dono/responsável. */
   owner_id: string | null;
+  /** Quando true, o agente de IA não responde a este contato. */
+  ai_paused: boolean;
 }
 
 /**
@@ -119,6 +133,7 @@ const transformContact = (db: DbContact): Contact => ({
   totalValue: db.total_value || 0,
   createdAt: db.created_at,
   updatedAt: db.updated_at,
+  aiPaused: db.ai_paused ?? false,
 });
 
 /**
@@ -165,6 +180,7 @@ const transformContactToDb = (contact: Partial<Contact>): Partial<DbContact> => 
   if (contact.lastInteraction !== undefined) db.last_interaction = contact.lastInteraction || null;
   if (contact.lastPurchaseDate !== undefined) db.last_purchase_date = contact.lastPurchaseDate || null;
   if (contact.totalValue !== undefined) db.total_value = contact.totalValue;
+  if (contact.aiPaused !== undefined) db.ai_paused = contact.aiPaused;
 
   return db;
 };
@@ -228,9 +244,10 @@ export const contactsService = {
    * Otimizado para buscar apenas os contatos necessários.
    *
    * @param ids - Array de IDs de contatos a buscar.
+   * @param options - Opções adicionais, incluindo AbortSignal para cancelar a request.
    * @returns Promise com array de contatos ou erro.
    */
-  async getByIds(ids: string[]): Promise<{ data: Contact[] | null; error: Error | null }> {
+  async getByIds(ids: string[], options?: { signal?: AbortSignal }): Promise<{ data: Contact[] | null; error: Error | null }> {
     try {
       if (!supabase) {
         return { data: null, error: new Error('Supabase não configurado') };
@@ -245,10 +262,12 @@ export const contactsService = {
         return { data: [], error: null };
       }
 
-      const { data, error } = await supabase
+      let contactsQuery = supabase
         .from('contacts')
         .select('*')
-        .in('id', uniqueIds);
+        .is('deleted_at', null);
+      if (options?.signal) contactsQuery = contactsQuery.abortSignal(options.signal);
+      const { data, error } = await contactsQuery.in('id', uniqueIds);
 
       if (error) return { data: null, error };
       return { data: (data || []).map(c => transformContact(c as DbContact)), error: null };
@@ -267,13 +286,14 @@ export const contactsService = {
       if (!supabase) {
         return { data: null, error: new Error('Supabase não configurado') };
       }
-      // Safety limit: Prevent unbounded queries when pagination isn't used
-      // For paginated access, use getAllPaginated() instead
+      // Safety limit: cap at 1000 for non-paginated access.
+      // For full datasets, use getAllPaginated() with cursor pagination.
       const { data, error } = await supabase
         .from('contacts')
         .select('*')
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
-        .limit(10000);
+        .limit(1000);
 
       if (error) return { data: null, error };
       return { data: (data || []).map(c => transformContact(c as DbContact)), error: null };
@@ -302,7 +322,8 @@ export const contactsService = {
    */
   async getAllPaginated(
     pagination: PaginationState,
-    filters?: ContactsServerFilters
+    filters?: ContactsServerFilters,
+    options?: { signal?: AbortSignal }
   ): Promise<{ data: PaginatedResponse<Contact> | null; error: Error | null }> {
     try {
       if (!supabase) {
@@ -312,10 +333,12 @@ export const contactsService = {
       const from = pageIndex * pageSize;
       const to = from + pageSize - 1;
 
-      // Build query with count
+      // Build query with count (exclude soft-deleted/merged contacts)
       let query = supabase
         .from('contacts')
-        .select('*', { count: 'exact' });
+        .select('*', { count: 'exact' })
+        .is('deleted_at', null);
+      if (options?.signal) query = query.abortSignal(options.signal);
 
       // Apply filters
       if (filters) {
@@ -399,6 +422,7 @@ export const contactsService = {
         return { data: null, error: new Error('Supabase não configurado') };
       }
       const phoneE164 = normalizePhoneE164(contact.phone);
+      const organizationId = await getCurrentOrganizationId();
       const insertData = {
         name: contact.name,
         email: sanitizeText(contact.email),
@@ -414,6 +438,7 @@ export const contactsService = {
         last_interaction: sanitizeText(contact.lastInteraction),
         last_purchase_date: sanitizeText(contact.lastPurchaseDate),
         total_value: sanitizeNumber(contact.totalValue, 0),
+        ...(organizationId ? { organization_id: organizationId } : {}),
       };
 
       const { data, error } = await supabase
@@ -565,9 +590,10 @@ export const companiesService = {
    * Otimizado para buscar apenas as empresas necessárias.
    *
    * @param ids - Array de IDs de empresas a buscar.
+   * @param options - Opções adicionais, incluindo AbortSignal para cancelar a request.
    * @returns Promise com array de empresas ou erro.
    */
-  async getByIds(ids: string[]): Promise<{ data: CRMCompany[] | null; error: Error | null }> {
+  async getByIds(ids: string[], options?: { signal?: AbortSignal }): Promise<{ data: CRMCompany[] | null; error: Error | null }> {
     try {
       if (!supabase) {
         return { data: null, error: new Error('Supabase não configurado') };
@@ -582,10 +608,11 @@ export const companiesService = {
         return { data: [], error: null };
       }
 
-      const { data, error } = await supabase
+      let companiesQuery = supabase
         .from('crm_companies')
-        .select('*')
-        .in('id', uniqueIds);
+        .select('*');
+      if (options?.signal) companiesQuery = companiesQuery.abortSignal(options.signal);
+      const { data, error } = await companiesQuery.in('id', uniqueIds);
 
       if (error) return { data: null, error };
       return { data: (data || []).map(c => transformCRMCompany(c as DbCRMCompany)), error: null };
@@ -604,12 +631,12 @@ export const companiesService = {
       if (!supabase) {
         return { data: null, error: new Error('Supabase não configurado') };
       }
-      // Safety limit: Prevent unbounded queries
+      // Safety limit: cap at 1000 for non-paginated access
       const { data, error } = await supabase
         .from('crm_companies')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(10000);
+        .limit(1000);
 
       if (error) return { data: null, error };
       return { data: (data || []).map(c => transformCRMCompany(c as DbCRMCompany)), error: null };
@@ -629,10 +656,12 @@ export const companiesService = {
       if (!supabase) {
         return { data: null, error: new Error('Supabase não configurado') };
       }
+      const organizationId = await getCurrentOrganizationId();
       const insertData = {
         name: company.name,
         industry: sanitizeText(company.industry),
         website: sanitizeText(company.website),
+        ...(organizationId ? { organization_id: organizationId } : {}),
       };
 
       const { data, error } = await supabase

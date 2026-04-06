@@ -129,7 +129,7 @@ export const settingsService = {
         .from('profiles')
         .select('id')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
       if (profileError || !profile) {
         console.warn('Profile not found, skipping user_settings creation');
@@ -164,7 +164,7 @@ export const settingsService = {
         .from('user_settings')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (error) return { data: null, error };
       return { data: transformSettings(data as DbUserSettings), error: null };
@@ -301,7 +301,7 @@ export const lifecycleStagesService = {
         .from('lifecycle_stages')
         .select('is_default')
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
       if (stage?.is_default) {
         return { error: new Error('Cannot delete default lifecycle stage') };

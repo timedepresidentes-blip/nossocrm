@@ -1,7 +1,8 @@
 import React from 'react';
-import { Building2, Mail, Phone, Plus, Calendar, Pencil, Trash2, Globe, MoreHorizontal, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Building2, Mail, Phone, Plus, Calendar, Pencil, Trash2, Globe, MoreHorizontal, ArrowUpDown, ArrowUp, ArrowDown, GitMerge, Users } from 'lucide-react';
 import { Contact, Company, ContactSortableColumn } from '@/types';
 import { StageBadge } from './ContactsStageTabs';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 // Performance: reuse Intl formatters (they are relatively expensive to instantiate).
 const PT_BR_DATE_FORMATTER = new Intl.DateTimeFormat('pt-BR');
@@ -89,6 +90,10 @@ interface ContactsListProps {
     sortBy?: ContactSortableColumn;
     sortOrder?: 'asc' | 'desc';
     onSort?: (column: ContactSortableColumn) => void;
+    // Duplicate detection
+    duplicateContactIds?: Set<string>;
+    // Empty state action
+    onAddContact?: () => void;
 }
 
 /**
@@ -147,6 +152,8 @@ export const ContactsList: React.FC<ContactsListProps> = ({
     sortBy = 'created_at',
     sortOrder = 'desc',
     onSort,
+    duplicateContactIds,
+    onAddContact,
 }) => {
     const activeListIds = viewMode === 'people'
         ? filteredContacts.map(c => c.id)
@@ -213,7 +220,18 @@ export const ContactsList: React.FC<ContactsListProps> = ({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                            {filteredContacts.map((contact) => (
+                            {filteredContacts.length === 0 ? (
+                                <tr>
+                                    <td colSpan={9}>
+                                        <EmptyState
+                                            icon={Users}
+                                            title="Nenhum contato encontrado"
+                                            description="Tente ajustar os filtros ou adicione um novo contato."
+                                            action={onAddContact ? { label: 'Adicionar Contato', onClick: onAddContact } : undefined}
+                                        />
+                                    </td>
+                                </tr>
+                            ) : filteredContacts.map((contact) => (
                                 <tr key={contact.id} className={`hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group ${selectedIds.has(contact.id) ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}`}>
                                     <td className="px-6 py-4">
                                         <input 
@@ -236,7 +254,15 @@ export const ContactsList: React.FC<ContactsListProps> = ({
                                                 {(contact.name || '?').charAt(0)}
                                             </button>
                                             <div>
-                                                <span className="font-semibold text-slate-900 dark:text-white block">{contact.name}</span>
+                                                <span className="font-semibold text-slate-900 dark:text-white block">
+                                                    {contact.name}
+                                                    {duplicateContactIds?.has(contact.id) && (
+                                                        <span className="inline-flex items-center gap-1 ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 rounded-full align-middle">
+                                                            <GitMerge size={10} />
+                                                            Duplicado
+                                                        </span>
+                                                    )}
+                                                </span>
                                             </div>
                                         </div>
                                     </td>
@@ -348,7 +374,17 @@ export const ContactsList: React.FC<ContactsListProps> = ({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                            {filteredCompanies.map((company) => (
+                            {filteredCompanies.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6}>
+                                        <EmptyState
+                                            icon={Users}
+                                            title="Nenhuma empresa encontrada"
+                                            description="Tente ajustar os filtros ou adicione uma nova empresa."
+                                        />
+                                    </td>
+                                </tr>
+                            ) : filteredCompanies.map((company) => (
                                 <tr key={company.id} className={`hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group ${selectedIds.has(company.id) ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}`}>
                                     <td className="px-6 py-4">
                                         <input

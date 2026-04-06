@@ -171,6 +171,9 @@ export interface Contact {
 
   // @deprecated - Use clientCompanyId instead
   companyId?: string;
+
+  /** Quando true, o agente de IA não responde a este contato em nenhum canal. */
+  aiPaused?: boolean;
 }
 
 // ITEM 3: Produtos e Serviços
@@ -238,6 +241,7 @@ export interface Deal {
   customFields?: Record<string, any>; // Dynamic fields storage
   lastStageChangeDate?: string; // For stagnation tracking
   lossReason?: string; // For win/loss analysis
+  aiExtracted?: Record<string, any>; // AI-extracted BANT fields (zero config)
 
   // @deprecated - Use clientCompanyId instead
   companyId?: string;

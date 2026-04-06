@@ -31,7 +31,8 @@ export async function GET(request: Request) {
 
   const { data, count, error } = await query.range(from, to);
   if (error) {
-    return NextResponse.json({ error: error.message, code: 'DB_ERROR' }, { status: 500 });
+    console.error('[API] Database error:', error)
+    return NextResponse.json({ error: 'Internal server error', code: 'DB_ERROR' }, { status: 500 });
   }
 
   const total = count ?? 0;

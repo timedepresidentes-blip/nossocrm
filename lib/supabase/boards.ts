@@ -47,7 +47,7 @@ async function getCurrentOrganizationId(): Promise<string | null> {
     .from('profiles')
     .select('organization_id')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
   if (error) return null;
 
@@ -355,7 +355,7 @@ export const boardsService = {
         .from('boards')
         .select('*')
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
       if (boardError || !boardData) return null;
 
@@ -504,14 +504,18 @@ export const boardsService = {
         }
 
         if (realWonStageId || realLostStageId) {
-          await supabase.from('boards').update({
+          const { error: wonLostError } = await supabase.from('boards').update({
             won_stage_id: realWonStageId,
             lost_stage_id: realLostStageId
           }).eq('id', newBoard.id);
 
-          // Update the local newBoard object to reflect this for response
-          if (realWonStageId) (newBoard as DbBoard).won_stage_id = realWonStageId;
-          if (realLostStageId) (newBoard as DbBoard).lost_stage_id = realLostStageId;
+          if (wonLostError) {
+            console.error('[boards] Failed to update won/lost stage IDs (non-fatal):', wonLostError.message);
+          } else {
+            // Update the local newBoard object to reflect this for response
+            if (realWonStageId) (newBoard as DbBoard).won_stage_id = realWonStageId;
+            if (realLostStageId) (newBoard as DbBoard).lost_stage_id = realLostStageId;
+          }
         }
       }
 
@@ -536,7 +540,7 @@ export const boardsService = {
         .from('boards')
         .select('organization_id')
         .eq('id', id)
-        .single();
+        .maybeSingle();
       const organizationId =
         sanitizeUUID((boardRow as any)?.organization_id) || (await getCurrentOrganizationId());
 
@@ -801,6 +805,7 @@ export const boardsService = {
         ? existingStages[0].order + 1
         : 0;
 
+      const organizationId = await getCurrentOrganizationId();
       const { data, error } = await supabase
         .from('board_stages')
         .insert({
@@ -809,6 +814,7 @@ export const boardsService = {
           color: stage.color || 'bg-gray-500',
           order: nextOrder,
           linked_lifecycle_stage: stage.linkedLifecycleStage || null,
+          ...(organizationId ? { organization_id: organizationId } : {}),
         })
         .select()
         .single();
@@ -882,14 +888,20 @@ export const boardsService = {
 // BOARD STAGES SERVICE (para lookup de stageLabel)
 // ============================================
 export const boardStagesService = {
-  /** Busca todos os stages */
-  async getAll(): Promise<{ data: DbBoardStage[] | null; error: Error | null }> {
+  /**
+   * Busca todos os stages.
+   *
+   * @param options - Opções adicionais, incluindo AbortSignal para cancelar a request.
+   */
+  async getAll(options?: { signal?: AbortSignal }): Promise<{ data: DbBoardStage[] | null; error: Error | null }> {
     try {
       if (!supabase) return { data: null, error: new Error('Supabase não configurado') };
 
-      const { data, error } = await supabase
+      let stagesQuery = supabase
         .from('board_stages')
-        .select('*')
+        .select('*');
+      if (options?.signal) stagesQuery = stagesQuery.abortSignal(options.signal);
+      const { data, error } = await stagesQuery
         .order('order', { ascending: true });
 
       return { data: data as DbBoardStage[] | null, error };

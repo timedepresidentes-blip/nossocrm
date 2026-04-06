@@ -39,7 +39,10 @@ export async function GET(request: Request) {
   const from = offset;
   const to = offset + limit - 1;
   const { data, count, error } = await query.range(from, to);
-  if (error) return NextResponse.json({ error: error.message, code: 'DB_ERROR' }, { status: 500 });
+  if (error) {
+    console.error('[API] Database error:', error)
+    return NextResponse.json({ error: 'Internal server error', code: 'DB_ERROR' }, { status: 500 })
+  }
 
   const total = count ?? 0;
   const nextOffset = to + 1;
@@ -88,7 +91,10 @@ export async function POST(request: Request) {
   else if (name) lookup = lookup.ilike('name', name);
 
   const existing = await lookup.maybeSingle();
-  if (existing.error) return NextResponse.json({ error: existing.error.message, code: 'DB_ERROR' }, { status: 500 });
+  if (existing.error) {
+    console.error('[API] Database error:', existing.error)
+    return NextResponse.json({ error: 'Internal server error', code: 'DB_ERROR' }, { status: 500 })
+  }
 
   const now = new Date().toISOString();
   const payload: any = {
@@ -107,7 +113,10 @@ export async function POST(request: Request) {
       .eq('id', existing.data.id)
       .select('id,name,website,industry,created_at,updated_at')
       .single();
-    if (error) return NextResponse.json({ error: error.message, code: 'DB_ERROR' }, { status: 500 });
+    if (error) {
+      console.error('[API] Database error:', error)
+      return NextResponse.json({ error: 'Internal server error', code: 'DB_ERROR' }, { status: 500 })
+    }
     return NextResponse.json({ data, action: 'updated' });
   }
 
@@ -129,7 +138,10 @@ export async function POST(request: Request) {
     .insert(insertPayload)
     .select('id,name,website,industry,created_at,updated_at')
     .single();
-  if (error) return NextResponse.json({ error: error.message, code: 'DB_ERROR' }, { status: 500 });
+  if (error) {
+    console.error('[API] Database error:', error)
+    return NextResponse.json({ error: 'Internal server error', code: 'DB_ERROR' }, { status: 500 })
+  }
   return NextResponse.json({ data, action: 'created' }, { status: 201 });
 }
 
