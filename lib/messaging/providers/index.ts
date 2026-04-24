@@ -10,12 +10,14 @@
 export { BaseChannelProvider } from './base.provider';
 
 // WhatsApp providers
-export { ZApiWhatsAppProvider, MetaCloudWhatsAppProvider } from './whatsapp';
+export { ZApiWhatsAppProvider, MetaCloudWhatsAppProvider, EvolutionWhatsAppProvider } from './whatsapp';
 export type {
   ZApiCredentials,
   ZApiWebhookPayload,
   MetaCloudCredentials,
   MetaCloudWebhookPayload,
+  EvolutionCredentials,
+  EvolutionWebhookPayload,
 } from './whatsapp';
 
 // Instagram providers
@@ -31,7 +33,7 @@ export type { ResendCredentials, ResendWebhookPayload } from './email';
 // =============================================================================
 
 import { registerProvider } from '../channel-factory';
-import { ZApiWhatsAppProvider, MetaCloudWhatsAppProvider } from './whatsapp';
+import { ZApiWhatsAppProvider, MetaCloudWhatsAppProvider, EvolutionWhatsAppProvider } from './whatsapp';
 import { MetaInstagramProvider } from './instagram';
 import { ResendEmailProvider } from './email';
 
@@ -118,6 +120,42 @@ registerProvider({
     },
   ],
   features: ['media', 'read_receipts', 'templates'],
+});
+
+// Register Evolution API provider
+registerProvider({
+  channelType: 'whatsapp',
+  providerName: 'evolution',
+  constructor: EvolutionWhatsAppProvider,
+  displayName: 'Evolution API',
+  description: 'WhatsApp via Evolution API (open source, self-hosted, gratuito)',
+  configFields: [
+    {
+      key: 'serverUrl',
+      label: 'URL do Servidor',
+      type: 'text',
+      required: true,
+      placeholder: 'https://sua-evolution.exemplo.com',
+      helpText: 'URL onde a Evolution API está hospedada',
+    },
+    {
+      key: 'apiKey',
+      label: 'API Key',
+      type: 'password',
+      required: true,
+      placeholder: 'sua-api-key-global',
+      helpText: 'Chave de API configurada na Evolution API',
+    },
+    {
+      key: 'instanceName',
+      label: 'Nome da Instância',
+      type: 'text',
+      required: true,
+      placeholder: 'nossocrm',
+      helpText: 'Nome da instância criada na Evolution API',
+    },
+  ],
+  features: ['media', 'read_receipts', 'qr_code'],
 });
 
 // Register Meta Instagram provider
