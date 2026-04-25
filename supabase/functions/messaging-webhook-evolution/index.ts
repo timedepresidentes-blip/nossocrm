@@ -273,13 +273,6 @@ async function autoCreateDeal(
         contact_id: params.contactId,
         title: `${params.contactName} - WhatsApp`,
         value: 0,
-        source: "whatsapp",
-        metadata: {
-          auto_created: true,
-          created_from: "evolution_webhook",
-          conversation_id: params.conversationId,
-          business_unit: params.businessUnitName,
-        },
       })
       .select("id")
       .single();
@@ -385,12 +378,6 @@ async function handleMessageUpsert(
           name: contactName,
           phone,
           source: "whatsapp",
-          metadata: {
-            auto_created: true,
-            created_from: "evolution_webhook",
-            whatsapp_name: data.pushName,
-            business_unit_id: channel.business_unit_id,
-          },
         })
         .select("id")
         .single();

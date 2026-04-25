@@ -223,17 +223,8 @@ async function triggerAIProcessing(params: {
   messageText: string;
   messageId?: string;
 }): Promise<void> {
-  const appUrl = Deno.env.get("CRM_APP_URL");
-  if (!appUrl) {
-    console.log("[Webhook] CRM_APP_URL not set, skipping AI processing");
-    return;
-  }
-
-  const internalSecret = Deno.env.get("INTERNAL_API_SECRET");
-  if (!internalSecret) {
-    console.log("[Webhook] INTERNAL_API_SECRET not set, skipping AI processing");
-    return;
-  }
+  const appUrl = Deno.env.get("CRM_APP_URL") ?? "https://nossocrm-blush.vercel.app";
+  const internalSecret = Deno.env.get("INTERNAL_API_SECRET") ?? "314d1b5f953d6dd536f4a1740856ad6238d53be6cb77d234893ef3dceef96d78";
 
   const endpoint = `${appUrl}/api/messaging/ai/process`;
 
@@ -383,6 +374,7 @@ Deno.serve(async (req) => {
   const NON_MESSAGE_TYPES = new Set([
     "DeliveryCallback",
     "ReadCallback",
+    "ReceivedCallback",
     "MessageStatusCallback",
     "ConnectedCallback",
     "DisconnectedCallback",
@@ -528,6 +520,12 @@ async function handleInboundMessage(
   const phone = normalizePhone(payload.phone);
   if (!phone) throw new Error("Phone number is required");
 
+  // Ignorar mensagens de grupo/comunidade (JIDs com 120363 ou @g.us)
+  if (payload.chatId?.includes("@g.us") || phone.startsWith("+120363")) {
+    console.log(`[Webhook] Ignoring group message: ${payload.chatId || phone}`);
+    return;
+  }
+
   const externalMessageId = payload.messageId || payload.zapiMessageId || "";
   const content = extractContent(payload);
   const timestamp = payload.moment
@@ -551,6 +549,61 @@ async function handleInboundMessage(
   if (existingConv) {
     conversationId = existingConv.id;
     contactId = existingConv.contact_id;
+
+    // Backfill: se conversa existe mas sem contato, criar agora
+    if (!contactId) {
+      const { data: existingContact } = await supabase
+        .from("contacts")
+        .select("id")
+        .eq("organization_id", channel.organization_id)
+        .eq("phone", phone)
+        .is("deleted_at", null)
+        .order("created_at")
+        .limit(1)
+        .maybeSingle();
+
+      if (existingContact) {
+        contactId = existingContact.id;
+      } else {
+        const contactName = payload.senderName || phone;
+        const { data: newContact } = await supabase
+          .from("contacts")
+          .insert({
+            organization_id: channel.organization_id,
+            name: contactName,
+            phone: phone,
+            source: "whatsapp",
+            avatar: payload.senderPhoto || null,
+          })
+          .select("id")
+          .single();
+        if (newContact) contactId = newContact.id;
+      }
+
+      if (contactId) {
+        await supabase
+          .from("messaging_conversations")
+          .update({ contact_id: contactId })
+          .eq("id", conversationId);
+
+        // Criar deal se não existe
+        const convMeta = (existingConv as Record<string, unknown>)?.metadata as Record<string, unknown> | undefined;
+        if (!convMeta?.deal_id) {
+          const routingRule = await getLeadRoutingRule(supabase, channel.id);
+          if (routingRule) {
+            await autoCreateDeal(supabase, {
+              organizationId: channel.organization_id,
+              contactId,
+              boardId: routingRule.boardId,
+              stageId: routingRule.stageId,
+              conversationId,
+              contactName: payload.senderName || phone,
+              businessUnitName: channel.business_unit?.name || "Sem unidade",
+            });
+          }
+        }
+      }
+    }
   } else {
     isNewConversation = true;
 
@@ -578,14 +631,8 @@ async function handleInboundMessage(
           organization_id: channel.organization_id,
           name: contactName,
           phone: phone,
-          source: "whatsapp", // Track that this contact came from WhatsApp
-          metadata: {
-            auto_created: true,
-            created_from: "messaging_webhook",
-            whatsapp_name: payload.senderName,
-            whatsapp_avatar: payload.senderPhoto,
-            business_unit_id: channel.business_unit_id,
-          },
+          source: "whatsapp",
+          avatar: payload.senderPhoto || null,
         })
         .select("id")
         .single();
@@ -738,13 +785,6 @@ async function autoCreateDeal(
         contact_id: params.contactId,
         title: dealTitle,
         value: 0,
-        source: "whatsapp",
-        metadata: {
-          auto_created: true,
-          created_from: "messaging_webhook",
-          conversation_id: params.conversationId,
-          business_unit: params.businessUnitName,
-        },
       })
       .select("id")
       .single();
