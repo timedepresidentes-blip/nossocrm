@@ -194,7 +194,7 @@ async function triggerAIProcessing(params: {
   messageId?: string;
 }): Promise<void> {
   const appUrl =
-    Deno.env.get("CRM_APP_URL") ?? "https://nossocrm-blush.vercel.app";
+    Deno.env.get("CRM_APP_URL") ?? "https://nossocrm1-blush.vercel.app";
   const internalSecret =
     Deno.env.get("INTERNAL_API_SECRET") ??
     "314d1b5f953d6dd536f4a1740856ad6238d53be6cb77d234893ef3dceef96d78";
