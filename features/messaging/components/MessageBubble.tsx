@@ -516,9 +516,9 @@ export const MessageBubble = memo(function MessageBubble({
             {isOutbound && <StatusIcon status={message.status} />}
           </div>
 
-          {/* Error detail */}
-          {message.status === 'failed' && message.errorMessage && (
-            <p className="text-xs text-red-300 mt-1">{message.errorMessage}</p>
+          {/* Error detail — mostra mensagem amigável, não o erro técnico bruto */}
+          {message.status === 'failed' && (
+            <p className="text-xs text-red-300 mt-1">Não foi possível entregar a mensagem.</p>
           )}
         </div>
 
