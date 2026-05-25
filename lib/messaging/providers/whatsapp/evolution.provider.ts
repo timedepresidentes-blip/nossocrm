@@ -239,7 +239,7 @@ export class EvolutionWhatsAppProvider extends BaseChannelProvider {
   }
 
   private async sendText(number: string, content: TextContent, quoted?: string): Promise<EvolutionSendResponse> {
-    const body: Record<string, unknown> = { number, text: content.text };
+    const body: Record<string, unknown> = { number, textMessage: { text: content.text } };
     if (quoted) body.quoted = { key: { id: quoted } };
     return this.request('POST', `/message/sendText/${this.instanceName}`, body);
   }
