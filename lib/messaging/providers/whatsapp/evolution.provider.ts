@@ -195,7 +195,10 @@ export class EvolutionWhatsAppProvider extends BaseChannelProvider {
   async sendMessage(params: SendMessageParams): Promise<SendMessageResult> {
     const { to, content, replyToExternalId } = params;
     try {
-      const number = to.replace(/\D/g, '');
+      const digits = to.replace(/\D/g, '');
+      // Contatos LID (WhatsApp privacy) têm > 13 dígitos e não são números reais.
+      // Passar o JID completo permite que a Evolution API roteie corretamente via store interno.
+      const number = digits.length > 13 ? `${digits}@s.whatsapp.net` : digits;
       let response: EvolutionSendResponse;
 
       switch (content.type) {
