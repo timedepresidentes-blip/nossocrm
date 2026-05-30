@@ -94,6 +94,9 @@ export function useMessagesInfinite(conversationId: string | undefined) {
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled: !authLoading && !!user && !!conversationId,
-    staleTime: 30 * 1000,
+    staleTime: 2 * 1000,
+    refetchInterval: 3 * 1000, // Polling a cada 3s — mensagens aparecem em tempo real
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 }
