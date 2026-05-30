@@ -3,10 +3,10 @@
 import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import { format, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Loader2, MessageSquare } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { PresenceIndicator } from './PresenceIndicator';
 import { MessageBubble } from './MessageBubble';
-import { useMessagesInfinite } from '@/lib/query/hooks/useMessagesQuery';
+import { useMessages } from '@/lib/query/hooks/useMessagesQuery';
 import type { MessagingMessage } from '@/lib/messaging/types';
 
 interface MessageThreadProps {
@@ -40,88 +40,42 @@ function DateDivider({ date }: { date: Date }) {
 }
 
 export function MessageThread({ conversationId, presenceStatus, onReply }: MessageThreadProps) {
-  const {
-    data,
-    isLoading,
-    error,
-    hasNextPage,
-    fetchNextPage,
-    isFetchingNextPage,
-  } = useMessagesInfinite(conversationId);
+  const { data, isLoading, error } = useMessages(conversationId);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const sentinelRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
   const prevLastMessageIdRef = useRef<string | undefined>(undefined);
-  const isLoadingOlderRef = useRef(false);
+  const isInitialLoadRef = useRef(true);
 
-  // Flatten pages into single message array (chronological order).
-  // Filter out reaction messages — they are displayed as pills on the target
-  // message bubble, not as standalone bubbles in the thread.
-  const messages = (data?.pages.flatMap((p) => p.messages) ?? []).filter(
-    (m) => m.contentType !== 'reaction',
+  // Filter out reaction messages — displayed as pills, not standalone bubbles
+  const messages = useMemo(
+    () => (data ?? []).filter((m) => m.contentType !== 'reaction'),
+    [data],
   );
 
-  // Derived values used as effect dependencies (primitive for stable comparison)
   const lastMessageId = messages[messages.length - 1]?.id;
 
   // Scroll to bottom when new messages arrive.
-  // Tracks both count AND last message ID because polling refetches drop the oldest messages
-  // from page 0 (keeping it capped at PAGE_SIZE=50), so length may not change even when
-  // new messages replace old ones at the bottom of the list.
+  // Tracks both count AND last message ID: when a poll refetch replaces old messages
+  // with newer ones (count stays the same), the ID change still triggers the scroll.
   useEffect(() => {
     const isNewLastMessage =
       lastMessageId !== undefined && lastMessageId !== prevLastMessageIdRef.current;
     const isMoreMessages = messages.length > prevMessagesLengthRef.current;
 
-    if ((isNewLastMessage || isMoreMessages) && !isLoadingOlderRef.current) {
+    if (isNewLastMessage || isMoreMessages) {
       scrollRef.current?.scrollTo({
         top: scrollRef.current.scrollHeight,
-        behavior: prevMessagesLengthRef.current === 0 ? 'auto' : 'smooth',
+        behavior: isInitialLoadRef.current ? 'auto' : 'smooth',
       });
+      isInitialLoadRef.current = false;
     }
-    isLoadingOlderRef.current = false;
+
     prevMessagesLengthRef.current = messages.length;
     prevLastMessageIdRef.current = lastMessageId;
   }, [messages.length, lastMessageId]);
 
-  // IntersectionObserver on sentinel to trigger loading older messages
-  const handleSentinel = useCallback(
-    (entries: IntersectionObserverEntry[]) => {
-      const [entry] = entries;
-      if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) {
-        const el = scrollRef.current;
-        const prevScrollHeight = el?.scrollHeight || 0;
-
-        isLoadingOlderRef.current = true;
-        fetchNextPage().then(() => {
-          // Preserve scroll position after loading older messages
-          requestAnimationFrame(() => {
-            if (el) {
-              const newScrollHeight = el.scrollHeight;
-              el.scrollTop += newScrollHeight - prevScrollHeight;
-            }
-          });
-        });
-      }
-    },
-    [hasNextPage, isFetchingNextPage, fetchNextPage]
-  );
-
-  useEffect(() => {
-    const sentinel = sentinelRef.current;
-    if (!sentinel) return;
-
-    const observer = new IntersectionObserver(handleSentinel, {
-      root: scrollRef.current,
-      threshold: 0.1,
-    });
-    observer.observe(sentinel);
-
-    return () => observer.disconnect();
-  }, [handleSentinel]);
-
-  // Group messages by date — must be before early returns (Rules of Hooks)
+  // Group messages by date
   const messagesWithDates = useMemo(() => {
     const result: Array<
       { type: 'date'; date: Date } | { type: 'message'; message: MessagingMessage }
@@ -176,16 +130,6 @@ export function MessageThread({ conversationId, presenceStatus, onReply }: Messa
       aria-label="Mensagens da conversa"
       className="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-50 dark:bg-slate-900/50"
     >
-      {/* Sentinel for loading older messages */}
-      <div ref={sentinelRef} className="h-1" />
-
-      {isFetchingNextPage && (
-        <div className="flex items-center justify-center py-3">
-          <Loader2 className="w-4 h-4 animate-spin text-slate-400 mr-2" />
-          <span className="text-xs text-slate-400">Carregando mensagens anteriores...</span>
-        </div>
-      )}
-
       {messagesWithDates.map((item, index) => {
         if (item.type === 'date') {
           return <DateDivider key={`date-${format(item.date, 'yyyy-MM-dd')}`} date={item.date} />;

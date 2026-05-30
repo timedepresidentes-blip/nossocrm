@@ -31,6 +31,7 @@ const PAGE_SIZE = 50;
 /**
  * Fetch messages for a conversation.
  * Returns messages in chronological order (oldest first).
+ * Uses simple useQuery (not infinite) for reliable real-time polling.
  */
 export function useMessages(conversationId: string | undefined) {
   const { user, loading: authLoading } = useAuth();
@@ -43,12 +44,15 @@ export function useMessages(conversationId: string | undefined) {
         .select('*')
         .eq('conversation_id', conversationId!)
         .order('created_at', { ascending: true })
-        .limit(200); // Limit to last 200 messages for performance
+        .limit(200);
 
       if (error) throw error;
       return (data || []).map((row) => transformMessage(row as DbMessagingMessage));
     },
-    staleTime: 30 * 1000, // 30 seconds
+    staleTime: 1 * 1000,
+    refetchInterval: 2 * 1000, // Polling a cada 2s — mensagens em tempo real
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     enabled: !authLoading && !!user && !!conversationId,
   });
 }

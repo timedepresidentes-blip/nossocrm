@@ -259,25 +259,26 @@ export function useRealtimeSync(
                   return;
                 }
 
-                // Inbound message: inject directly into the infinite query cache.
+                // Inbound message: inject directly into the flat query cache (useMessages).
                 // This is instant and doesn't require a network roundtrip or RLS re-evaluation.
                 const newMessage = transformMessage(payload.new as unknown as DbMessagingMessage);
                 const flatKey = queryKeys.messagingMessages.byConversation(conversationId);
                 const infiniteKey = [...flatKey, 'infinite'] as const;
 
+                // Inject into flat query (used by MessageThread via useMessages)
+                queryClient.setQueryData<MessagingMessage[]>(flatKey, (old) => {
+                  if (!old) return old; // cold cache — polling will fetch it within 2s
+                  if (old.some((m) => m.id === newMessage.id)) return old; // dedup
+                  return [...old, newMessage]; // append at end (chronological order)
+                });
+
+                // Also inject into legacy infinite query (kept for backward compatibility)
                 queryClient.setQueryData<InfiniteData<{ messages: MessagingMessage[]; nextCursor: string | null }>>(
                   infiniteKey,
                   (old) => {
-                    if (!old) {
-                      // Cache frio (conversa nunca aberta) — invalida para refetch quando o usuário abrir
-                      queryClient.invalidateQueries({ queryKey: flatKey, exact: false });
-                      return old;
-                    }
-                    // Append to the last page (most recent messages page).
-                    // MessageThread reverses the order, so appending here is correct.
+                    if (!old) return old;
                     const pages = old.pages.map((page, i) => {
                       if (i !== old.pages.length - 1) return page;
-                      // Deduplicate: skip if message already in cache
                       if (page.messages.some((m) => m.id === newMessage.id)) return page;
                       return { ...page, messages: [...page.messages, newMessage] };
                     });
