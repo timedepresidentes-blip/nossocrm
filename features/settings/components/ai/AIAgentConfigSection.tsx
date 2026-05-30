@@ -169,7 +169,7 @@ function AITakeoverSection({
   };
 
   const handleMinutesChange = async (minutes: number) => {
-    const clamped = Math.max(5, Math.min(120, minutes));
+    const clamped = Math.max(0.5, Math.min(120, minutes));
     try {
       await onUpdate({ ai_takeover_minutes: clamped });
     } catch (e) {
@@ -223,6 +223,9 @@ function AITakeoverSection({
               onChange={(e) => handleMinutesChange(Number(e.target.value))}
               className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
             >
+              <option value={0.5}>30 segundos</option>
+              <option value={1}>1 minuto</option>
+              <option value={2}>2 minutos</option>
               <option value={5}>5 minutos</option>
               <option value={10}>10 minutos</option>
               <option value={15}>15 minutos</option>
