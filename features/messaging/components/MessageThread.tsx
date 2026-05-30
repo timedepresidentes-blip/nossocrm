@@ -52,6 +52,7 @@ export function MessageThread({ conversationId, presenceStatus, onReply }: Messa
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
+  const prevLastMessageIdRef = useRef<string | undefined>(undefined);
   const isLoadingOlderRef = useRef(false);
 
   // Flatten pages into single message array (chronological order).
@@ -61,9 +62,19 @@ export function MessageThread({ conversationId, presenceStatus, onReply }: Messa
     (m) => m.contentType !== 'reaction',
   );
 
-  // Scroll to bottom on new messages (not when loading older)
+  // Derived values used as effect dependencies (primitive for stable comparison)
+  const lastMessageId = messages[messages.length - 1]?.id;
+
+  // Scroll to bottom when new messages arrive.
+  // Tracks both count AND last message ID because polling refetches drop the oldest messages
+  // from page 0 (keeping it capped at PAGE_SIZE=50), so length may not change even when
+  // new messages replace old ones at the bottom of the list.
   useEffect(() => {
-    if (messages.length > prevMessagesLengthRef.current && !isLoadingOlderRef.current) {
+    const isNewLastMessage =
+      lastMessageId !== undefined && lastMessageId !== prevLastMessageIdRef.current;
+    const isMoreMessages = messages.length > prevMessagesLengthRef.current;
+
+    if ((isNewLastMessage || isMoreMessages) && !isLoadingOlderRef.current) {
       scrollRef.current?.scrollTo({
         top: scrollRef.current.scrollHeight,
         behavior: prevMessagesLengthRef.current === 0 ? 'auto' : 'smooth',
@@ -71,7 +82,8 @@ export function MessageThread({ conversationId, presenceStatus, onReply }: Messa
     }
     isLoadingOlderRef.current = false;
     prevMessagesLengthRef.current = messages.length;
-  }, [messages.length]);
+    prevLastMessageIdRef.current = lastMessageId;
+  }, [messages.length, lastMessageId]);
 
   // IntersectionObserver on sentinel to trigger loading older messages
   const handleSentinel = useCallback(
