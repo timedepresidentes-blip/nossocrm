@@ -268,7 +268,11 @@ export function useRealtimeSync(
                 queryClient.setQueryData<InfiniteData<{ messages: MessagingMessage[]; nextCursor: string | null }>>(
                   infiniteKey,
                   (old) => {
-                    if (!old) return old;
+                    if (!old) {
+                      // Cache frio (conversa nunca aberta) — invalida para refetch quando o usuário abrir
+                      queryClient.invalidateQueries({ queryKey: flatKey, exact: false });
+                      return old;
+                    }
                     // Append to the last page (most recent messages page).
                     // MessageThread reverses the order, so appending here is correct.
                     const pages = old.pages.map((page, i) => {

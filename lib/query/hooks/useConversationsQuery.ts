@@ -154,6 +154,8 @@ export function useConversations(filters?: ConversationFilters) {
       });
     },
     staleTime: 30 * 1000, // 30 seconds
+    refetchInterval: 15 * 1000, // Polling fallback — garante atualização se Realtime cair
+    refetchIntervalInBackground: false, // Não pollar com aba oculta
     enabled: !authLoading && !!user && !!profile?.organization_id,
     placeholderData: keepPreviousData,
     // Filter out conversations being deleted so stale refetches from other
