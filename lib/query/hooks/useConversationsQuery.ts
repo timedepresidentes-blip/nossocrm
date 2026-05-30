@@ -153,9 +153,10 @@ export function useConversations(filters?: ConversationFilters) {
         };
       });
     },
-    staleTime: 30 * 1000, // 30 seconds
-    refetchInterval: 15 * 1000, // Polling fallback — garante atualização se Realtime cair
+    staleTime: 2 * 1000, // 2 seconds
+    refetchInterval: 2 * 1000, // Polling a cada 2s — inbox quase em tempo real
     refetchIntervalInBackground: false, // Não pollar com aba oculta
+    refetchOnWindowFocus: true, // Refetch imediato ao focar a aba
     enabled: !authLoading && !!user && !!profile?.organization_id,
     placeholderData: keepPreviousData,
     // Filter out conversations being deleted so stale refetches from other
