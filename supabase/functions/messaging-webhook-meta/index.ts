@@ -686,6 +686,14 @@ async function getLeadRoutingRule(
   };
 }
 
+function detectLeadSource(messageText: string): string {
+  const text = messageText.toLowerCase();
+  if (text.includes("vim pelo site da ecopower") || text.includes("vim pelo site")) {
+    return "site";
+  }
+  return "whatsapp";
+}
+
 async function handleInboundMessage(
   supabase: ReturnType<typeof createClient>,
   channel: {
@@ -717,6 +725,7 @@ async function handleInboundMessage(
   const content = extractContent(message);
   const timestamp = new Date(parseInt(message.timestamp) * 1000);
   const senderName = contact?.profile?.name;
+  const leadSource = detectLeadSource(content.type === "text" ? (content.text || "") : "");
 
   // Find or create conversation
   // During transition: try bsuid first, then phone fallback for existing convs
@@ -813,7 +822,7 @@ async function handleInboundMessage(
       const insertData: Record<string, unknown> = {
         organization_id: channel.organization_id,
         name: contactName,
-        source: "whatsapp",
+        source: leadSource,
       };
 
       if (phone) insertData.phone = phone;
@@ -866,6 +875,7 @@ async function handleInboundMessage(
           conversationId,
           contactName: senderName || externalContactId,
           businessUnitName: channel.business_unit?.name || "Sem unidade",
+          source: leadSource,
         });
       }
     }
@@ -965,20 +975,20 @@ async function autoCreateDeal(
 
     // Create the deal
     const source = params.source || "whatsapp";
-    const sourceLabel = source === "instagram" ? "Instagram" : "WhatsApp";
+    const sourceLabel = source === "instagram" ? "Instagram" : source === "site" ? "Site" : "WhatsApp";
     const dealTitle = `${params.contactName} - ${sourceLabel}`;
 
     const { data: newDeal, error: dealErr } = await supabase
-      // Nota: deals não tem colunas source/metadata — não incluir
       .from("deals")
       .insert({
         organization_id: params.organizationId,
         board_id: params.boardId,
         stage_id: stageId,
-        status: stageId, // CRM usa stage_id e status iguais
+        status: stageId,
         contact_id: params.contactId,
         title: dealTitle,
         value: 0,
+        ...(source !== "whatsapp" && { tags: [`origem: ${sourceLabel.toLowerCase()}`] }),
       })
       .select("id")
       .single();
