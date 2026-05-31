@@ -80,6 +80,44 @@ interface MessageContent {
 // HELPERS
 // =============================================================================
 
+/**
+ * Chama Evolution API para decodificar mídia criptografada do WhatsApp.
+ * Retorna data URL base64 pronta para uso direto no browser.
+ */
+async function downloadMediaAsBase64(params: {
+  serverUrl: string;
+  apiKey: string;
+  instanceName: string;
+  messageData: EvolutionMessageData;
+  mimeType: string;
+}): Promise<string | null> {
+  const { serverUrl, apiKey, instanceName, messageData, mimeType } = params;
+  try {
+    const res = await fetch(
+      `${serverUrl.replace(/\/+$/, "")}/chat/getBase64FromMediaMessage/${instanceName}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: apiKey },
+        body: JSON.stringify({ message: { key: messageData.key, message: messageData.message } }),
+        signal: AbortSignal.timeout(12000),
+      }
+    );
+    if (!res.ok) {
+      console.error(`[Evolution] Media download ${res.status}`);
+      return null;
+    }
+    const result = await res.json() as { base64?: string; mimetype?: string };
+    if (!result.base64) return null;
+    // Truncar parâmetros do MIME type (ex: "audio/ogg; codecs=opus" → "audio/ogg")
+    // para evitar data URL malformada que impede reprodução no browser
+    const mime = (result.mimetype || mimeType).split(";")[0].trim();
+    return `data:${mime};base64,${result.base64}`;
+  } catch (err) {
+    console.error("[Evolution] downloadMediaAsBase64 error:", err);
+    return null;
+  }
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -315,6 +353,7 @@ async function handleMessageUpsert(
     id: string;
     organization_id: string;
     business_unit_id: string;
+    credentials?: Record<string, unknown>;
     business_unit?: { id: string; name: string } | null;
   },
   data: EvolutionMessageData
@@ -335,6 +374,24 @@ async function handleMessageUpsert(
 
   const externalMessageId = data.key.id;
   const content = extractContent(data);
+
+  // Decodificar mídia criptografada via Evolution API antes de salvar
+  if (["audio", "image", "video", "document"].includes(content.type) && content.mediaUrl) {
+    const creds = channel.credentials as { serverUrl?: string; apiKey?: string; instanceName?: string } | undefined;
+    if (creds?.serverUrl && creds?.apiKey && creds?.instanceName) {
+      const base64Url = await downloadMediaAsBase64({
+        serverUrl: creds.serverUrl,
+        apiKey: creds.apiKey,
+        instanceName: creds.instanceName,
+        messageData: data,
+        mimeType: content.mimeType || "application/octet-stream",
+      });
+      if (base64Url) {
+        content.mediaUrl = base64Url;
+        console.log(`[Evolution] Media decoded: ${content.type} (${base64Url.length} chars)`);
+      }
+    }
+  }
   const timestamp = data.messageTimestamp
     ? new Date(data.messageTimestamp * 1000)
     : new Date();

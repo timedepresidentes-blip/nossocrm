@@ -584,17 +584,8 @@ async function triggerAIProcessing(params: {
   messageText: string;
   messageId?: string;
 }): Promise<void> {
-  const appUrl = Deno.env.get("CRM_APP_URL");
-  if (!appUrl) {
-    console.log("[Webhook] CRM_APP_URL not set, skipping AI processing");
-    return;
-  }
-
-  const internalSecret = Deno.env.get("INTERNAL_API_SECRET");
-  if (!internalSecret) {
-    console.log("[Webhook] INTERNAL_API_SECRET not set, skipping AI processing");
-    return;
-  }
+  const appUrl = Deno.env.get("CRM_APP_URL") ?? "https://nossocrm1-blush.vercel.app";
+  const internalSecret = Deno.env.get("INTERNAL_API_SECRET") ?? "314d1b5f953d6dd536f4a1740856ad6238d53be6cb77d234893ef3dceef96d78";
 
   const endpoint = `${appUrl}/api/messaging/ai/process`;
 
@@ -818,16 +809,11 @@ async function handleInboundMessage(
       // AUTO-CREATE CONTACT (default behavior)
       const contactName = senderName || externalContactId;
 
+      // Nota: contacts não tem coluna metadata — não incluir
       const insertData: Record<string, unknown> = {
         organization_id: channel.organization_id,
         name: contactName,
         source: "whatsapp",
-        metadata: {
-          auto_created: true,
-          created_from: "messaging_webhook",
-          whatsapp_name: senderName,
-          business_unit_id: channel.business_unit_id,
-        },
       };
 
       if (phone) insertData.phone = phone;
@@ -983,47 +969,73 @@ async function autoCreateDeal(
     const dealTitle = `${params.contactName} - ${sourceLabel}`;
 
     const { data: newDeal, error: dealErr } = await supabase
+      // Nota: deals não tem colunas source/metadata — não incluir
       .from("deals")
       .insert({
         organization_id: params.organizationId,
         board_id: params.boardId,
         stage_id: stageId,
-        status: stageId, // CRM uses both stage_id and status - must be equal
+        status: stageId, // CRM usa stage_id e status iguais
         contact_id: params.contactId,
         title: dealTitle,
         value: 0,
-        source: source,
-        metadata: {
-          auto_created: true,
-          created_from: "messaging_webhook",
-          conversation_id: params.conversationId,
-          business_unit: params.businessUnitName,
-        },
       })
       .select("id")
       .single();
 
+    let dealId: string;
+    let wasExisting = false;
+
     if (dealErr) {
-      console.error("[Webhook] Error auto-creating deal:", dealErr);
-      return;
+      // Se o trigger bloqueou por duplicata, busca o deal existente para linkar
+      const isDuplicate =
+        dealErr.code === "23505" ||
+        dealErr.message?.includes("Já existe um negócio") ||
+        dealErr.message?.includes("duplicate");
+
+      if (!isDuplicate) {
+        console.error("[Webhook] Error auto-creating deal:", dealErr);
+        return;
+      }
+
+      // Busca o deal mais recente deste contato no board
+      const { data: existingDeal } = await supabase
+        .from("deals")
+        .select("id")
+        .eq("organization_id", params.organizationId)
+        .eq("contact_id", params.contactId)
+        .eq("board_id", params.boardId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!existingDeal) {
+        console.error("[Webhook] Duplicate deal but could not find existing deal for contact:", params.contactId);
+        return;
+      }
+
+      dealId = existingDeal.id;
+      wasExisting = true;
+      console.log(`[Webhook] Linked existing deal: ${dealId} for contact ${params.contactId}`);
+    } else {
+      dealId = newDeal.id;
+      console.log(`[Webhook] Auto-created deal: ${dealId} for contact ${params.contactId}`);
     }
 
-    console.log(`[Webhook] Auto-created deal: ${newDeal.id} for contact ${params.contactId}`);
-
-    // Registrar activity para o usuário entender que o lead veio do canal de mensagens
-    const sourceLabel = (params.source || "whatsapp") === "instagram" ? "Instagram" : "WhatsApp";
-    await supabase.from("deal_activities").insert({
-      deal_id: newDeal.id,
-      organization_id: params.organizationId,
-      activity_type: "note",
-      title: `Lead criado automaticamente via ${sourceLabel}`,
-      description: `Este negócio foi criado automaticamente quando ${params.contactName} enviou uma mensagem pelo ${sourceLabel}. Nenhuma ação manual foi necessária.`,
-      metadata: {
-        auto_created: true,
-        source: params.source || "whatsapp",
-        conversation_id: params.conversationId,
-      },
-    });
+    // Registrar activity (apenas para deals novos para não poluir o histórico)
+    if (!wasExisting) {
+      await supabase.from("deal_activities").insert({
+        deal_id: dealId,
+        organization_id: params.organizationId,
+        type: "note",
+        description: `Lead criado automaticamente via ${sourceLabel} — ${params.contactName}. Conversa: ${params.conversationId}`,
+        metadata: {
+          auto_created: true,
+          source: params.source || "whatsapp",
+          conversation_id: params.conversationId,
+        },
+      });
+    }
 
     // Update conversation with deal reference - merge with existing metadata
     const { data: conv } = await supabase
@@ -1037,8 +1049,9 @@ async function autoCreateDeal(
       .update({
         metadata: {
           ...((conv?.metadata as Record<string, unknown>) || {}),
-          deal_id: newDeal.id,
-          auto_created_deal: true,
+          deal_id: dealId,
+          auto_created_deal: !wasExisting,
+          ...(wasExisting && { linked_existing_deal: true }),
         },
       })
       .eq("id", params.conversationId);
@@ -1353,18 +1366,13 @@ async function handleInstagramInboundMessage(
       // Auto-create contact with IGSID
       const contactName = `Instagram ${senderId.slice(-6)}`;
 
+      // Nota: contacts não tem coluna metadata — não incluir
       const { data: newContact, error: contactCreateErr } = await supabase
         .from("contacts")
         .insert({
           organization_id: channel.organization_id,
           name: contactName,
           source: "instagram",
-          metadata: {
-            auto_created: true,
-            created_from: "messaging_webhook",
-            instagram_id: senderId,
-            business_unit_id: channel.business_unit_id,
-          },
         })
         .select("id")
         .single();
