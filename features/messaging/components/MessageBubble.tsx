@@ -2,10 +2,10 @@
 
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Check, CheckCheck, Clock, AlertCircle, FileText, MapPin, Play, Pause, Image, Reply, Trash2 } from 'lucide-react';
+import { Check, CheckCheck, Clock, AlertCircle, FileText, MapPin, Play, Pause, Image, Reply, Trash2, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sanitizeUrl } from '@/lib/utils/sanitize';
-import { useSendMessage, useDeleteMessage } from '@/lib/query/hooks/useMessagingMessagesQuery';
+import { useSendMessage, useDeleteMessage, useRetryMessage } from '@/lib/query/hooks/useMessagingMessagesQuery';
 import type {
   MessagingMessage,
   MessageStatus,
@@ -459,6 +459,7 @@ export const MessageBubble = memo(function MessageBubble({
   const time = format(new Date(message.createdAt), 'HH:mm');
   const { mutate: sendMessage } = useSendMessage();
   const { mutate: deleteMessage, isPending: isDeleting } = useDeleteMessage();
+  const { mutate: retryMessage, isPending: isRetrying } = useRetryMessage();
 
   const isDeleted = !!(message.metadata?.deleted_at as string | undefined);
 
@@ -562,9 +563,21 @@ export const MessageBubble = memo(function MessageBubble({
             {isOutbound && <StatusIcon status={message.status} />}
           </div>
 
-          {/* Error detail — mostra mensagem amigável, não o erro técnico bruto */}
+          {/* Error: botão de reenviar + mensagem amigável */}
           {message.status === 'failed' && (
-            <p className="text-xs text-red-300 mt-1">Não foi possível entregar a mensagem.</p>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-xs text-red-300 flex-1">Não foi possível entregar.</p>
+              <button
+                type="button"
+                disabled={isRetrying}
+                onClick={() => retryMessage(message.id)}
+                className="flex items-center gap-1 text-xs text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded px-1.5 py-0.5 transition-colors disabled:opacity-50"
+                aria-label="Reenviar mensagem"
+              >
+                <RotateCcw className={cn('w-3 h-3', isRetrying && 'animate-spin')} />
+                {isRetrying ? 'Reenviando...' : 'Reenviar'}
+              </button>
+            </div>
           )}
         </div>
 
