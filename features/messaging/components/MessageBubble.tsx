@@ -475,7 +475,7 @@ export const MessageBubble = memo(function MessageBubble({
   const canEdit = isOutbound && !isDeleted && message.contentType === 'text';
 
   const handleStartEdit = useCallback(() => {
-    const current = ((message.content as Record<string, unknown>).text as string) ?? '';
+    const current = ((message.content as unknown as Record<string, unknown>).text as string) ?? '';
     setEditText(current);
     setEditMode(true);
     // Foca o textarea no próximo tick
