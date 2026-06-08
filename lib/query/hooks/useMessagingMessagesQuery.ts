@@ -470,7 +470,7 @@ export function useEditMessage() {
         if (m.id !== messageId) return m;
         return {
           ...m,
-          content: { ...(m.content as unknown as Record<string, unknown>), text },
+          content: { ...(m.content as unknown as Record<string, unknown>), text } as unknown as MessageContent,
           metadata: { ...(m.metadata ?? {}), edited_at: editedAt },
         };
       };
