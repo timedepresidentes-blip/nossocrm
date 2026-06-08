@@ -102,10 +102,13 @@ export async function POST(
       );
     }
 
-    // Validate status — only retry failed messages
-    if (message.status !== 'failed') {
+    // Permite retry de mensagens failed OU stuck em pending/queued há mais de 3 minutos
+    const isStuck = (message.status === 'pending' || message.status === 'queued')
+      && new Date(message.created_at).getTime() < Date.now() - 3 * 60 * 1000;
+
+    if (message.status !== 'failed' && !isStuck) {
       return NextResponse.json(
-        { message: 'Only failed messages can be retried' },
+        { message: 'Only failed or stuck messages can be retried' },
         { status: 400 }
       );
     }
@@ -140,7 +143,7 @@ export async function POST(
       return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
 
-    // Atomic reset to queued (only if still failed — prevents race condition)
+    // Reset para queued — aceita failed ou pending/queued travadas
     const { data: resetResult } = await supabase
       .from('messaging_messages')
       .update({
@@ -150,13 +153,13 @@ export async function POST(
         failed_at: null,
       })
       .eq('id', messageId)
-      .eq('status', 'failed')
+      .in('status', ['failed', 'pending', 'queued'])
       .select('id')
       .single();
 
     if (!resetResult) {
       return NextResponse.json(
-        { message: 'Message is no longer in failed state (possibly already retried)' },
+        { message: 'Message is no longer in retryable state' },
         { status: 409 }
       );
     }
@@ -176,8 +179,8 @@ export async function POST(
           .eq('id', conversation.channel_id)
           .single();
         const creds = channelCreds?.credentials as Record<string, string> | null;
-        if (channelCreds?.provider === 'meta-cloud' && creds?.access_token && creds?.phone_number_id) {
-          const mediaId = await reuploadAudioToMeta(mediaUrl, creds.phone_number_id, creds.access_token);
+        if (channelCreds?.provider === 'meta-cloud' && creds?.accessToken && creds?.phoneNumberId) {
+          const mediaId = await reuploadAudioToMeta(mediaUrl, creds.phoneNumberId, creds.accessToken);
           if (mediaId) {
             const newMediaUrl = `meta:${mediaId}`;
             content = { ...audioContent, mediaUrl: newMediaUrl };

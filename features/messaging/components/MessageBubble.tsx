@@ -474,6 +474,11 @@ export const MessageBubble = memo(function MessageBubble({
   const isEdited = !!(message.metadata?.edited_at as string | undefined);
   const canEdit = isOutbound && !isDeleted && message.contentType === 'text';
 
+  // Mensagem presa em pending/queued há mais de 3 min — precisa de retry
+  const isStuck = isOutbound
+    && (message.status === 'pending' || message.status === 'queued')
+    && new Date(message.createdAt).getTime() < Date.now() - 3 * 60 * 1000;
+
   const handleStartEdit = useCallback(() => {
     const current = ((message.content as unknown as Record<string, unknown>).text as string) ?? '';
     setEditText(current);
@@ -656,9 +661,11 @@ export const MessageBubble = memo(function MessageBubble({
           </div>
 
           {/* Error: botão de reenviar + mensagem amigável */}
-          {message.status === 'failed' && (
+          {(message.status === 'failed' || isStuck) && (
             <div className="flex items-center gap-2 mt-1">
-              <p className="text-xs text-red-300 flex-1">Não foi possível entregar.</p>
+              <p className="text-xs text-red-300 flex-1">
+                {isStuck ? 'Envio travado.' : 'Não foi possível entregar.'}
+              </p>
               <button
                 type="button"
                 disabled={isRetrying}
