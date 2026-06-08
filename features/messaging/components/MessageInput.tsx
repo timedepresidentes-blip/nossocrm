@@ -82,8 +82,8 @@ async function convertWebmToMp3(webmBlob: Blob): Promise<File> {
 
   const channels = audioBuffer.numberOfChannels;
   const sampleRate = audioBuffer.sampleRate;
-  // 96 kbps — good quality/size tradeoff for voice messages
-  const encoder = new Mp3Encoder(channels >= 2 ? 2 : 1, sampleRate, 96);
+  // 64 kbps — suficiente para voz, reduz tamanho ~30% vs 96kbps
+  const encoder = new Mp3Encoder(channels >= 2 ? 2 : 1, sampleRate, 64);
 
   const BLOCK_SIZE = 1152; // lamejs required block size
 

@@ -335,7 +335,39 @@ export class MetaCloudWhatsAppProvider extends BaseChannelProvider {
       // Normalize phone number (remove + and any non-digits)
       const phone = to.replace(/\D/g, '');
 
-      const messagePayload = this.buildMessagePayload(phone, content, replyToExternalId);
+      // Para áudio, Meta rejeita links públicos (erro 131053).
+      // A abordagem correta é: baixar o arquivo do Supabase → fazer upload
+      // para o endpoint de media da Meta → usar o mediaId no payload.
+      let resolvedContent = content;
+      if (content.type === 'audio') {
+        const audioContent = content as AudioContent;
+        const mediaUrl = audioContent.mediaUrl;
+        if (mediaUrl && !mediaUrl.startsWith('meta:')) {
+          try {
+            this.log('info', 'Fazendo upload de áudio para Meta antes de enviar', { mediaUrl });
+            const fileResponse = await fetch(mediaUrl);
+            if (!fileResponse.ok) throw new Error(`Download do Supabase falhou: ${fileResponse.status}`);
+
+            const fileBlob = await fileResponse.blob();
+            // MIME type vem do header Content-Type do Supabase
+            const mimeType = fileBlob.type || 'audio/mpeg';
+
+            const uploadResult = await this.uploadMedia(fileBlob, mimeType);
+            if (!uploadResult.success || !uploadResult.mediaId) {
+              throw new Error(uploadResult.error?.message ?? 'Upload para Meta falhou');
+            }
+
+            this.log('info', 'Áudio enviado para Meta, mediaId obtido', { mediaId: uploadResult.mediaId });
+            // Substitui mediaUrl pelo mediaId da Meta para uso no payload
+            resolvedContent = { ...audioContent, mediaUrl: `meta:${uploadResult.mediaId}` };
+          } catch (uploadErr) {
+            this.log('error', 'Falha no upload de áudio para Meta, tentando link direto', { uploadErr });
+            // Continua com link direto como fallback
+          }
+        }
+      }
+
+      const messagePayload = this.buildMessagePayload(phone, resolvedContent, replyToExternalId);
 
       const response = await this.request<MetaSendResponse>(
         'POST',
@@ -463,13 +495,17 @@ export class MetaCloudWhatsAppProvider extends BaseChannelProvider {
           },
         };
 
-      case 'audio':
+      case 'audio': {
         const audioContent = content as AudioContent;
+        const audioMediaUrl = audioContent.mediaUrl ?? '';
+        // Se o upload para Meta já ocorreu em sendMessage, a URL vem como "meta:{mediaId}"
+        const audioMediaId = audioMediaUrl.startsWith('meta:') ? audioMediaUrl.slice(5) : null;
         return {
           ...base,
           type: 'audio',
-          audio: { link: audioContent.mediaUrl },
+          audio: audioMediaId ? { id: audioMediaId } : { link: audioMediaUrl },
         };
+      }
 
       case 'document':
         const docContent = content as DocumentContent;
