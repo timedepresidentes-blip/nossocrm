@@ -56,9 +56,8 @@ function getMediaType(mimeType: string): PendingMedia['mediaType'] {
 }
 
 /**
- * Convert a WebM/Opus blob (Chrome MediaRecorder output) to an MP3 file.
- * Uses AudioContext to decode PCM + lamejs to encode to MP3.
- * WhatsApp Cloud API accepts audio/mpeg; Chrome never produces it natively.
+ * Converte qualquer blob de áudio para MP3 leve otimizado para voz.
+ * Reamostrado para 16kHz mono + 32kbps = ~4KB/s (WhatsApp usa 8-32kbps Opus).
  */
 async function convertWebmToMp3(webmBlob: Blob): Promise<File> {
   const Mp3Encoder = window.lamejs?.Mp3Encoder;
@@ -67,8 +66,6 @@ async function convertWebmToMp3(webmBlob: Blob): Promise<File> {
   const arrayBuffer = await webmBlob.arrayBuffer();
   const audioContext = new AudioContext();
 
-  // decodeAudioData can hang indefinitely in Chrome on malformed WebM —
-  // wrap with a 15s timeout to guarantee resolution.
   const audioBuffer = await Promise.race([
     new Promise<AudioBuffer>((resolve, reject) =>
       audioContext.decodeAudioData(arrayBuffer, resolve, reject)
@@ -80,23 +77,27 @@ async function convertWebmToMp3(webmBlob: Blob): Promise<File> {
 
   await audioContext.close();
 
-  const channels = audioBuffer.numberOfChannels;
-  const sampleRate = audioBuffer.sampleRate;
-  // 64 kbps — suficiente para voz, reduz tamanho ~30% vs 96kbps
-  const encoder = new Mp3Encoder(channels >= 2 ? 2 : 1, sampleRate, 64);
+  // Reamostrar para 16kHz mono — voz humana cabe em 300Hz-3.4kHz, 16kHz é mais que suficiente.
+  // OfflineAudioContext faz o mix-down estéreo→mono e a reamostragem automaticamente.
+  const TARGET_SR = 16000;
+  const frameCount = Math.ceil(audioBuffer.duration * TARGET_SR);
+  const offline = new OfflineAudioContext(1, frameCount, TARGET_SR);
+  const src = offline.createBufferSource();
+  src.buffer = audioBuffer;
+  src.connect(offline.destination);
+  src.start(0);
+  const resampled = await offline.startRendering();
 
-  const BLOCK_SIZE = 1152; // lamejs required block size
+  // 32 kbps mono 16kHz ≈ 4KB/s — reduz ~4x vs 64kbps stereo 44kHz anterior
+  const encoder = new Mp3Encoder(1, TARGET_SR, 32);
 
-  const leftPCM = floatToInt16(audioBuffer.getChannelData(0));
-  const rightPCM = channels >= 2 ? floatToInt16(audioBuffer.getChannelData(1)) : null;
-
+  const BLOCK_SIZE = 1152;
+  const samples = floatToInt16(resampled.getChannelData(0));
   const mp3Chunks: Int8Array[] = [];
 
-  for (let i = 0; i < leftPCM.length; i += BLOCK_SIZE) {
-    const leftChunk = leftPCM.subarray(i, i + BLOCK_SIZE);
-    const encoded = rightPCM
-      ? encoder.encodeBuffer(leftChunk, rightPCM.subarray(i, i + BLOCK_SIZE))
-      : encoder.encodeBuffer(leftChunk);
+  for (let i = 0; i < samples.length; i += BLOCK_SIZE) {
+    const chunk = samples.subarray(i, i + BLOCK_SIZE);
+    const encoded = encoder.encodeBuffer(chunk);
     if (encoded.length > 0) mp3Chunks.push(encoded);
   }
 
@@ -243,20 +244,19 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      // Prefer formats WhatsApp accepts natively (no conversion needed):
-      //   1. audio/ogg;codecs=opus  — Firefox
-      //   2. audio/mp4              — macOS/iOS Chrome (AAC)
-      //   3. audio/webm             — Windows Chrome fallback (convertido p/ MP3)
+      // Ordem de preferência: WebM antes de MP4 para que Chrome use WebM
+      // e passe pela conversão lamejs (32kbps mono 16kHz).
+      // MP4 fica no final como fallback para iOS/Safari que não suporta webm.
       const PREFERRED_TYPES = [
-        'audio/ogg;codecs=opus',
-        'audio/mp4',
-        'audio/mp4;codecs=mp4a.40.2',
-        'audio/webm;codecs=opus',
-        'audio/webm',
+        'audio/ogg;codecs=opus',  // Firefox — Opus nativo aceito pelo WhatsApp
+        'audio/webm;codecs=opus', // Chrome — convertido p/ MP3 leve via lamejs
+        'audio/webm',             // Chrome fallback
+        'audio/mp4',              // iOS/Safari — sem conversão, mas 32kbps via audioBitsPerSecond
       ];
       const mimeType = PREFERRED_TYPES.find((t) => MediaRecorder.isTypeSupported(t)) ?? '';
 
-      const recorder = new MediaRecorder(stream, { mimeType });
+      // 32kbps reduz tamanho em todos os formatos nativos (OGG Opus, MP4 AAC)
+      const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 32000 });
       mediaRecorderRef.current = recorder;
       audioChunksRef.current = [];
 
