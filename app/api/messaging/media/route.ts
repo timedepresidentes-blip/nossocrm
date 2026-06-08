@@ -63,8 +63,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Canal não é Meta Cloud' }, { status: 400 });
   }
 
-  const accessToken = channel.credentials?.accessToken;
+  // Suporta camelCase e snake_case para compatibilidade com canais legados
+  const creds = channel.credentials ?? {} as Record<string, string>;
+  const accessToken = creds.accessToken || creds.access_token;
   if (!accessToken) {
+    console.error('[media-proxy] accessToken ausente nas credenciais:', Object.keys(creds));
     return NextResponse.json({ error: 'Canal sem credenciais configuradas' }, { status: 500 });
   }
 

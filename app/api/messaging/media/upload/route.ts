@@ -206,8 +206,8 @@ export async function POST(req: NextRequest) {
       const channel = conversation.channel as { provider: string; credentials: Record<string, string> } | null;
       if (channel?.provider === 'meta-cloud') {
         const creds = (channel.credentials ?? {}) as Record<string, string>;
-        const access_token = creds.accessToken;
-        const phone_number_id = creds.phoneNumberId;
+        const access_token = creds.accessToken || creds.access_token;
+        const phone_number_id = creds.phoneNumberId || creds.phone_number_id;
         if (access_token && phone_number_id) {
           const mediaId = await uploadAudioToMeta(fileBuffer, file.type, phone_number_id, access_token);
           if (mediaId) {

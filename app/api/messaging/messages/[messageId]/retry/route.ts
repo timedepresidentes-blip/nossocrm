@@ -179,8 +179,10 @@ export async function POST(
           .eq('id', conversation.channel_id)
           .single();
         const creds = channelCreds?.credentials as Record<string, string> | null;
-        if (channelCreds?.provider === 'meta-cloud' && creds?.accessToken && creds?.phoneNumberId) {
-          const mediaId = await reuploadAudioToMeta(mediaUrl, creds.phoneNumberId, creds.accessToken);
+        const retryAccessToken = creds?.accessToken || creds?.access_token;
+        const retryPhoneId = creds?.phoneNumberId || creds?.phone_number_id;
+        if (channelCreds?.provider === 'meta-cloud' && retryAccessToken && retryPhoneId) {
+          const mediaId = await reuploadAudioToMeta(mediaUrl, retryPhoneId, retryAccessToken);
           if (mediaId) {
             const newMediaUrl = `meta:${mediaId}`;
             content = { ...audioContent, mediaUrl: newMediaUrl };

@@ -77,12 +77,13 @@ const AudioPlayer = memo(function AudioPlayer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState<number>(content.duration ?? 0);
+  const [loadError, setLoadError] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
   const safeUrl = resolveMediaUrl(content.mediaUrl, conversationId);
 
   // 24 bars — wide enough to look like waveform, not too thin
-  const bars = useMemo(() => generateWaveform(content.mediaUrl, 24), [content.mediaUrl]);
+  const bars = useMemo(() => generateWaveform(content.mediaUrl ?? '', 24), [content.mediaUrl]);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -92,24 +93,32 @@ const AudioPlayer = memo(function AudioPlayer({
     const onEnded = () => { setIsPlaying(false); setCurrentTime(0); };
     const onTimeUpdate = () => setCurrentTime(el.currentTime);
     const onMeta = () => { if (Number.isFinite(el.duration)) setDuration(el.duration); };
+    const onError = () => { setLoadError(true); setIsPlaying(false); };
     el.addEventListener('play', onPlay);
     el.addEventListener('pause', onPause);
     el.addEventListener('ended', onEnded);
     el.addEventListener('timeupdate', onTimeUpdate);
     el.addEventListener('loadedmetadata', onMeta);
+    el.addEventListener('error', onError);
     return () => {
       el.removeEventListener('play', onPlay);
       el.removeEventListener('pause', onPause);
       el.removeEventListener('ended', onEnded);
       el.removeEventListener('timeupdate', onTimeUpdate);
       el.removeEventListener('loadedmetadata', onMeta);
+      el.removeEventListener('error', onError);
     };
   }, []);
 
   const togglePlay = useCallback(() => {
     const el = audioRef.current;
     if (!el || !safeUrl) return;
-    isPlaying ? el.pause() : el.play().catch(() => {});
+    setLoadError(false);
+    if (isPlaying) {
+      el.pause();
+    } else {
+      el.play().catch(() => setLoadError(true));
+    }
   }, [isPlaying, safeUrl]);
 
   const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -123,6 +132,18 @@ const AudioPlayer = memo(function AudioPlayer({
   }, [duration]);
 
   const progress = duration > 0 ? currentTime / duration : 0;
+
+  if (loadError) {
+    return (
+      <div className={cn(
+        'flex items-center gap-2 text-xs px-1',
+        isOutbound ? 'text-white/60' : 'text-slate-400',
+      )}>
+        <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        <span>Áudio indisponível</span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-2.5 select-none" style={{ minWidth: 200 }}>
