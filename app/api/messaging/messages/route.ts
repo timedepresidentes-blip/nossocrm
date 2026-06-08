@@ -9,6 +9,8 @@ import {
   setConversationCache,
 } from '@/lib/messaging/conversation-cache';
 
+export const maxDuration = 60;
+
 type ChannelInfo = { id: string; channel_type: string; provider: string };
 
 export async function POST(request: NextRequest) {
