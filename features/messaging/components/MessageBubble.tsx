@@ -200,25 +200,22 @@ interface MessageBubbleProps {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-// StatusIcon é exibido APENAS em bolhas outbound (fundo azul primary-500).
-// Escala de opacidade: pending→sent→delivered→read, do mais apagado ao mais visível.
+// StatusIcon — exibido APENAS em bolhas outbound (fundo azul primary-500).
+// Escala de progressão: relógio apagado → tick branco → 2 ticks verdes → lido verde-claro.
 const StatusIcon = memo(function StatusIcon({ status }: { status: MessageStatus }) {
   switch (status) {
     case 'pending':
     case 'queued':
-      // Relógio bem apagado — aguardando envio
       return <Clock className="w-3 h-3 text-white/40" />;
     case 'sent':
-      // 1 tick branco semi-transparente — chegou ao servidor Meta
-      return <Check className="w-3 h-3 text-white/60" />;
+      return <Check className="w-3 h-3 text-white/70" />;
     case 'delivered':
-      // 2 ticks brancos fortes — chegou no celular do cliente
-      return <CheckCheck className="w-3 h-3 text-white/90" />;
+      // Verde escuro — claramente visível sobre azul, indica entrega confirmada
+      return <CheckCheck className="w-3 h-3 text-emerald-300" />;
     case 'read':
-      // 2 ticks azul-claro — mensagem lida (contraste alto sobre o azul escuro)
-      return <CheckCheck className="w-3 h-3 text-sky-200" />;
+      // Verde mais claro e brilhante — lida
+      return <CheckCheck className="w-3 h-3 text-green-200" />;
     case 'failed':
-      // Vermelho claro — visível sobre azul
       return <AlertCircle className="w-3 h-3 text-red-300" />;
     default:
       return null;
@@ -485,14 +482,25 @@ export const MessageBubble = memo(function MessageBubble({
     setTimeout(() => editRef.current?.focus(), 0);
   }, [message.content]);
 
+  const [isSendingResend, setIsSendingResend] = useState(false);
+
   const handleSaveEdit = useCallback(() => {
     const trimmed = editText.trim();
-    if (!trimmed) return;
-    editMessage(
-      { messageId: message.id, text: trimmed, conversationId },
-      { onSuccess: () => setEditMode(false) }
+    if (!trimmed || isSendingResend) return;
+    setIsSendingResend(true);
+    // Envia nova mensagem com texto corrigido, depois apaga a antiga
+    sendMessage(
+      { conversationId, content: { type: 'text', text: trimmed } },
+      {
+        onSuccess: () => {
+          deleteMessage({ messageId: message.id, conversationId });
+          setEditMode(false);
+          setIsSendingResend(false);
+        },
+        onError: () => setIsSendingResend(false),
+      }
     );
-  }, [editText, editMessage, message.id, conversationId]);
+  }, [editText, isSendingResend, sendMessage, deleteMessage, message.id, conversationId]);
 
   const handleCancelEdit = useCallback(() => {
     setEditMode(false);
@@ -605,6 +613,9 @@ export const MessageBubble = memo(function MessageBubble({
                   rows={3}
                   className="w-full bg-white/15 text-white placeholder-white/50 rounded-lg px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-white/40"
                 />
+                <p className="text-[10px] text-white/50 leading-tight">
+                  A mensagem antiga será apagada e esta será reenviada ao cliente.
+                </p>
                 <div className="flex items-center justify-end gap-2">
                   <button
                     type="button"
@@ -616,10 +627,10 @@ export const MessageBubble = memo(function MessageBubble({
                   <button
                     type="button"
                     onClick={handleSaveEdit}
-                    disabled={isEditing || !editText.trim()}
+                    disabled={isSendingResend || !editText.trim()}
                     className="text-[11px] bg-white/20 hover:bg-white/30 text-white rounded px-2 py-0.5 transition-colors disabled:opacity-40"
                   >
-                    {isEditing ? 'Salvando...' : 'Salvar'}
+                    {isSendingResend ? 'Enviando...' : 'Apagar e reenviar'}
                   </button>
                 </div>
               </div>
