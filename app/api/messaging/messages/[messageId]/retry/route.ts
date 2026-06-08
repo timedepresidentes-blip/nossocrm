@@ -6,7 +6,55 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getChannelRouter, transformMessage } from '@/lib/messaging';
-import type { MessageContent, DbMessagingMessage } from '@/lib/messaging';
+import type { MessageContent, DbMessagingMessage, AudioContent } from '@/lib/messaging';
+
+export const maxDuration = 120;
+
+const META_GRAPH_URL = 'https://graph.facebook.com/v25.0';
+
+// Para áudio com URL do Supabase: faz upload direto para Meta e retorna mediaId
+async function reuploadAudioToMeta(
+  mediaUrl: string,
+  phoneNumberId: string,
+  accessToken: string,
+): Promise<string | null> {
+  try {
+    const fileRes = await fetch(mediaUrl);
+    if (!fileRes.ok) {
+      console.error('[retry] Download do Supabase falhou:', fileRes.status, mediaUrl);
+      return null;
+    }
+    const fileBlob = await fileRes.blob();
+    const mimeType = fileBlob.type || 'audio/mpeg';
+    const extMap: Record<string, string> = {
+      'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/aac': 'aac',
+      'audio/ogg': 'ogg', 'audio/amr': 'amr', 'audio/webm': 'webm',
+    };
+    const filename = `audio.${extMap[mimeType] || 'mp3'}`;
+
+    const metaForm = new FormData();
+    metaForm.append('messaging_product', 'whatsapp');
+    metaForm.append('type', mimeType);
+    metaForm.append('file', fileBlob, filename);
+
+    const metaRes = await fetch(`${META_GRAPH_URL}/${phoneNumberId}/media`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: metaForm,
+    });
+
+    const data = await metaRes.json() as { id?: string; error?: { message: string; code: number } };
+    if (data.id) {
+      console.log('[retry] Áudio reenviado para Meta, mediaId:', data.id);
+      return data.id;
+    }
+    console.error('[retry] Meta rejeitou upload de áudio:', JSON.stringify(data.error));
+    return null;
+  } catch (err) {
+    console.error('[retry] Falha no upload de áudio para Meta:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
 
 export async function POST(
   _request: NextRequest,
@@ -115,7 +163,33 @@ export async function POST(
 
     // Retry via channel router
     const router = getChannelRouter();
-    const content = message.content as unknown as MessageContent;
+    let content = message.content as unknown as MessageContent;
+
+    // Para áudio com URL Supabase: faz upload direto para Meta antes de enviar
+    if (content.type === 'audio') {
+      const audioContent = content as AudioContent;
+      const mediaUrl = audioContent.mediaUrl ?? '';
+      if (mediaUrl && !mediaUrl.startsWith('meta:')) {
+        const { data: channelCreds } = await supabase
+          .from('messaging_channels')
+          .select('credentials, provider')
+          .eq('id', conversation.channel_id)
+          .single();
+        const creds = channelCreds?.credentials as Record<string, string> | null;
+        if (channelCreds?.provider === 'meta-cloud' && creds?.access_token && creds?.phone_number_id) {
+          const mediaId = await reuploadAudioToMeta(mediaUrl, creds.phone_number_id, creds.access_token);
+          if (mediaId) {
+            const newMediaUrl = `meta:${mediaId}`;
+            content = { ...audioContent, mediaUrl: newMediaUrl };
+            // Persiste o mediaId para que próximos retries não precisem fazer upload novamente
+            await supabase
+              .from('messaging_messages')
+              .update({ content: { ...(message.content as Record<string, unknown>), mediaUrl: newMediaUrl } })
+              .eq('id', messageId);
+          }
+        }
+      }
+    }
 
     const result = await router.sendMessage(conversation.channel_id, {
       conversationId: conversation.id,

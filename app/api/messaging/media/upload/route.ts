@@ -1,7 +1,8 @@
 /**
  * POST /api/messaging/media/upload
  *
- * Upload media for messaging. Stores in Supabase Storage and returns the public URL.
+ * Upload media for messaging. Stores in Supabase Storage (backup) and, for audio,
+ * faz upload direto para Meta e retorna meta:mediaId para evitar erro 131053.
  * Accepts multipart/form-data with:
  * - file: the media file
  * - conversationId: the target conversation (for org ownership validation)
@@ -11,6 +12,8 @@ import { createClient } from '@/lib/supabase/server';
 
 export const maxDuration = 120;
 import crypto from 'crypto';
+
+const META_GRAPH_URL = 'https://graph.facebook.com/v25.0';
 
 // WhatsApp limits (Meta API v25 — https://developers.facebook.com/docs/whatsapp/cloud-api/reference/media)
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB (Meta limit: 5MB)
@@ -33,6 +36,20 @@ const ALLOWED_DOCUMENT_TYPES = [
   'text/csv',
 ];
 
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif',
+  'video/mp4': 'mp4', 'video/3gpp': '3gp',
+  'audio/aac': 'aac', 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3', 'audio/amr': 'amr',
+  'audio/ogg': 'ogg', 'audio/webm': 'webm',
+  'application/pdf': 'pdf', 'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-powerpoint': 'ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  'text/plain': 'txt', 'text/csv': 'csv',
+};
+
 function getMediaType(mimeType: string): 'image' | 'video' | 'audio' | 'document' | null {
   if (ALLOWED_IMAGE_TYPES.includes(mimeType)) return 'image';
   if (ALLOWED_VIDEO_TYPES.includes(mimeType)) return 'video';
@@ -48,6 +65,41 @@ function getMaxSize(mediaType: string): number {
     case 'audio': return MAX_AUDIO_SIZE;
     case 'document': return MAX_DOCUMENT_SIZE;
     default: return MAX_DOCUMENT_SIZE;
+  }
+}
+
+// Faz upload de áudio direto para Meta usando o buffer já em memória
+async function uploadAudioToMeta(
+  fileBuffer: Buffer,
+  mimeType: string,
+  phoneNumberId: string,
+  accessToken: string,
+): Promise<string | null> {
+  try {
+    const ext = MIME_TO_EXT[mimeType] || 'mp3';
+    const filename = `audio.${ext}`;
+
+    const metaForm = new FormData();
+    metaForm.append('messaging_product', 'whatsapp');
+    metaForm.append('type', mimeType);
+    metaForm.append('file', new Blob([fileBuffer], { type: mimeType }), filename);
+
+    const res = await fetch(`${META_GRAPH_URL}/${phoneNumberId}/media`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: metaForm,
+    });
+
+    const data = await res.json() as { id?: string; error?: { message: string; code: number } };
+    if (data.id) {
+      console.log('[upload] Áudio enviado para Meta, mediaId:', data.id);
+      return data.id;
+    }
+    console.error('[upload] Meta rejeitou upload de áudio:', JSON.stringify(data.error));
+    return null;
+  } catch (err) {
+    console.error('[upload] Falha no upload de áudio para Meta:', err instanceof Error ? err.message : err);
+    return null;
   }
 }
 
@@ -83,10 +135,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Validate conversation belongs to org
+  // Validate conversation belongs to org — inclui credenciais do canal para upload de áudio
   const { data: conversation } = await supabase
     .from('messaging_conversations')
-    .select('id')
+    .select(`
+      id,
+      channel:messaging_channels!channel_id (
+        provider,
+        credentials
+      )
+    `)
     .eq('id', conversationId)
     .eq('organization_id', profile.organization_id)
     .single();
@@ -115,25 +173,14 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Derive extension from validated MIME type (not user-supplied filename)
-    const MIME_TO_EXT: Record<string, string> = {
-      'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif',
-      'video/mp4': 'mp4', 'video/3gpp': '3gp',
-      'audio/aac': 'aac', 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3', 'audio/amr': 'amr', 'audio/ogg': 'ogg', 'audio/webm': 'webm',
-      'application/pdf': 'pdf', 'application/msword': 'doc',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-      'application/vnd.ms-excel': 'xls',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
-      'application/vnd.ms-powerpoint': 'ppt',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
-      'text/plain': 'txt', 'text/csv': 'csv',
-    };
     const ext = MIME_TO_EXT[file.type] || 'bin';
     const uniqueId = crypto.randomUUID();
     const storagePath = `${profile.organization_id}/${conversationId}/${uniqueId}.${ext}`;
 
-    // Upload to Supabase Storage
+    // Lê o buffer uma vez — usado tanto para Supabase quanto para Meta
     const fileBuffer = Buffer.from(await file.arrayBuffer());
+
+    // Upload to Supabase Storage (backup para reprodução no CRM)
     const { error: uploadError } = await supabase.storage
       .from('messaging-media')
       .upload(storagePath, fileBuffer, {
@@ -149,10 +196,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get public URL
     const { data: urlData } = supabase.storage
       .from('messaging-media')
       .getPublicUrl(storagePath);
+
+    // Para áudio: tenta fazer upload direto para Meta no momento da gravação.
+    // Isso evita o erro 131053 que ocorre quando a Meta tenta baixar o arquivo depois.
+    if (mediaType === 'audio') {
+      const channel = conversation.channel as { provider: string; credentials: Record<string, string> } | null;
+      if (channel?.provider === 'meta-cloud') {
+        const { access_token, phone_number_id } = channel.credentials ?? {};
+        if (access_token && phone_number_id) {
+          const mediaId = await uploadAudioToMeta(fileBuffer, file.type, phone_number_id, access_token);
+          if (mediaId) {
+            return NextResponse.json({
+              mediaUrl: `meta:${mediaId}`,
+              mediaType,
+              mimeType: file.type,
+              fileName: file.name,
+              fileSize: file.size,
+            });
+          }
+          // Se upload para Meta falhou, o Supabase URL é retornado abaixo como fallback
+          console.warn('[upload] Fallback para URL Supabase — áudio pode falhar na entrega');
+        }
+      }
+    }
 
     return NextResponse.json({
       mediaUrl: urlData.publicUrl,
