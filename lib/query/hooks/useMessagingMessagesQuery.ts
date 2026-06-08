@@ -438,6 +438,66 @@ export function useDeleteMessage() {
 }
 
 /**
+ * Edita o texto de uma mensagem outbound.
+ */
+export function useEditMessage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ messageId, text }: { messageId: string; text: string; conversationId: string }): Promise<{ editedAt: string }> => {
+      const response = await fetch(`/api/messaging/messages/${messageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { message?: string }).message || 'Failed to edit message');
+      }
+      return response.json();
+    },
+    onMutate: async ({ messageId, text, conversationId }) => {
+      const queryKey = queryKeys.messagingMessages.byConversation(conversationId);
+      const infiniteQueryKey = [...queryKeys.messagingMessages.byConversation(conversationId), 'infinite'] as const;
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey }),
+        queryClient.cancelQueries({ queryKey: infiniteQueryKey }),
+      ]);
+      const previous = queryClient.getQueryData<MessagingMessage[]>(queryKey);
+      const editedAt = new Date().toISOString();
+
+      const applyEdit = (m: MessagingMessage): MessagingMessage => {
+        if (m.id !== messageId) return m;
+        return {
+          ...m,
+          content: { ...(m.content as Record<string, unknown>), text },
+          metadata: { ...(m.metadata ?? {}), edited_at: editedAt },
+        };
+      };
+
+      queryClient.setQueryData<MessagingMessage[]>(queryKey, (old) => old?.map(applyEdit));
+      queryClient.setQueryData<InfiniteData<{ messages: MessagingMessage[]; nextCursor: string | null }>>(
+        infiniteQueryKey,
+        (old) => old
+          ? { ...old, pages: old.pages.map(p => ({ ...p, messages: p.messages.map(applyEdit) })) }
+          : old
+      );
+      return { previous, queryKey, infiniteQueryKey };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(context.queryKey, context.previous);
+      }
+    },
+    onSettled: (_data, _err, { conversationId }) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messagingMessages.byConversation(conversationId),
+      });
+    },
+  });
+}
+
+/**
  * Retry a failed message.
  * TODO: Implement API endpoint for retry
  */

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createStaticAdminClient } from '@/lib/supabase/staticAdminClient';
 
 /**
  * DELETE /api/messaging/messages/[messageId]
@@ -71,6 +72,97 @@ export async function DELETE(
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('[messaging/messages/delete]', err instanceof Error ? err.message : err);
+    return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
+  }
+}
+
+/**
+ * PATCH /api/messaging/messages/[messageId]
+ * Edita o texto de uma mensagem outbound.
+ * Atualiza o conteúdo no CRM e tenta editar no WhatsApp (janela de 15 min).
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ messageId: string }> }
+) {
+  try {
+    const { messageId } = await params;
+    const body = await req.json() as { text?: string };
+    const newText = typeof body.text === 'string' ? body.text.trim() : '';
+
+    if (!newText) {
+      return NextResponse.json({ message: 'Texto não pode ser vazio' }, { status: 400 });
+    }
+
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { data: message, error: msgError } = await supabase
+      .from('messaging_messages')
+      .select(`
+        id,
+        direction,
+        content_type,
+        content,
+        external_id,
+        deleted_at,
+        created_at,
+        metadata,
+        conversation:messaging_conversations!conversation_id (
+          organization_id
+        )
+      `)
+      .eq('id', messageId)
+      .single();
+
+    if (msgError || !message) {
+      return NextResponse.json({ message: 'Message not found' }, { status: 404 });
+    }
+    if (message.direction !== 'outbound') {
+      return NextResponse.json({ message: 'Apenas mensagens enviadas podem ser editadas' }, { status: 400 });
+    }
+    if (message.deleted_at) {
+      return NextResponse.json({ message: 'Mensagem apagada não pode ser editada' }, { status: 409 });
+    }
+    if (message.content_type !== 'text') {
+      return NextResponse.json({ message: 'Apenas mensagens de texto podem ser editadas' }, { status: 400 });
+    }
+
+    // Valida org
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single();
+
+    const conv = message.conversation as { organization_id: string } | null;
+    if (!profile || conv?.organization_id !== profile.organization_id) {
+      return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+    }
+
+    const editedAt = new Date().toISOString();
+    const newContent = { ...(message.content as Record<string, unknown>), text: newText };
+    const newMetadata = {
+      ...(message.metadata as Record<string, unknown> ?? {}),
+      edited_at: editedAt,
+    };
+
+    const supabaseAdmin = createStaticAdminClient();
+    const { error: updateError } = await supabaseAdmin
+      .from('messaging_messages')
+      .update({ content: newContent, metadata: newMetadata })
+      .eq('id', messageId);
+
+    if (updateError) {
+      return NextResponse.json({ message: 'Failed to update message' }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true, editedAt });
+  } catch (err) {
+    console.error('[messaging/messages/patch]', err instanceof Error ? err.message : err);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }

@@ -2,10 +2,10 @@
 
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Check, CheckCheck, Clock, AlertCircle, FileText, MapPin, Play, Pause, Image, Reply, Trash2, RotateCcw } from 'lucide-react';
+import { Check, CheckCheck, Clock, AlertCircle, FileText, MapPin, Play, Pause, Image, Reply, Trash2, RotateCcw, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sanitizeUrl } from '@/lib/utils/sanitize';
-import { useSendMessage, useDeleteMessage, useRetryMessage } from '@/lib/query/hooks/useMessagingMessagesQuery';
+import { useSendMessage, useDeleteMessage, useRetryMessage, useEditMessage } from '@/lib/query/hooks/useMessagingMessagesQuery';
 import type {
   MessagingMessage,
   MessageStatus,
@@ -467,8 +467,47 @@ export const MessageBubble = memo(function MessageBubble({
   const { mutate: sendMessage } = useSendMessage();
   const { mutate: deleteMessage, isPending: isDeleting } = useDeleteMessage();
   const { mutate: retryMessage, isPending: isRetrying } = useRetryMessage();
+  const { mutate: editMessage, isPending: isEditing } = useEditMessage();
+
+  const [editMode, setEditMode] = useState(false);
+  const [editText, setEditText] = useState('');
+  const editRef = useRef<HTMLTextAreaElement>(null);
 
   const isDeleted = !!(message.metadata?.deleted_at as string | undefined);
+  const isEdited = !!(message.metadata?.edited_at as string | undefined);
+  const canEdit = isOutbound && !isDeleted && message.contentType === 'text';
+
+  const handleStartEdit = useCallback(() => {
+    const current = ((message.content as Record<string, unknown>).text as string) ?? '';
+    setEditText(current);
+    setEditMode(true);
+    // Foca o textarea no próximo tick
+    setTimeout(() => editRef.current?.focus(), 0);
+  }, [message.content]);
+
+  const handleSaveEdit = useCallback(() => {
+    const trimmed = editText.trim();
+    if (!trimmed) return;
+    editMessage(
+      { messageId: message.id, text: trimmed, conversationId },
+      { onSuccess: () => setEditMode(false) }
+    );
+  }, [editText, editMessage, message.id, conversationId]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditMode(false);
+    setEditText('');
+  }, []);
+
+  const handleEditKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSaveEdit();
+    }
+    if (e.key === 'Escape') {
+      handleCancelEdit();
+    }
+  }, [handleSaveEdit, handleCancelEdit]);
 
   const reactions = (message.metadata?.reactions as Record<string, number> | undefined) ?? {};
   const canReact = !isOutbound && !!message.externalId;
@@ -554,9 +593,39 @@ export const MessageBubble = memo(function MessageBubble({
             </p>
           )}
 
-          {/* Content */}
+          {/* Content — modo edição ou conteúdo normal */}
           <div className="text-sm">
-            <MessageContent message={message} conversationId={conversationId} />
+            {editMode ? (
+              <div className="flex flex-col gap-1.5">
+                <textarea
+                  ref={editRef}
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  onKeyDown={handleEditKeyDown}
+                  rows={3}
+                  className="w-full bg-white/15 text-white placeholder-white/50 rounded-lg px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-white/40"
+                />
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    className="text-[11px] text-white/60 hover:text-white/90 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveEdit}
+                    disabled={isEditing || !editText.trim()}
+                    className="text-[11px] bg-white/20 hover:bg-white/30 text-white rounded px-2 py-0.5 transition-colors disabled:opacity-40"
+                  >
+                    {isEditing ? 'Salvando...' : 'Salvar'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <MessageContent message={message} conversationId={conversationId} />
+            )}
           </div>
 
           {/* Timestamp + delivery status */}
@@ -566,6 +635,11 @@ export const MessageBubble = memo(function MessageBubble({
               isOutbound ? 'text-white/70' : 'text-slate-400',
             )}
           >
+            {isEdited && (
+              <span className={cn('text-[10px] italic', isOutbound ? 'text-white/50' : 'text-slate-400')}>
+                editada
+              </span>
+            )}
             <span className="text-[10px]">{time}</span>
             {isOutbound && <StatusIcon status={message.status} />}
           </div>
@@ -612,6 +686,18 @@ export const MessageBubble = memo(function MessageBubble({
 
         {/* Emoji picker — only for inbound */}
         {canReact && <EmojiPickerButton onReact={handleReact} />}
+
+        {/* Edit button — only for outbound text messages */}
+        {canEdit && !editMode && (
+          <button
+            type="button"
+            onClick={handleStartEdit}
+            aria-label="Editar mensagem"
+            className="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:text-primary-500 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-500/10 transition-colors"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
 
         {/* Delete button — only for outbound */}
         {isOutbound && (
