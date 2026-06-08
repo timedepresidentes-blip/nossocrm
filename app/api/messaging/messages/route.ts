@@ -188,7 +188,18 @@ export async function POST(request: NextRequest) {
             .eq('id', messageId);
         }
       } catch (err: unknown) {
-        console.error('[messaging/messages] background send failed:', err instanceof Error ? err.message : err, err instanceof Error ? err.stack : '');
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error('[messaging/messages] background send failed:', errMsg, err instanceof Error ? err.stack : '');
+        // Marca como failed para que o botão Reenviar apareça na UI
+        await supabaseAdmin
+          .from('messaging_messages')
+          .update({
+            status: 'failed',
+            error_code: 'SEND_EXCEPTION',
+            error_message: errMsg.slice(0, 500),
+            failed_at: new Date().toISOString(),
+          })
+          .eq('id', messageId);
       }
     })();
 
