@@ -394,6 +394,50 @@ export function useUpdateMessageStatus() {
 }
 
 /**
+ * Soft-deleta uma mensagem outbound.
+ */
+export function useDeleteMessage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ messageId, conversationId }: { messageId: string; conversationId: string }): Promise<void> => {
+      const response = await fetch(`/api/messaging/messages/${messageId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { message?: string }).message || 'Failed to delete message');
+      }
+      void conversationId; // usado apenas no onMutate/onSettled
+    },
+    onMutate: async ({ messageId, conversationId }) => {
+      const queryKey = queryKeys.messagingMessages.byConversation(conversationId);
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<MessagingMessage[]>(queryKey);
+      // Marca como deletada otimisticamente
+      queryClient.setQueryData<MessagingMessage[]>(queryKey, (old) =>
+        old?.map((m) =>
+          m.id === messageId
+            ? { ...m, metadata: { ...m.metadata, deleted_at: new Date().toISOString() } }
+            : m
+        )
+      );
+      return { previous, queryKey };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(context.queryKey, context.previous);
+      }
+    },
+    onSettled: (_data, _err, { conversationId }) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messagingMessages.byConversation(conversationId),
+      });
+    },
+  });
+}
+
+/**
  * Retry a failed message.
  * TODO: Implement API endpoint for retry
  */

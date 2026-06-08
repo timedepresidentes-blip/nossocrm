@@ -2,10 +2,10 @@
 
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Check, CheckCheck, Clock, AlertCircle, FileText, MapPin, Play, Pause, Image, Reply } from 'lucide-react';
+import { Check, CheckCheck, Clock, AlertCircle, FileText, MapPin, Play, Pause, Image, Reply, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sanitizeUrl } from '@/lib/utils/sanitize';
-import { useSendMessage } from '@/lib/query/hooks/useMessagingMessagesQuery';
+import { useSendMessage, useDeleteMessage } from '@/lib/query/hooks/useMessagingMessagesQuery';
 import type {
   MessagingMessage,
   MessageStatus,
@@ -18,6 +18,24 @@ import type {
 } from '@/lib/messaging/types';
 
 const QUICK_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'] as const;
+
+// ---------------------------------------------------------------------------
+// Media URL helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Converte uma mediaUrl para uma URL reproduzível no browser.
+ * URLs com prefixo "meta:" são IDs de mídia do Meta Cloud API e precisam
+ * passar pelo proxy /api/messaging/media que faz a autenticação com o Meta.
+ */
+function resolveMediaUrl(url: string | null | undefined, conversationId: string): string {
+  if (!url) return '';
+  if (url.startsWith('meta:')) {
+    const mediaId = url.slice(5);
+    return `/api/messaging/media?id=${encodeURIComponent(mediaId)}&conversationId=${encodeURIComponent(conversationId)}`;
+  }
+  return sanitizeUrl(url);
+}
 
 // ---------------------------------------------------------------------------
 // Audio player helpers
@@ -50,16 +68,18 @@ function formatAudioTime(seconds: number): string {
 const AudioPlayer = memo(function AudioPlayer({
   content,
   isOutbound,
+  conversationId,
 }: {
   content: AudioContent;
   isOutbound: boolean;
+  conversationId: string;
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState<number>(content.duration ?? 0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
-  const safeUrl = sanitizeUrl(content.mediaUrl);
+  const safeUrl = resolveMediaUrl(content.mediaUrl, conversationId);
 
   // 24 bars — wide enough to look like waveform, not too thin
   const bars = useMemo(() => generateWaveform(content.mediaUrl, 24), [content.mediaUrl]);
@@ -198,7 +218,13 @@ const StatusIcon = memo(function StatusIcon({ status }: { status: MessageStatus 
   }
 });
 
-const MessageContent = memo(function MessageContent({ message }: { message: MessagingMessage }) {
+const MessageContent = memo(function MessageContent({
+  message,
+  conversationId,
+}: {
+  message: MessagingMessage;
+  conversationId: string;
+}) {
   const { content, contentType } = message;
   const isOutbound = message.direction === 'outbound';
 
@@ -210,11 +236,12 @@ const MessageContent = memo(function MessageContent({ message }: { message: Mess
 
     case 'image': {
       const imageContent = content as ImageContent;
+      const resolvedImageUrl = resolveMediaUrl(imageContent.mediaUrl, conversationId);
       return (
         <div className="space-y-1">
-          {sanitizeUrl(imageContent.mediaUrl) && (
+          {resolvedImageUrl && (
             <img
-              src={sanitizeUrl(imageContent.mediaUrl)}
+              src={resolvedImageUrl}
               alt={imageContent.caption || 'Imagem'}
               className="max-w-[240px] rounded-lg"
             />
@@ -228,7 +255,7 @@ const MessageContent = memo(function MessageContent({ message }: { message: Mess
 
     case 'document': {
       const docContent = content as DocumentContent;
-      const safeDocUrl = sanitizeUrl(docContent.mediaUrl);
+      const safeDocUrl = resolveMediaUrl(docContent.mediaUrl, conversationId);
       return safeDocUrl ? (
         <a
           href={safeDocUrl}
@@ -267,7 +294,7 @@ const MessageContent = memo(function MessageContent({ message }: { message: Mess
 
     case 'audio': {
       const audioContent = content as AudioContent;
-      return <AudioPlayer content={audioContent} isOutbound={isOutbound} />;
+      return <AudioPlayer content={audioContent} isOutbound={isOutbound} conversationId={conversationId} />;
     }
 
     case 'video':
@@ -278,20 +305,18 @@ const MessageContent = memo(function MessageContent({ message }: { message: Mess
         </div>
       );
 
-    case 'sticker':
+    case 'sticker': {
+      const stickerUrl = resolveMediaUrl((content as { mediaUrl?: string }).mediaUrl, conversationId);
       return (
         <div className="text-4xl">
-          {sanitizeUrl((content as { mediaUrl?: string }).mediaUrl ?? '') ? (
-            <img
-              src={sanitizeUrl((content as { mediaUrl?: string }).mediaUrl ?? '')}
-              alt="Sticker"
-              className="w-24 h-24"
-            />
+          {stickerUrl ? (
+            <img src={stickerUrl} alt="Sticker" className="w-24 h-24" />
           ) : (
             '🏷️'
           )}
         </div>
       );
+    }
 
     default:
       return <p className="italic opacity-70">[Tipo de mensagem não suportado]</p>;
@@ -433,6 +458,9 @@ export const MessageBubble = memo(function MessageBubble({
   const isOutbound = message.direction === 'outbound';
   const time = format(new Date(message.createdAt), 'HH:mm');
   const { mutate: sendMessage } = useSendMessage();
+  const { mutate: deleteMessage, isPending: isDeleting } = useDeleteMessage();
+
+  const isDeleted = !!(message.metadata?.deleted_at as string | undefined);
 
   const reactions = (message.metadata?.reactions as Record<string, number> | undefined) ?? {};
   const canReact = !isOutbound && !!message.externalId;
@@ -456,6 +484,24 @@ export const MessageBubble = memo(function MessageBubble({
     },
     [message.externalId, conversationId, sendMessage],
   );
+
+  // Mensagem apagada — exibe placeholder sem conteúdo
+  if (isDeleted) {
+    return (
+      <div className={cn('flex items-end gap-1', isOutbound ? 'justify-end' : 'justify-start')}>
+        <div
+          className={cn(
+            'rounded-2xl px-4 py-2 shadow-sm italic text-xs opacity-60',
+            isOutbound
+              ? 'bg-primary-500/40 text-white rounded-br-md'
+              : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-bl-md border border-slate-200 dark:border-slate-700',
+          )}
+        >
+          🗑 Mensagem apagada · {time}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -502,7 +548,7 @@ export const MessageBubble = memo(function MessageBubble({
 
           {/* Content */}
           <div className="text-sm">
-            <MessageContent message={message} />
+            <MessageContent message={message} conversationId={conversationId} />
           </div>
 
           {/* Timestamp + delivery status */}
@@ -546,6 +592,19 @@ export const MessageBubble = memo(function MessageBubble({
 
         {/* Emoji picker — only for inbound */}
         {canReact && <EmojiPickerButton onReact={handleReact} />}
+
+        {/* Delete button — only for outbound */}
+        {isOutbound && (
+          <button
+            type="button"
+            disabled={isDeleting}
+            onClick={() => deleteMessage({ messageId: message.id, conversationId })}
+            aria-label="Apagar mensagem"
+            className="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors disabled:opacity-40"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );

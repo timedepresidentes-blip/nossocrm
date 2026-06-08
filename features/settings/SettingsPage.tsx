@@ -16,9 +16,84 @@ import { AICenterSettings } from './AICenterSettings';
 
 import { UsersPage } from './UsersPage';
 import { useAuth } from '@/context/AuthContext';
-import { Settings as SettingsIcon, Users, Database, Sparkles, Plug, Package, Building2 } from 'lucide-react';
+import { Settings as SettingsIcon, Users, Database, Sparkles, Plug, Package, Building2, CheckCircle2, Loader2 } from 'lucide-react';
 import { SelectField } from '@/components/ui/FormField';
 import { Button } from '@/components/ui/button';
+
+// ─── Seção de assinatura ─────────────────────────────────────────────────────
+
+function SignatureSection() {
+  const { profile, refreshProfile } = useAuth();
+  const [value, setValue] = useState(profile?.signature ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Sincroniza quando o perfil carrega pela primeira vez
+  useEffect(() => {
+    if (profile?.signature !== undefined) {
+      setValue(profile.signature ?? '');
+    }
+  }, [profile?.signature]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaved(false);
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signature: value.trim() || null }),
+      });
+      if (!res.ok) throw new Error('Falha ao salvar');
+      await refreshProfile();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      alert('Erro ao salvar assinatura. Tente novamente.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mb-12">
+      <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6">
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Assinatura do Atendente</h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+          Será adicionada automaticamente ao final de cada mensagem de texto que você enviar.
+        </p>
+        <textarea
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          rows={3}
+          placeholder={`Ex: Flávio Cintra\nEcoPower Energia Solar — Araraquara`}
+          className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 resize-none mb-3"
+        />
+        {value.trim() && (
+          <div className="mb-3 p-3 rounded-lg bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap">
+            <span className="block text-[10px] uppercase font-medium mb-1 text-slate-400">Prévia:</span>
+            {`Olá! Segue a proposta... [texto da mensagem]\n\n--\n${value.trim()}`}
+          </div>
+        )}
+        <Button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          size="sm"
+          className="flex items-center gap-2"
+        >
+          {saving ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
+          ) : saved ? (
+            <><CheckCircle2 className="w-4 h-4 text-green-400" /> Salvo!</>
+          ) : (
+            'Salvar assinatura'
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 type SettingsTab = 'general' | 'products' | 'business-units' | 'integrations' | 'ai' | 'data' | 'users';
 
@@ -71,6 +146,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ hash, isAdmin }) => {
           />
         </div>
       </div>
+
+      <SignatureSection />
 
       {isAdmin && (
         <>

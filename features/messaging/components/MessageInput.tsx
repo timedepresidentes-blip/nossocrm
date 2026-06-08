@@ -10,7 +10,7 @@ declare global {
     flush(): Int8Array;
   }};
 }
-import { Send, Paperclip, Smile, Clock, FileText, X, Loader2, Image, File as FileIcon, Mic, Square, Reply } from 'lucide-react';
+import { Send, Paperclip, Smile, Clock, FileText, X, Loader2, Image, File as FileIcon, Mic, Square, Reply, AlertCircle } from 'lucide-react';
 import EmojiPicker, { type EmojiClickData, Theme } from 'emoji-picker-react';
 import { cn } from '@/lib/utils';
 import { useSendTextMessage, useSendMessage } from '@/lib/query/hooks/useMessagingMessagesQuery';
@@ -130,6 +130,7 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
   const [isRecording, setIsRecording] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [micError, setMicError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -238,13 +239,14 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
   }, []);
 
   const startRecording = useCallback(async () => {
+    setMicError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
       // Prefer formats WhatsApp accepts natively (no conversion needed):
       //   1. audio/ogg;codecs=opus  — Firefox
-      //   2. audio/mp4              — macOS/iOS Chrome (AAC) ← fixes Chrome on macOS
-      //   3. audio/webm             — Windows Chrome fallback (needs conversion)
+      //   2. audio/mp4              — macOS/iOS Chrome (AAC)
+      //   3. audio/webm             — Windows Chrome fallback (convertido p/ MP3)
       const PREFERRED_TYPES = [
         'audio/ogg;codecs=opus',
         'audio/mp4',
@@ -269,8 +271,13 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
       recordingTimerRef.current = setInterval(() => {
         setRecordingDuration((d) => d + 1);
       }, 1000);
-    } catch {
-      // User denied microphone or device unavailable — fail silently
+    } catch (err) {
+      const isDenied = err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError');
+      setMicError(
+        isDenied
+          ? 'Permissão de microfone negada. Clique no cadeado na barra de endereço do navegador e permita o microfone.'
+          : 'Microfone não disponível. Verifique se há um microfone conectado.'
+      );
     }
   }, []);
 
@@ -287,6 +294,10 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
       recorder.stream?.getTracks().forEach((t) => t.stop());
       setIsRecording(false);
 
+      // Salva os chunks antes de qualquer operação assíncrona
+      const chunks = [...audioChunksRef.current];
+      audioChunksRef.current = [];
+
       const baseMimeType = recorder.mimeType.split(';')[0];
       const isWhatsAppNative = baseMimeType === 'audio/ogg'
         || baseMimeType === 'audio/mp4'
@@ -295,7 +306,6 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
         || baseMimeType === 'audio/amr';
 
       if (isWhatsAppNative) {
-        // Format already accepted by WhatsApp — no conversion needed
         const MIME_TO_EXT: Record<string, string> = {
           'audio/ogg': 'ogg',
           'audio/mp4': 'm4a',
@@ -304,31 +314,27 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
           'audio/amr': 'amr',
         };
         const ext = MIME_TO_EXT[baseMimeType] ?? 'audio';
-        const file = new File(
-          audioChunksRef.current,
-          `audio-${Date.now()}.${ext}`,
-          { type: baseMimeType }
-        );
+        const file = new File(chunks, `audio-${Date.now()}.${ext}`, { type: baseMimeType });
         setPendingMedia({ file, preview: null, mediaType: 'audio' });
         setRecordingDuration(0);
-        audioChunksRef.current = [];
         return;
       }
 
-      // audio/webm (Windows Chrome) — try MP3 conversion via lamejs
+      // audio/webm (Windows Chrome) — tenta converter para MP3 via lamejs
       setIsConverting(true);
       try {
-        const rawBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
+        const rawBlob = new Blob(chunks, { type: recorder.mimeType });
         const mp3File = await convertWebmToMp3(rawBlob);
         setPendingMedia({ file: mp3File, preview: null, mediaType: 'audio' });
       } catch (err) {
-        console.error('[Audio] MP3 conversion failed:', err);
-        // webm not accepted by WhatsApp — clear media rather than send a broken file
-        setPendingMedia(null);
+        console.error('[Audio] Conversão MP3 falhou, enviando webm diretamente:', err);
+        // Fallback: envia o webm direto — a rota de upload aceita audio/webm
+        const rawBlob = new Blob(chunks, { type: recorder.mimeType });
+        const file = new File([rawBlob], `audio-${Date.now()}.webm`, { type: recorder.mimeType });
+        setPendingMedia({ file, preview: null, mediaType: 'audio' });
       } finally {
         setIsConverting(false);
         setRecordingDuration(0);
-        audioChunksRef.current = [];
       }
     };
 
@@ -428,6 +434,10 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
     const trimmedText = text.trim();
     if (!trimmedText || isDisabled) return;
 
+    // Appende a assinatura do atendente se configurada
+    const sig = profile?.signature?.trim();
+    const finalText = sig ? `${trimmedText}\n\n--\n${sig}` : trimmedText;
+
     // Clear immediately — optimistic message already in cache via onMutate
     setText('');
     if (textareaRef.current) {
@@ -436,9 +446,9 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
     textareaRef.current?.focus();
 
     claimConversation();
-    sendTextMessage({ conversationId: conversation.id, text: trimmedText, replyToMessageId: replyTo?.id });
+    sendTextMessage({ conversationId: conversation.id, text: finalText, replyToMessageId: replyTo?.id });
     onCancelReply?.();
-  }, [text, isDisabled, sendTextMessage, conversation.id, pendingMedia, handleSendMedia, replyTo, onCancelReply, claimConversation]);
+  }, [text, isDisabled, sendTextMessage, conversation.id, pendingMedia, handleSendMedia, replyTo, onCancelReply, claimConversation, profile?.signature]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -454,6 +464,26 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
     const newHeight = Math.min(textarea.scrollHeight, 120);
     textarea.style.height = newHeight + 'px';
   }, []);
+
+  // Erro de microfone — mostrado brevemente após falha de permissão
+  if (micError) {
+    return (
+      <div className="border-t border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+          <span className="flex-1 text-sm text-red-600 dark:text-red-400">{micError}</span>
+          <button
+            type="button"
+            onClick={() => setMicError(null)}
+            className="p-1 text-slate-400 hover:text-slate-600 rounded"
+            aria-label="Fechar aviso"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Converting state — shown while webm → mp3 encoding runs
   if (isConverting) {
@@ -707,7 +737,7 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
           </div>
         </div>
 
-        {/* Send or mic button */}
+        {/* Send or mic button (assinatura adicionada automaticamente ao enviar) */}
         {showMicButton ? (
           <button
             type="button"
@@ -733,6 +763,14 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
           </button>
         )}
       </div>
+
+      {/* Indicador de assinatura ativa */}
+      {profile?.signature?.trim() && (
+        <div className="px-4 pb-2 text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
+          <span>✍️ Assinatura ativa</span>
+          <span className="truncate max-w-[180px] opacity-70">· {profile.signature.trim().split('\n')[0]}</span>
+        </div>
+      )}
     </form>
   );
 }

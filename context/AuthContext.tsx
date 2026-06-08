@@ -58,6 +58,7 @@ interface Profile {
     nickname?: string | null;
     phone?: string | null;
     avatar_url?: string | null;
+    signature?: string | null;
     created_at?: string;
 }
 
