@@ -55,7 +55,7 @@ export async function DELETE(
       .eq('id', user.id)
       .single();
 
-    const conv = message.conversation as { organization_id: string } | null;
+    const conv = message.conversation as unknown as { organization_id: string } | null;
     if (!profile || conv?.organization_id !== profile.organization_id) {
       return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
@@ -138,7 +138,7 @@ export async function PATCH(
       .eq('id', user.id)
       .single();
 
-    const conv = message.conversation as { organization_id: string } | null;
+    const conv = message.conversation as unknown as { organization_id: string } | null;
     if (!profile || conv?.organization_id !== profile.organization_id) {
       return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
     }
