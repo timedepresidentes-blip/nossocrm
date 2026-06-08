@@ -351,8 +351,11 @@ export class MetaCloudWhatsAppProvider extends BaseChannelProvider {
             const fileBlob = await fileResponse.blob();
             // MIME type vem do header Content-Type do Supabase
             const mimeType = fileBlob.type || 'audio/mpeg';
+            // Deriva extensão do mimeType (ex: audio/mpeg → mp3, audio/ogg → ogg)
+            const mimeExt = mimeType.split('/')[1]?.split(';')[0]?.trim() || 'mp3';
+            const audioFilename = `audio.${mimeExt === 'mpeg' ? 'mp3' : mimeExt}`;
 
-            const uploadResult = await this.uploadMedia(fileBlob, mimeType);
+            const uploadResult = await this.uploadMedia(fileBlob, mimeType, audioFilename);
             if (!uploadResult.success || !uploadResult.mediaId) {
               throw new Error(uploadResult.error?.message ?? 'Upload para Meta falhou');
             }
@@ -576,12 +579,14 @@ export class MetaCloudWhatsAppProvider extends BaseChannelProvider {
    * Upload media to Meta servers.
    * Returns a media ID that can be used in messages.
    */
-  async uploadMedia(file: File | Blob, mimeType: string): Promise<MediaUploadResult> {
+  async uploadMedia(file: File | Blob, mimeType: string, filename?: string): Promise<MediaUploadResult> {
     try {
       const formData = new FormData();
       formData.append('messaging_product', 'whatsapp');
       formData.append('type', mimeType);
-      formData.append('file', file);
+      // filename é obrigatório no multipart para a API da Meta aceitar o upload
+      const resolvedFilename = filename ?? (file instanceof File ? file.name : 'audio.mp3');
+      formData.append('file', file, resolvedFilename);
 
       const response = await fetch(`${META_GRAPH_URL}/${this.phoneNumberId}/media`, {
         method: 'POST',
