@@ -145,6 +145,8 @@ export interface DbMessagingMessage {
   delivered_at: string | null;
   read_at: string | null;
   failed_at: string | null;
+  deleted_at: string | null;
+  sender_user_id?: string | null;
   sender_name: string | null;
   sender_profile_url: string | null;
   metadata: Record<string, unknown>;
@@ -499,7 +501,9 @@ export function transformMessage(db: DbMessagingMessage): MessagingMessage {
     failedAt: db.failed_at ?? undefined,
     senderName: db.sender_name ?? undefined,
     senderProfileUrl: db.sender_profile_url ?? undefined,
-    metadata: db.metadata,
+    metadata: db.deleted_at
+      ? { ...db.metadata, deleted_at: db.deleted_at }
+      : db.metadata,
     createdAt: db.created_at,
   };
 }
