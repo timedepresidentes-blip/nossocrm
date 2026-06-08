@@ -200,19 +200,26 @@ interface MessageBubbleProps {
 // Sub-components
 // ---------------------------------------------------------------------------
 
+// StatusIcon é exibido APENAS em bolhas outbound (fundo azul primary-500).
+// Escala de opacidade: pending→sent→delivered→read, do mais apagado ao mais visível.
 const StatusIcon = memo(function StatusIcon({ status }: { status: MessageStatus }) {
   switch (status) {
     case 'pending':
     case 'queued':
-      return <Clock className="w-3 h-3 text-slate-400" />;
+      // Relógio bem apagado — aguardando envio
+      return <Clock className="w-3 h-3 text-white/40" />;
     case 'sent':
-      return <Check className="w-3 h-3 text-slate-400" />;
+      // 1 tick branco semi-transparente — chegou ao servidor Meta
+      return <Check className="w-3 h-3 text-white/60" />;
     case 'delivered':
-      return <CheckCheck className="w-3 h-3 text-slate-400" />;
+      // 2 ticks brancos fortes — chegou no celular do cliente
+      return <CheckCheck className="w-3 h-3 text-white/90" />;
     case 'read':
-      return <CheckCheck className="w-3 h-3 text-blue-500" />;
+      // 2 ticks azul-claro — mensagem lida (contraste alto sobre o azul escuro)
+      return <CheckCheck className="w-3 h-3 text-sky-200" />;
     case 'failed':
-      return <AlertCircle className="w-3 h-3 text-red-500" />;
+      // Vermelho claro — visível sobre azul
+      return <AlertCircle className="w-3 h-3 text-red-300" />;
     default:
       return null;
   }
