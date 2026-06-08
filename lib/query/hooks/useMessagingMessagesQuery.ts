@@ -412,21 +412,34 @@ export function useDeleteMessage() {
     },
     onMutate: async ({ messageId, conversationId }) => {
       const queryKey = queryKeys.messagingMessages.byConversation(conversationId);
-      await queryClient.cancelQueries({ queryKey });
+      const infiniteQueryKey = [...queryKey, 'infinite'] as const;
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey }),
+        queryClient.cancelQueries({ queryKey: infiniteQueryKey }),
+      ]);
       const previous = queryClient.getQueryData<MessagingMessage[]>(queryKey);
-      // Marca como deletada otimisticamente
-      queryClient.setQueryData<MessagingMessage[]>(queryKey, (old) =>
-        old?.map((m) =>
-          m.id === messageId
-            ? { ...m, metadata: { ...m.metadata, deleted_at: new Date().toISOString() } }
-            : m
-        )
+      const previousInfinite = queryClient.getQueryData<InfiniteData<{ messages: MessagingMessage[]; nextCursor: string | null }>>(infiniteQueryKey);
+
+      const applyDelete = (m: MessagingMessage): MessagingMessage =>
+        m.id === messageId
+          ? { ...m, metadata: { ...m.metadata, deleted_at: new Date().toISOString() } }
+          : m;
+
+      queryClient.setQueryData<MessagingMessage[]>(queryKey, (old) => old?.map(applyDelete));
+      queryClient.setQueryData<InfiniteData<{ messages: MessagingMessage[]; nextCursor: string | null }>>(
+        infiniteQueryKey,
+        (old) => old
+          ? { ...old, pages: old.pages.map(p => ({ ...p, messages: p.messages.map(applyDelete) })) }
+          : old
       );
-      return { previous, queryKey };
+      return { previous, previousInfinite, queryKey, infiniteQueryKey };
     },
     onError: (_err, _vars, context) => {
       if (context?.previous !== undefined) {
         queryClient.setQueryData(context.queryKey, context.previous);
+      }
+      if (context?.previousInfinite !== undefined) {
+        queryClient.setQueryData(context.infiniteQueryKey, context.previousInfinite);
       }
     },
     onSettled: (_data, _err, { conversationId }) => {

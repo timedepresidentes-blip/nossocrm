@@ -451,22 +451,13 @@ export function useDeleteConversation() {
 
   return useMutation({
     mutationFn: async (conversationId: string) => {
-      // Delete messages first (FK constraint)
-      const { error: messagesError } = await supabase
-        .from('messaging_messages')
-        .delete()
-        .eq('conversation_id', conversationId);
-
-      if (messagesError) throw messagesError;
-
-      // Then delete conversation
-      const { error: conversationError } = await supabase
-        .from('messaging_conversations')
-        .delete()
-        .eq('id', conversationId);
-
-      if (conversationError) throw conversationError;
-
+      const response = await fetch(`/api/messaging/conversations/${conversationId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { message?: string }).message || 'Failed to delete conversation');
+      }
       return conversationId;
     },
     onSuccess: (deletedId) => {
