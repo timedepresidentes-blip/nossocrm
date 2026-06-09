@@ -173,7 +173,9 @@ export async function POST(
       const audioContent = content as AudioContent;
       const mediaUrl = audioContent.mediaUrl ?? '';
       if (mediaUrl && !mediaUrl.startsWith('meta:')) {
-        const { data: channelCreds } = await supabase
+        // Usa admin-client: cookie-client (RLS) bloqueia leitura da coluna 'credentials'
+        const supabaseAdmin = createStaticAdminClient();
+        const { data: channelCreds } = await supabaseAdmin
           .from('messaging_channels')
           .select('credentials, provider')
           .eq('id', conversation.channel_id)
