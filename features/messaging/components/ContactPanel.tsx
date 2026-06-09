@@ -107,9 +107,18 @@ export const ContactPanel = memo(function ContactPanel({
   const toggleConversationAiPause = useToggleConversationAiPause();
 
   const contactId = conversation?.contactId;
+  const conversationMeta = conversation?.metadata as Record<string, unknown> | undefined;
+
+  // Júlia fica silenciada em dois casos:
+  //   1. ai_paused === true  → pausada explicitamente pelo operador
+  //   2. ai_paused !== false E assignedAt está setado → humano respondeu e Júlia entrou em silêncio
+  // Apenas ai_paused === false (valor explícito) garante que Júlia está ativa após intervenção humana.
   const isAiPaused = contactId
     ? (conversation?.contactAiPaused ?? false)
-    : (conversation?.metadata?.ai_paused === true);
+    : (
+        conversationMeta?.ai_paused === true ||
+        (conversationMeta?.ai_paused !== false && !!conversation?.assignedAt)
+      );
   const isPending = updateContact.isPending || toggleConversationAiPause.isPending;
 
   function handleToggleAiPause() {
