@@ -17,7 +17,7 @@ import type { DealView } from '@/types';
 import type { MessagingMessage } from '@/lib/messaging';
 import { transformMessage } from '@/lib/messaging/types';
 import type { DbMessagingMessage, ConversationView } from '@/lib/messaging/types';
-import { pendingDeletionIds, removePendingDeletion } from '@/lib/query/hooks/useConversationsQuery';
+import { pendingDeletionIds, confirmedDeletedIds, removePendingDeletion } from '@/lib/query/hooks/useConversationsQuery';
 
 // Enable detailed Realtime logging in development or when DEBUG_REALTIME env var is set
 const DEBUG_REALTIME = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEBUG_REALTIME === 'true';
@@ -249,7 +249,7 @@ export function useRealtimeSync(
                         // The shared ref may have been contaminated by a concurrent UPDATE event
                         // (e.g. markAsRead). Flushing it here causes a refetch that returns the
                         // conversation from DB before it's deleted, creating a flicker.
-                        if (pendingDeletionIds.size > 0 && queryKey === queryKeys.messagingConversations.all) {
+                        if ((pendingDeletionIds.size > 0 || confirmedDeletedIds.size > 0) && queryKey === queryKeys.messagingConversations.all) {
                           return;
                         }
                         queryClient.invalidateQueries({ queryKey, exact: false, refetchType: 'all' });
@@ -304,7 +304,7 @@ export function useRealtimeSync(
                       // Same guard as the outbound path — prevents an inbound message arriving
                       // during the delete window from triggering a refetch that re-shows the
                       // deleted conversation before the realtime DELETE event lowers the guard.
-                      if (pendingDeletionIds.size > 0 && queryKey === queryKeys.messagingConversations.all) {
+                      if ((pendingDeletionIds.size > 0 || confirmedDeletedIds.size > 0) && queryKey === queryKeys.messagingConversations.all) {
                         return;
                       }
                       queryClient.invalidateQueries({ queryKey, exact: false, refetchType: 'all' });
@@ -336,7 +336,7 @@ export function useRealtimeSync(
                     // The shared ref may be contaminated by a concurrent UPDATE event (e.g.
                     // markAsRead). Flushing messagingConversations.all here with refetchType:'all'
                     // would return the conversation from DB before it's deleted — causing a flicker.
-                    if (pendingDeletionIds.size > 0 && queryKey === queryKeys.messagingConversations.all) {
+                    if ((pendingDeletionIds.size > 0 || confirmedDeletedIds.size > 0) && queryKey === queryKeys.messagingConversations.all) {
                       return;
                     }
                     queryClient.invalidateQueries({ queryKey, exact: false, refetchType: 'all' });
@@ -388,9 +388,9 @@ export function useRealtimeSync(
           // that returns the conversation (still in DB at that instant), causing the flicker.
           if (table === 'messaging_conversations' && payload.eventType !== 'DELETE') {
             const convId = ((payload.new || payload.old) as Record<string, unknown>)?.id as string | undefined;
-            if (convId && pendingDeletionIds.has(convId)) {
+            if (convId && (pendingDeletionIds.has(convId) || confirmedDeletedIds.has(convId))) {
               if (DEBUG_REALTIME) {
-                console.log('[Realtime] ⏭️ Skip conversations UPDATE for pending deletion:', convId.slice(0, 8));
+                console.log('[Realtime] ⏭️ Skip conversations UPDATE for pending/confirmed deletion:', convId.slice(0, 8));
               }
               return;
             }
@@ -875,7 +875,7 @@ export function useRealtimeSync(
                 // Invalidate all pending queries
                 pendingInvalidationsRef.current.forEach(queryKey => {
                   // Skip conversations-list invalidation while a deletion is in-progress.
-                  if (pendingDeletionIds.size > 0 && queryKey === queryKeys.messagingConversations.all) {
+                  if ((pendingDeletionIds.size > 0 || confirmedDeletedIds.size > 0) && queryKey === queryKeys.messagingConversations.all) {
                     return;
                   }
                   if (DEBUG_REALTIME) {

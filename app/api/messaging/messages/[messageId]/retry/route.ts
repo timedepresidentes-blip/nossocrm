@@ -5,6 +5,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createStaticAdminClient } from '@/lib/supabase/staticAdminClient';
 import { getChannelRouter, transformMessage } from '@/lib/messaging';
 import type { MessageContent, DbMessagingMessage, AudioContent } from '@/lib/messaging';
 

@@ -50,12 +50,38 @@ import {
  */
 export const pendingDeletionIds = new Set<string>();
 
+/**
+ * IDs confirmados como deletados pelo servidor (HTTP DELETE retornou { ok: true }).
+ * Persiste por 30s para bloquear o polling de 2s mesmo após o guard principal
+ * (pendingDeletionIds) ser limpo pelo timeout de segurança de 10s no MessagingPage.
+ *
+ * Isso resolve o cenário onde:
+ * 1. HTTP DELETE confirma remoção do banco
+ * 2. removePendingDeletion é chamado pelo timeout de 10s
+ * 3. O polling de 2s ainda está ativo e buscaria a conversa — mas ela foi deletada
+ * 4. O evento realtime pode ainda não ter chegado (WebSocket lento)
+ * confirmedDeletedIds garante que o select continue filtrando por mais 30s.
+ */
+export const confirmedDeletedIds = new Map<string, number>(); // id -> timestamp
+
 export function addPendingDeletion(id: string): void {
   pendingDeletionIds.add(id);
 }
 
 export function removePendingDeletion(id: string): void {
   pendingDeletionIds.delete(id);
+}
+
+export function confirmDeletion(id: string): void {
+  confirmedDeletedIds.set(id, Date.now());
+  // Auto-limpeza após 30s (polling já parou, realtime já atualizou)
+  setTimeout(() => confirmedDeletedIds.delete(id), 30_000);
+}
+
+/** Retorna true se a conversa deve ser filtrada da lista (pendente OU confirmada deletada). */
+function isConversationDeleted(id: string): boolean {
+  if (pendingDeletionIds.has(id)) return true;
+  return confirmedDeletedIds.has(id);
 }
 
 // =============================================================================
@@ -159,13 +185,14 @@ export function useConversations(filters?: ConversationFilters) {
     refetchOnWindowFocus: true, // Refetch imediato ao focar a aba
     enabled: !authLoading && !!user && !!profile?.organization_id,
     placeholderData: keepPreviousData,
-    // Filter out conversations being deleted so stale refetches from other
-    // mutations (e.g. markAsRead.onSettled) can't re-add them while the
-    // delete mutation is in-flight.
+    // Filtra conversas que estão sendo deletadas (pending) OU já foram confirmadas
+    // como deletadas pelo servidor. O segundo guard (confirmedDeletedIds) cobre o
+    // cenário onde o timeout de segurança de 10s remove o pendingDeletionIds antes
+    // do evento realtime chegar, e o polling de 2s retornaria a conversa.
     select: (data) =>
-      pendingDeletionIds.size === 0
+      pendingDeletionIds.size === 0 && confirmedDeletedIds.size === 0
         ? data
-        : data.filter((conv) => !pendingDeletionIds.has(conv.id)),
+        : data.filter((conv) => !isConversationDeleted(conv.id)),
   });
 }
 
@@ -461,6 +488,11 @@ export function useDeleteConversation() {
       return conversationId;
     },
     onSuccess: (deletedId) => {
+      // Confirma que o servidor deletou a conversa. O confirmedDeletedIds persiste
+      // por 30s para bloquear o polling de 2s mesmo após o guard pendingDeletionIds
+      // ser removido pelo timeout de segurança de 10s no MessagingPage.
+      confirmDeletion(deletedId);
+
       // Cancel any in-flight refetches triggered by realtime during the mutation.
       // The messaging_messages DELETE event fires before the conversation is deleted,
       // causing a refetch that returns the conversation still in the list and overwrites
