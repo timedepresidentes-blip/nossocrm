@@ -10,6 +10,10 @@ import { createStaticAdminClient } from '@/lib/supabase/staticAdminClient';
 
 const META_GRAPH_URL = 'https://graph.facebook.com/v25.0';
 
+// Buffer é uma API Node.js — força o runtime Node.js no Vercel.
+// Sem isso, o Vercel tenta compilar no Edge Runtime onde Buffer não existe
+// e a rota falha no build silenciosamente (404 em produção).
+export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 export async function GET(req: NextRequest) {
