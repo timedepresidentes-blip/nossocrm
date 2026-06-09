@@ -11,9 +11,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createStaticAdminClient } from '@/lib/supabase/staticAdminClient';
-
-export const maxDuration = 120;
 import crypto from 'crypto';
+
+// Força runtime Node.js — usa Buffer (API Node.js) para processamento de mídia.
+// Sem isso o Vercel tenta compilar no Edge Runtime e a rota falha silenciosamente.
+export const runtime = 'nodejs';
+export const maxDuration = 120;
 
 const META_GRAPH_URL = 'https://graph.facebook.com/v25.0';
 
