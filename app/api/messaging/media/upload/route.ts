@@ -3,12 +3,14 @@
  *
  * Upload media for messaging. Stores in Supabase Storage (backup) and, for audio,
  * faz upload direto para Meta e retorna meta:mediaId para evitar erro 131053.
+ * Busca credenciais via admin-client para evitar bloqueio de RLS na coluna 'credentials'.
  * Accepts multipart/form-data with:
  * - file: the media file
  * - conversationId: the target conversation (for org ownership validation)
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createStaticAdminClient } from '@/lib/supabase/staticAdminClient';
 
 export const maxDuration = 120;
 import crypto from 'crypto';
@@ -113,14 +115,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Get user profile for org check
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('organization_id')
-    .eq('id', user.id)
-    .single();
+  // Busca org_id do usuário
+  const orgId: string | undefined =
+    (user.app_metadata?.organization_id as string | undefined) ??
+    await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => data?.organization_id as string | undefined);
 
-  if (!profile) {
+  if (!orgId) {
     return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
   }
 
@@ -135,18 +140,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Validate conversation belongs to org — inclui credenciais do canal para upload de áudio
+  // Valida que a conversa pertence à org (cookie-client, RLS aplicado)
   const { data: conversation } = await supabase
     .from('messaging_conversations')
-    .select(`
-      id,
-      channel:messaging_channels!channel_id (
-        provider,
-        credentials
-      )
-    `)
+    .select('id, channel_id')
     .eq('id', conversationId)
-    .eq('organization_id', profile.organization_id)
+    .eq('organization_id', orgId)
     .single();
 
   if (!conversation) {
@@ -175,7 +174,7 @@ export async function POST(req: NextRequest) {
   try {
     const ext = MIME_TO_EXT[file.type] || 'bin';
     const uniqueId = crypto.randomUUID();
-    const storagePath = `${profile.organization_id}/${conversationId}/${uniqueId}.${ext}`;
+    const storagePath = `${orgId}/${conversationId}/${uniqueId}.${ext}`;
 
     // Lê o buffer uma vez — usado tanto para Supabase quanto para Meta
     const fileBuffer = Buffer.from(await file.arrayBuffer());
@@ -200,12 +199,18 @@ export async function POST(req: NextRequest) {
       .from('messaging-media')
       .getPublicUrl(storagePath);
 
-    // Para áudio: tenta fazer upload direto para Meta no momento da gravação.
-    // Isso evita o erro 131053 que ocorre quando a Meta tenta baixar o arquivo depois.
+    // Para áudio: faz upload direto para Meta usando admin-client para ler credenciais.
+    // O cookie-client (RLS) bloqueia leitura da coluna 'credentials' em messaging_channels.
     if (mediaType === 'audio') {
-      const channel = conversation.channel as { provider: string; credentials: Record<string, string> } | null;
-      if (channel?.provider === 'meta-cloud') {
-        const creds = (channel.credentials ?? {}) as Record<string, string>;
+      const supabaseAdmin = createStaticAdminClient();
+      const { data: channelData } = await supabaseAdmin
+        .from('messaging_channels')
+        .select('provider, credentials')
+        .eq('id', conversation.channel_id)
+        .single();
+
+      if (channelData?.provider === 'meta-cloud') {
+        const creds = (channelData.credentials ?? {}) as Record<string, string>;
         const access_token = creds.accessToken || creds.access_token;
         const phone_number_id = creds.phoneNumberId || creds.phone_number_id;
         if (access_token && phone_number_id) {
@@ -219,8 +224,9 @@ export async function POST(req: NextRequest) {
               fileSize: file.size,
             });
           }
-          // Se upload para Meta falhou, o Supabase URL é retornado abaixo como fallback
-          console.warn('[upload] Fallback para URL Supabase — áudio pode falhar na entrega');
+          console.warn('[upload] Upload para Meta falhou — usando URL Supabase como fallback');
+        } else {
+          console.error('[upload] Credenciais ausentes no canal:', conversation.channel_id);
         }
       }
     }

@@ -9,13 +9,13 @@ import {
   setConversationCache,
 } from '@/lib/messaging/conversation-cache';
 
+// 60s para acomodar upload de áudio para Meta + envio da mensagem
 export const maxDuration = 60;
 
 type ChannelInfo = { id: string; channel_type: string; provider: string };
 
 export async function POST(request: NextRequest) {
   try {
-    // Parallelize auth check and body parsing — no dependency between them
     const [supabase, body] = await Promise.all([
       createClient(),
       request.json() as Promise<SendMessageInput>,
@@ -35,9 +35,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Read org_id from JWT app_metadata (injected by custom_access_token_hook at login).
-    // Eliminates the profiles round-trip (~150ms) on every message send.
-    // Falls back to a profiles query during the transition period before the hook is active.
     const orgId: string | undefined =
       (user.app_metadata?.organization_id as string | undefined) ??
       await supabase
@@ -51,8 +48,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Profile not found' }, { status: 404 });
     }
 
-    // Fetch conversation to get channel info and recipient — cache hit skips the DB round-trip.
-    // Cache is scoped to org to prevent IDOR on cache hits.
     let channel: ChannelInfo;
     let externalContactId: string;
 
@@ -96,7 +91,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Create message record in database (pending state)
+    // Cria a mensagem no banco (status pending)
     const messageData = {
       conversation_id: conversationId,
       direction: 'outbound' as const,
@@ -122,91 +117,94 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fire-and-forget: send to provider without blocking the response.
-    // Uses createStaticAdminClient (service role, no request context needed)
-    // because the standard createClient depends on next/headers which is
-    // unavailable after the response has been sent.
-    const router = getChannelRouter();
+    const supabaseAdmin = createStaticAdminClient();
     const messageId = dbMessage.id;
     const channelId = channel.id;
+    const router = getChannelRouter();
 
-    void (async () => {
-      const supabaseAdmin = createStaticAdminClient();
-      try {
+    // Atualiza para queued antes de enviar
+    await supabaseAdmin
+      .from('messaging_messages')
+      .update({ status: 'queued' })
+      .eq('id', messageId);
+
+    // Resolve replyToExternalId se necessário
+    let replyToExternalId: string | undefined;
+    if (replyToMessageId) {
+      const { data: replyMsg } = await supabaseAdmin
+        .from('messaging_messages')
+        .select('external_id, metadata')
+        .eq('id', replyToMessageId)
+        .maybeSingle();
+
+      if (replyMsg) {
+        const zapiId = (replyMsg.metadata as Record<string, unknown> | null)?.zapi_message_id as string | undefined;
+        replyToExternalId = (channel.provider === 'z-api' ? zapiId : undefined) ?? replyMsg.external_id ?? undefined;
+      }
+    }
+
+    console.log('[messaging/messages] sending to provider:', {
+      messageId, channelId, provider: channel.provider,
+      contentType: (content as MessageContent).type, to: externalContactId,
+    });
+
+    // Envia via provider de forma SÍNCRONA — garante execução completa no Vercel
+    let finalMessage: DbMessagingMessage;
+    try {
+      const result = await router.sendMessage(channelId, {
+        conversationId,
+        to: externalContactId,
+        content: content as MessageContent,
+        replyToExternalId,
+      });
+
+      console.log('[messaging/messages] provider result:', JSON.stringify(result));
+
+      if (result.success) {
         await supabaseAdmin
           .from('messaging_messages')
-          .update({ status: 'queued' })
+          .update({
+            status: 'sent',
+            external_id: result.externalMessageId,
+            sent_at: new Date().toISOString(),
+          })
           .eq('id', messageId);
-
-        // Resolve internal replyToMessageId → provider's external_id (e.g. WhatsApp wamid).
-        // Providers expect the platform message ID for threaded replies, not our DB UUID.
-        // Z-API requires its own internal zapiMessageId (stored in metadata.zapi_message_id),
-        // NOT the WhatsApp messageId stored in external_id.
-        let replyToExternalId: string | undefined;
-        if (replyToMessageId) {
-          const { data: replyMsg } = await supabaseAdmin
-            .from('messaging_messages')
-            .select('external_id, metadata')
-            .eq('id', replyToMessageId)
-            .maybeSingle();
-
-          if (replyMsg) {
-            const zapiId = (replyMsg.metadata as Record<string, unknown> | null)?.zapi_message_id as string | undefined;
-            // Z-API needs its internal zapiMessageId; other providers use external_id (WhatsApp ID)
-            replyToExternalId = (channel.provider === 'z-api' ? zapiId : undefined) ?? replyMsg.external_id ?? undefined;
-          }
-        }
-
-        console.log('[messaging/messages] sending to provider:', { messageId, channelId, provider: channel.provider, contentType: (content as MessageContent).type, to: externalContactId, replyToExternalId });
-
-        const result = await router.sendMessage(channelId, {
-          conversationId,
-          to: externalContactId,
-          content: content as MessageContent,
-          replyToExternalId,
-        });
-
-        console.log('[messaging/messages] provider result:', JSON.stringify(result));
-
-        if (result.success) {
-          await supabaseAdmin
-            .from('messaging_messages')
-            .update({
-              status: 'sent',
-              external_id: result.externalMessageId,
-              sent_at: new Date().toISOString(),
-            })
-            .eq('id', messageId);
-        } else {
-          console.error('[messaging/messages] provider failure:', result.error);
-          await supabaseAdmin
-            .from('messaging_messages')
-            .update({
-              status: 'failed',
-              error_code: result.error?.code,
-              error_message: result.error?.message,
-              failed_at: new Date().toISOString(),
-            })
-            .eq('id', messageId);
-        }
-      } catch (err: unknown) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        console.error('[messaging/messages] background send failed:', errMsg, err instanceof Error ? err.stack : '');
-        // Marca como failed para que o botão Reenviar apareça na UI
+      } else {
+        console.error('[messaging/messages] provider failure:', result.error);
         await supabaseAdmin
           .from('messaging_messages')
           .update({
             status: 'failed',
-            error_code: 'SEND_EXCEPTION',
-            error_message: errMsg.slice(0, 500),
+            error_code: result.error?.code,
+            error_message: result.error?.message,
             failed_at: new Date().toISOString(),
           })
           .eq('id', messageId);
       }
-    })();
+    } catch (sendErr: unknown) {
+      const errMsg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+      console.error('[messaging/messages] send exception:', errMsg);
+      await supabaseAdmin
+        .from('messaging_messages')
+        .update({
+          status: 'failed',
+          error_code: 'SEND_EXCEPTION',
+          error_message: errMsg.slice(0, 500),
+          failed_at: new Date().toISOString(),
+        })
+        .eq('id', messageId);
+    }
 
-    // Respond immediately with pending message — UI updates via realtime
-    return NextResponse.json(transformMessage(dbMessage as DbMessagingMessage));
+    // Busca a mensagem atualizada para retornar o status final ao cliente
+    const { data: updatedMessage } = await supabaseAdmin
+      .from('messaging_messages')
+      .select('*')
+      .eq('id', messageId)
+      .single();
+
+    return NextResponse.json(
+      transformMessage((updatedMessage ?? dbMessage) as DbMessagingMessage)
+    );
   } catch (error) {
     console.error('[messaging/messages]', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(

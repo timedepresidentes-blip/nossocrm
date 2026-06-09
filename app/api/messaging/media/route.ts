@@ -2,11 +2,11 @@
  * GET /api/messaging/media?id=MEDIA_ID&conversationId=CONV_ID
  *
  * Proxy para mídias do Meta Cloud API.
- * O Meta armazena mídias com IDs temporários que requerem autenticação para download.
- * Esta rota resolve o ID → URL real → binário e devolve ao cliente de forma segura.
+ * Valida ownership via cookie-client, busca credenciais via admin-client (bypassa RLS).
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createStaticAdminClient } from '@/lib/supabase/staticAdminClient';
 
 const META_GRAPH_URL = 'https://graph.facebook.com/v25.0';
 
@@ -28,56 +28,58 @@ export async function GET(req: NextRequest) {
   }
 
   // Busca org do usuário
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('organization_id')
-    .eq('id', user.id)
-    .single();
+  const orgId: string | undefined =
+    (user.app_metadata?.organization_id as string | undefined) ??
+    await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => data?.organization_id as string | undefined);
 
-  if (!profile?.organization_id) {
+  if (!orgId) {
     return NextResponse.json({ error: 'Perfil não encontrado' }, { status: 404 });
   }
 
-  // Busca conversa + credenciais do canal — valida que conversa pertence à org
-  const { data: conversation } = await supabase
+  // Passo 1: valida que a conversa pertence à org do usuário (cookie-client, RLS aplicado)
+  const { data: conv } = await supabase
     .from('messaging_conversations')
-    .select(`
-      id,
-      channel:messaging_channels!channel_id (
-        provider,
-        credentials
-      )
-    `)
+    .select('id, channel_id')
     .eq('id', conversationId)
-    .eq('organization_id', profile.organization_id)
+    .eq('organization_id', orgId)
     .single();
 
-  if (!conversation) {
+  if (!conv) {
     return NextResponse.json({ error: 'Conversa não encontrada' }, { status: 404 });
   }
 
-  type ChannelRow = { provider: string; credentials: Record<string, string> };
-  const channel = conversation.channel as unknown as ChannelRow | null;
+  // Passo 2: busca credenciais do canal via admin-client (bypassa RLS que bloqueia 'credentials')
+  const supabaseAdmin = createStaticAdminClient();
+  const { data: channel } = await supabaseAdmin
+    .from('messaging_channels')
+    .select('provider, credentials')
+    .eq('id', conv.channel_id)
+    .single();
 
   if (!channel || channel.provider !== 'meta-cloud') {
     return NextResponse.json({ error: 'Canal não é Meta Cloud' }, { status: 400 });
   }
 
-  // Suporta camelCase e snake_case para compatibilidade com canais legados
-  const creds = channel.credentials ?? {} as Record<string, string>;
+  const creds = (channel.credentials ?? {}) as Record<string, string>;
   const accessToken = creds.accessToken || creds.access_token;
   if (!accessToken) {
     console.error('[media-proxy] accessToken ausente nas credenciais:', Object.keys(creds));
     return NextResponse.json({ error: 'Canal sem credenciais configuradas' }, { status: 500 });
   }
 
-  // Passo 1: pede ao Meta a URL de download real (expira, por isso não cacheamos no DB)
+  // Passo 3: pede ao Meta a URL de download real
   const infoRes = await fetch(`${META_GRAPH_URL}/${mediaId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
   if (!infoRes.ok) {
-    console.error('[media-proxy] Meta info error:', await infoRes.text());
+    const errText = await infoRes.text();
+    console.error('[media-proxy] Meta info error:', infoRes.status, errText);
     return NextResponse.json({ error: 'Falha ao obter info da mídia no Meta' }, { status: 502 });
   }
 
@@ -88,7 +90,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'URL de mídia não encontrada' }, { status: 502 });
   }
 
-  // Passo 2: faz download do binário (a URL do Meta também requer o token)
+  // Passo 4: baixa o binário (a URL do Meta também requer o token)
   const mediaRes = await fetch(info.url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
