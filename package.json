@@ -21,6 +21,8 @@
     "@ai-sdk/openai": "^3.0.49",
     "@ai-sdk/react": "^3.0.144",
     "@faker-js/faker": "^10.4.0",
+    "@ffmpeg/core": "^0.12.10",
+    "@ffmpeg/ffmpeg": "^0.12.15",
     "@hookform/resolvers": "^5.2.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@radix-ui/react-accordion": "^1.2.12",

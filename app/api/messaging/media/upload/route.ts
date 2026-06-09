@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createStaticAdminClient } from '@/lib/supabase/staticAdminClient';
 import crypto from 'crypto';
+import { convertM4aToMp3 } from '@/lib/media/audio-converter';
 
 // Força runtime Node.js — usa Buffer (API Node.js) para processamento de mídia.
 // Sem isso o Vercel tenta compilar no Edge Runtime e a rota falha silenciosamente.
@@ -202,7 +203,7 @@ export async function POST(req: NextRequest) {
       .from('messaging-media')
       .getPublicUrl(storagePath);
 
-    // Para áudio: faz upload direto para Meta usando admin-client para ler credenciais.
+    // Para áudio: converte M4A→MP3 se necessário e faz upload direto para Meta.
     // O cookie-client (RLS) bloqueia leitura da coluna 'credentials' em messaging_channels.
     if (mediaType === 'audio') {
       const supabaseAdmin = createStaticAdminClient();
@@ -217,14 +218,26 @@ export async function POST(req: NextRequest) {
         const access_token = creds.accessToken || creds.access_token;
         const phone_number_id = creds.phoneNumberId || creds.phone_number_id;
         if (access_token && phone_number_id) {
-          const mediaId = await uploadAudioToMeta(fileBuffer, file.type, phone_number_id, access_token);
+          // audio/mp4 (M4A) causa erro 131053 no WhatsApp — converte para MP3 antes do upload
+          let uploadBuffer = fileBuffer;
+          let uploadMime = file.type;
+          if (file.type === 'audio/mp4' || file.type === 'audio/m4a') {
+            console.log('[upload] audio/mp4 — convertendo para audio/mpeg...');
+            const mp3Buffer = await convertM4aToMp3(fileBuffer);
+            if (mp3Buffer && mp3Buffer.length > 0) {
+              uploadBuffer = mp3Buffer;
+              uploadMime = 'audio/mpeg';
+            }
+          }
+
+          const mediaId = await uploadAudioToMeta(uploadBuffer, uploadMime, phone_number_id, access_token);
           if (mediaId) {
             return NextResponse.json({
               mediaUrl: `meta:${mediaId}`,
               mediaType,
-              mimeType: file.type,
+              mimeType: uploadMime,
               fileName: file.name,
-              fileSize: file.size,
+              fileSize: uploadBuffer.length,
             });
           }
           console.warn('[upload] Upload para Meta falhou — usando URL Supabase como fallback');
