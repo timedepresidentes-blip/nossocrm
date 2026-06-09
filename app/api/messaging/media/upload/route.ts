@@ -87,7 +87,7 @@ async function uploadAudioToMeta(
     const metaForm = new FormData();
     metaForm.append('messaging_product', 'whatsapp');
     metaForm.append('type', mimeType);
-    metaForm.append('file', new Blob([fileBuffer], { type: mimeType }), filename);
+    metaForm.append('file', new Blob([new Uint8Array(fileBuffer)], { type: mimeType }), filename);
 
     const res = await fetch(`${META_GRAPH_URL}/${phoneNumberId}/media`, {
       method: 'POST',
