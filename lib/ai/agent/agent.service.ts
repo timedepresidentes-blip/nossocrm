@@ -247,31 +247,6 @@ export async function processIncomingMessage(
     }
   }
 
-  // 0d. Inatividade permanente após humano assumir a conversa.
-  // Julia fica completamente silenciosa enquanto houver mensagens de operador humano,
-  // a menos que o operador reative explicitamente via metadata.ai_paused = false.
-  if (conversationMetadata.ai_paused !== false) {
-    const { data: humanMessage } = await supabase
-      .from('messaging_messages')
-      .select('id')
-      .eq('conversation_id', conversationId)
-      .eq('direction', 'outbound')
-      .eq('sender_type', 'user')
-      .limit(1)
-      .maybeSingle();
-
-    if (humanMessage) {
-      console.log('[AIAgent] Human agent active — staying silent until explicit reactivation:', conversationId);
-      return {
-        success: true,
-        decision: {
-          action: 'skipped',
-          reason: 'Atendimento humano ativo — Júlia inativa até reativação explícita',
-        },
-      };
-    }
-  }
-
   const dealId = conversationMetadata.deal_id as string | undefined;
 
   if (!dealId) {
@@ -363,8 +338,9 @@ export async function processIncomingMessage(
     };
   }
 
-  // 4b. Verificar inatividade do operador (AI Takeover)
-  if (aiConfig.takeoverEnabled && conversation?.assigned_user_id) {
+  // 4b. Verificar inatividade do operador (AI Takeover).
+  // Verifica se existe mensagem humana recente, independente de atribuição formal.
+  if (aiConfig.takeoverEnabled) {
     const operatorActive = await isOperatorActive(
       supabase,
       conversationId,
