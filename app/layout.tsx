@@ -9,6 +9,9 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'sw
 export const metadata: Metadata = {
   title: 'NossoCRM',
   description: 'CRM Inteligente para Gestão de Vendas',
+  other: {
+    'facebook-domain-verification': 'pp2xjidmxftgughoygico9p1yawuu0',
+  },
 }
 
 /**
