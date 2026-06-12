@@ -344,7 +344,7 @@ export async function processIncomingMessage(
     const operatorActive = await isOperatorActive(
       supabase,
       conversationId,
-      conversation.assigned_at,
+      conversation?.assigned_at,
       aiConfig.takeoverMinutes
     );
 
@@ -910,7 +910,7 @@ async function logAIInteraction(params: {
 async function isOperatorActive(
   supabase: SupabaseClient,
   conversationId: string,
-  assignedAt: string | null,
+  assignedAt: string | null | undefined,
   takeoverMinutes: number
 ): Promise<boolean> {
   const { data: lastUserMessage } = await supabase
