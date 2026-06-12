@@ -65,6 +65,9 @@ function formatAudioTime(seconds: number): string {
 // WhatsApp-style audio player
 // ---------------------------------------------------------------------------
 
+const SPEED_STEPS = [1, 1.5, 2] as const;
+type SpeedStep = typeof SPEED_STEPS[number];
+
 const AudioPlayer = memo(function AudioPlayer({
   content,
   isOutbound,
@@ -78,6 +81,7 @@ const AudioPlayer = memo(function AudioPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState<number>(content.duration ?? 0);
   const [loadError, setLoadError] = useState(false);
+  const [speed, setSpeed] = useState<SpeedStep>(1);
   const audioRef = useRef<HTMLAudioElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
   const safeUrl = resolveMediaUrl(content.mediaUrl, conversationId);
@@ -117,9 +121,16 @@ const AudioPlayer = memo(function AudioPlayer({
     if (isPlaying) {
       el.pause();
     } else {
+      el.playbackRate = speed;
       el.play().catch(() => setLoadError(true));
     }
-  }, [isPlaying, safeUrl]);
+  }, [isPlaying, safeUrl, speed]);
+
+  const cycleSpeed = useCallback(() => {
+    const next = SPEED_STEPS[(SPEED_STEPS.indexOf(speed) + 1) % SPEED_STEPS.length];
+    setSpeed(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  }, [speed]);
 
   const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const el = audioRef.current;
@@ -206,6 +217,22 @@ const AudioPlayer = memo(function AudioPlayer({
       >
         {formatAudioTime(isPlaying ? currentTime : duration)}
       </span>
+
+      {/* Playback speed */}
+      <button
+        type="button"
+        onClick={cycleSpeed}
+        aria-label={`Velocidade de reprodução: ${speed}x`}
+        className={cn(
+          'flex-shrink-0 text-[11px] font-bold w-8 text-center rounded transition-colors',
+          isOutbound
+            ? 'text-white/80 hover:text-white hover:bg-white/20'
+            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10',
+          speed !== 1 && (isOutbound ? 'text-white bg-white/20' : 'text-primary-600 dark:text-primary-400'),
+        )}
+      >
+        {speed}x
+      </button>
     </div>
   );
 });
