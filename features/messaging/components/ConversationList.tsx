@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, memo } from 'react';
-import { Search, Filter, Inbox, CheckCircle, X } from 'lucide-react';
+import { Search, Filter, Inbox, CheckCircle, X, PenSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConversationItem } from './ConversationItem';
 import { ChannelIndicator } from './ChannelIndicator';
@@ -39,6 +39,7 @@ const ConversationItemWrapper = memo(function ConversationItemWrapper({
 interface ConversationListProps {
   selectedId?: string;
   onSelect: (conversationId: string) => void;
+  onNewConversation?: () => void;
   businessUnitId?: string;
   getPresence?: (contactId: string) => 'online' | 'typing' | 'recording' | 'offline';
 }
@@ -54,6 +55,7 @@ const CHANNEL_OPTIONS: { id: ChannelType | 'all'; label: string }[] = [
 export const ConversationList = memo(function ConversationList({
   selectedId,
   onSelect,
+  onNewConversation,
   businessUnitId,
   getPresence,
 }: ConversationListProps) {
@@ -98,6 +100,18 @@ export const ConversationList = memo(function ConversationList({
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Conversas
           </h2>
+          <div className="flex items-center gap-1">
+            {onNewConversation && (
+              <button
+                type="button"
+                onClick={onNewConversation}
+                className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                title="Nova conversa"
+                aria-label="Nova conversa"
+              >
+                <PenSquare className="w-4 h-4" />
+              </button>
+            )}
           <button
             type="button"
             onClick={() => setShowFilters(!showFilters)}
@@ -118,6 +132,7 @@ export const ConversationList = memo(function ConversationList({
               </span>
             )}
           </button>
+          </div>
         </div>
 
         {/* Search */}

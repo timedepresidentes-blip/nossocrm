@@ -13,6 +13,7 @@ import { MessageThread } from './components/MessageThread';
 import { MessageInput } from './components/MessageInput';
 import { ContactPanel } from './components/ContactPanel';
 import { ContactLinkModal } from './components/Modals/ContactLinkModal';
+import { NewConversationModal } from './components/Modals/NewConversationModal';
 import { ChannelIndicator } from './components/ChannelIndicator';
 import { WindowExpiryBadge } from './components/WindowExpiryBadge';
 import { MessageSearchBar } from './components/MessageSearchBar';
@@ -55,6 +56,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
     initialConversationId || conversationIdParam || undefined
   );
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [isNewConversationOpen, setIsNewConversationOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [replyToMessage, setReplyToMessage] = useState<import('@/lib/messaging/types').MessagingMessage | null>(null);
@@ -173,6 +175,43 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
     router.push(`/boards?contact=${contactId}`);
   }, [router]);
 
+  // Create a new outbound conversation
+  const handleCreateConversation = useCallback(async (params: {
+    channelId: string;
+    phoneNumber: string;
+    contactName?: string;
+    contactId?: string;
+  }) => {
+    const res = await fetch('/api/messaging/conversations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        channelId: params.channelId,
+        externalContactId: params.phoneNumber,
+        externalContactName: params.contactName || params.phoneNumber,
+        contactId: params.contactId,
+      }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      // Conversa já existe — navegar para ela
+      if (res.status === 409 && data.conversationId) {
+        setIsNewConversationOpen(false);
+        handleSelectConversation(data.conversationId);
+        return;
+      }
+      throw new Error(data.error || 'Erro ao criar conversa');
+    }
+
+    const data = await res.json();
+    queryClient.invalidateQueries({ queryKey: queryKeys.messagingConversations.all });
+    setIsNewConversationOpen(false);
+    if (data.conversation?.id) {
+      handleSelectConversation(data.conversation.id);
+    }
+  }, [queryClient, handleSelectConversation]);
+
   return (
     <div className="h-[calc(100vh-4rem)] flex">
       {/* Conversation List */}
@@ -180,6 +219,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
         <ConversationList
           selectedId={selectedConversationId}
           onSelect={handleSelectConversation}
+          onNewConversation={() => setIsNewConversationOpen(true)}
           getPresence={getPresence}
         />
       </div>
@@ -339,6 +379,13 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
           onViewDeals={handleViewDeals}
         />
       </div>
+
+      {/* New Conversation Modal */}
+      <NewConversationModal
+        isOpen={isNewConversationOpen}
+        onClose={() => setIsNewConversationOpen(false)}
+        onCreateConversation={handleCreateConversation}
+      />
 
       {/* Contact Link Modal */}
       <ContactLinkModal
