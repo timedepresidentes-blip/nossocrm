@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 type SoundType =
   | 'mensagem_recebida'
@@ -74,9 +74,32 @@ function createSound(ctx: AudioContext, type: SoundType) {
 export function useNotificationSound() {
   const ctxRef = useRef<AudioContext | null>(null);
 
+  // Chrome/Edge bloqueiam AudioContext até o primeiro clique do usuário.
+  // Este efeito cria e "desbloqueia" o contexto na primeira interação,
+  // garantindo que sons de eventos de rede (WebSocket) funcionem depois.
+  useEffect(() => {
+    const unlock = () => {
+      try {
+        if (!ctxRef.current) {
+          ctxRef.current = new AudioContext();
+        }
+        if (ctxRef.current.state === 'suspended') {
+          ctxRef.current.resume();
+        }
+      } catch {
+        // ignora
+      }
+    };
+    document.addEventListener('click', unlock, { once: true });
+    document.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      document.removeEventListener('click', unlock);
+      document.removeEventListener('keydown', unlock);
+    };
+  }, []);
+
   const play = useCallback((type: SoundType) => {
     try {
-      // Cria o AudioContext na primeira interação do usuário (exigência dos browsers)
       if (!ctxRef.current || ctxRef.current.state === 'closed') {
         ctxRef.current = new AudioContext();
       }
@@ -87,7 +110,7 @@ export function useNotificationSound() {
         createSound(ctx, type);
       }
     } catch {
-      // Silencia erros — som é progressivo, não crítico
+      // Som é progressivo — falha silenciosa
     }
   }, []);
 
