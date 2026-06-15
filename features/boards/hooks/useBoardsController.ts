@@ -21,6 +21,7 @@ import { useToast } from '@/context/ToastContext';
 import { useAuth } from '@/context/AuthContext';
 import { useLifecycleStages } from '@/lib/query/hooks/useLifecycleStagesQuery';
 import { useAI } from '@/context/AIContext';
+import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
 
 /**
  * Função pública `isDealRotting` do projeto.
@@ -61,6 +62,7 @@ export const useBoardsController = () => {
   const { profile, organizationId } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { play: playSound } = useNotificationSound();
 
   // AI Context
   const { setContext, clearContext } = useAI();
@@ -487,6 +489,7 @@ export const useBoardsController = () => {
       // Check linkedLifecycleStage to determine won/lost status
       if (targetStage?.linkedLifecycleStage === 'OTHER') {
         // Dropping into LOST stage - open modal to ask for reason
+        playSound('lead_perdido');
         setLossReasonModal({
           isOpen: true,
           dealId,
@@ -495,6 +498,8 @@ export const useBoardsController = () => {
         });
       } else {
         // Use unified moveDeal for all other cases (WON or regular stages)
+        const isWon = targetStage?.linkedLifecycleStage === 'WON';
+        playSound(isWon ? 'lead_ganho' : 'lead_movido');
         moveDealMutation.mutate({
           dealId,
           targetStageId: stageId,

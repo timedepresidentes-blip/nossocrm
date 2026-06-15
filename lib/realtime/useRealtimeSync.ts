@@ -18,6 +18,7 @@ import type { MessagingMessage } from '@/lib/messaging';
 import { transformMessage } from '@/lib/messaging/types';
 import type { DbMessagingMessage, ConversationView } from '@/lib/messaging/types';
 import { pendingDeletionIds, confirmedDeletedIds, removePendingDeletion } from '@/lib/query/hooks/useConversationsQuery';
+import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
 
 // Enable detailed Realtime logging in development or when DEBUG_REALTIME env var is set
 const DEBUG_REALTIME = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_DEBUG_REALTIME === 'true';
@@ -103,6 +104,7 @@ export function useRealtimeSync(
 ) {
   const { enabled = true, debounceMs = 100, onchange } = options;
   const queryClient = useQueryClient();
+  const { play: playSound } = useNotificationSound();
   const channelRef = useRef<RealtimeChannel | null>(null);
   const isConnectedRef = useRef(false);
   const instanceIdRef = useRef(0);
@@ -236,6 +238,7 @@ export function useRealtimeSync(
                 if (direction === 'outbound') {
                   // Our own outbound INSERT — useSendMessage already placed the message in cache.
                   // Only refresh the conversations list (last_message preview).
+                  playSound('mensagem_enviada');
                   pendingInvalidationsRef.current.add(queryKeys.messagingConversations.all);
                   pendingInvalidationsRef.current.add(queryKeys.messagingConversations.unreadCount());
                   if (!flushScheduledRef.current) {
@@ -261,6 +264,7 @@ export function useRealtimeSync(
 
                 // Inbound message: inject directly into the flat query cache (useMessages).
                 // This is instant and doesn't require a network roundtrip or RLS re-evaluation.
+                playSound('mensagem_recebida');
                 const newMessage = transformMessage(payload.new as unknown as DbMessagingMessage);
                 const flatKey = queryKeys.messagingMessages.byConversation(conversationId);
                 const infiniteKey = [...flatKey, 'infinite'] as const;
