@@ -1110,24 +1110,11 @@ async function handleStatusUpdate(
     console.log(`[Webhook] Status skipped (${result?.reason}): ${status.id} → ${status.status}`);
   }
 
-  // Update window expiration if conversation info is present
-  if (status.conversation?.expiration_timestamp && result?.message_id) {
-    const expirationTime = new Date(parseInt(status.conversation.expiration_timestamp) * 1000);
-
-    // Find conversation by message and update window
-    const { data: msg } = await supabase
-      .from("messaging_messages")
-      .select("conversation_id")
-      .eq("id", result.message_id)
-      .maybeSingle();
-
-    if (msg?.conversation_id) {
-      await supabase
-        .from("messaging_conversations")
-        .update({ window_expires_at: expirationTime.toISOString() })
-        .eq("id", msg.conversation_id);
-    }
-  }
+  // NOTA: NÃO atualizamos window_expires_at via STATUS webhook.
+  // O expiration_timestamp da Meta representa a janela de FATURAMENTO (pode ser 72h),
+  // não a janela de atendimento de 24h. Atualizar aqui causaria o bug de mostrar
+  // a janela como aberta mesmo após 24h sem resposta do cliente.
+  // A janela é gerenciada exclusivamente pelo handler de mensagens inbound (now + 24h).
 }
 
 // =============================================================================
