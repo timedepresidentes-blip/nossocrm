@@ -18,6 +18,7 @@ import { ChannelIndicator } from './components/ChannelIndicator';
 import { WindowExpiryBadge } from './components/WindowExpiryBadge';
 import { MessageSearchBar } from './components/MessageSearchBar';
 import { AssignmentDropdown } from './components/AssignmentDropdown';
+import { TransferButton } from './components/TransferButton';
 import {
   useConversation,
   useMarkConversationRead,
@@ -261,6 +262,12 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <TransferButton
+                  conversationId={selectedConversation.id}
+                  assignedUserId={selectedConversation.assignedUserId}
+                  conversationMetadata={selectedConversation.metadata}
+                  assignedAt={selectedConversation.assignedAt}
+                />
                 <AssignmentDropdown
                   conversationId={selectedConversation.id}
                   assignedUserId={selectedConversation.assignedUserId}
