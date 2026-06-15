@@ -2,7 +2,7 @@
 
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Check, CheckCheck, Clock, AlertCircle, FileText, MapPin, Play, Pause, Image, Reply, Trash2, RotateCcw, Pencil } from 'lucide-react';
+import { Check, CheckCheck, Clock, AlertCircle, FileText, MapPin, Play, Pause, Image, Reply, Trash2, RotateCcw, Pencil, LayoutTemplate } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sanitizeUrl } from '@/lib/utils/sanitize';
 import { useSendMessage, useDeleteMessage, useRetryMessage, useEditMessage } from '@/lib/query/hooks/useMessagingMessagesQuery';
@@ -366,6 +366,32 @@ const MessageContent = memo(function MessageContent({
           ) : (
             '🏷️'
           )}
+        </div>
+      );
+    }
+
+    case 'template': {
+      const tpl = content as {
+        templateName?: string;
+        templateCategory?: string;
+        parameters?: { body?: { text: string; type: string }[] };
+        renderedText?: string;
+      };
+      const name = (tpl.templateName ?? '').replace(/_/g, ' ');
+      const params = tpl.parameters?.body?.map((p) => p.text) ?? [];
+      return (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5 opacity-60 text-xs">
+            <LayoutTemplate className="w-3.5 h-3.5" />
+            <span>Template · {name}</span>
+          </div>
+          {tpl.renderedText ? (
+            <p className="whitespace-pre-wrap break-words">{tpl.renderedText}</p>
+          ) : params.length > 0 ? (
+            <p className="whitespace-pre-wrap break-words opacity-80 text-sm">
+              {params.join(' · ')}
+            </p>
+          ) : null}
         </div>
       );
     }
