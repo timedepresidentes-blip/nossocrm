@@ -399,6 +399,8 @@ export const useUpdateContact = () => {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all });
+      // Conversas incluem ai_paused do contato via join — precisa refrescar quando muda
+      queryClient.invalidateQueries({ queryKey: queryKeys.messagingConversations.all });
     },
   });
 };

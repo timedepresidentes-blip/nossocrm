@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect } from 'react';
 
 type SoundType =
   | 'mensagem_recebida'
@@ -7,8 +7,29 @@ type SoundType =
   | 'lead_ganho'
   | 'lead_perdido';
 
-// Sons gerados via Web Audio API — nenhum arquivo externo necessário.
-// Cada som é distinto para identificação auditiva imediata.
+// Singleton — sobrevive a remontagens do componente.
+// AudioContext criado em resposta a gesto do usuário perde o estado "unlocked"
+// ao ser recriado, por isso mantemos uma instância global.
+let _ctx: AudioContext | null = null;
+
+function getCtx(): AudioContext {
+  if (!_ctx || _ctx.state === 'closed') {
+    _ctx = new AudioContext();
+  }
+  return _ctx;
+}
+
+function tryResume() {
+  try {
+    const ctx = getCtx();
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+  } catch {
+    // ignora — SSR ou browser sem suporte
+  }
+}
+
 function createSound(ctx: AudioContext, type: SoundType) {
   const master = ctx.createGain();
   master.connect(ctx.destination);
@@ -28,13 +49,11 @@ function createSound(ctx: AudioContext, type: SoundType) {
   };
 
   switch (type) {
-    // Dois tons ascendentes — estilo MSN Messenger clássico
     case 'mensagem_recebida':
       note(523, 0,    0.18, 0.35);
       note(784, 0.15, 0.28, 0.40);
       break;
 
-    // Tom curto ascendente — "whoosh" discreto de envio
     case 'mensagem_enviada': {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -50,20 +69,17 @@ function createSound(ctx: AudioContext, type: SoundType) {
       break;
     }
 
-    // "Pop" seco — card movido no kanban
     case 'lead_movido':
       note(600, 0,    0.08, 0.30, 'sine');
       note(900, 0.06, 0.07, 0.15, 'sine');
       break;
 
-    // Três notas ascendentes em acorde maior — vitória!
     case 'lead_ganho':
       note(523, 0,    0.20, 0.35);
       note(659, 0.12, 0.20, 0.35);
       note(784, 0.24, 0.35, 0.40);
       break;
 
-    // Dois tons descendentes — sinal de encerramento
     case 'lead_perdido':
       note(440, 0,    0.20, 0.30);
       note(330, 0.18, 0.28, 0.28);
@@ -72,40 +88,30 @@ function createSound(ctx: AudioContext, type: SoundType) {
 }
 
 export function useNotificationSound() {
-  const ctxRef = useRef<AudioContext | null>(null);
-
-  // Chrome/Edge bloqueiam AudioContext até o primeiro clique do usuário.
-  // Este efeito cria e "desbloqueia" o contexto na primeira interação,
-  // garantindo que sons de eventos de rede (WebSocket) funcionem depois.
+  // Registra listeners de desbloqueio em cada montagem.
+  // Como _ctx é singleton, qualquer gesto em qualquer instância desbloqueia para todos.
   useEffect(() => {
-    const unlock = () => {
-      try {
-        if (!ctxRef.current) {
-          ctxRef.current = new AudioContext();
-        }
-        if (ctxRef.current.state === 'suspended') {
-          ctxRef.current.resume();
-        }
-      } catch {
-        // ignora
-      }
-    };
-    document.addEventListener('click', unlock, { once: true });
-    document.addEventListener('keydown', unlock, { once: true });
+    const unlock = () => tryResume();
+
+    document.addEventListener('click',      unlock, { passive: true });
+    document.addEventListener('keydown',    unlock, { passive: true });
+    document.addEventListener('touchstart', unlock, { passive: true });
+
+    // Tenta desbloquear imediatamente — pode funcionar se já houve gesto anterior
+    unlock();
+
     return () => {
-      document.removeEventListener('click', unlock);
-      document.removeEventListener('keydown', unlock);
+      document.removeEventListener('click',      unlock);
+      document.removeEventListener('keydown',    unlock);
+      document.removeEventListener('touchstart', unlock);
     };
   }, []);
 
   const play = useCallback((type: SoundType) => {
     try {
-      if (!ctxRef.current || ctxRef.current.state === 'closed') {
-        ctxRef.current = new AudioContext();
-      }
-      const ctx = ctxRef.current;
+      const ctx = getCtx();
       if (ctx.state === 'suspended') {
-        ctx.resume().then(() => createSound(ctx, type));
+        ctx.resume().then(() => createSound(ctx, type)).catch(() => {});
       } else {
         createSound(ctx, type);
       }

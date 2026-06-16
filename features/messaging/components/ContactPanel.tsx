@@ -322,7 +322,7 @@ export const ContactPanel = memo(function ContactPanel({
               className={cn(
                 'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent',
                 'transition-colors duration-200 ease-in-out focus:outline-none',
-                isAiPaused ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700',
+                isAiPaused ? 'bg-slate-200 dark:bg-slate-700' : 'bg-green-500',
                 isPending && 'opacity-50 cursor-not-allowed'
               )}
               title={
@@ -335,7 +335,7 @@ export const ContactPanel = memo(function ContactPanel({
                 className={cn(
                   'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0',
                   'transition duration-200 ease-in-out',
-                  isAiPaused ? 'translate-x-4' : 'translate-x-0'
+                  isAiPaused ? 'translate-x-0' : 'translate-x-4'
                 )}
               />
             </button>
