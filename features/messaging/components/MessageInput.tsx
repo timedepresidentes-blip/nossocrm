@@ -158,9 +158,14 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
   );
 
   const isUploading = uploadMedia.isPending;
+  // Para Meta Cloud: se não há janela ativa (windowExpiresAt === null) significa que
+  // nenhuma mensagem inbound foi recebida ainda — só templates são aceitos pela API.
+  const needsTemplate =
+    conversation.isWindowExpired ||
+    (conversation.channelProvider === 'meta-cloud' && !conversation.windowExpiresAt);
   // Text sends use optimistic updates — no need to block the input while the API is in flight.
   // Only block during: media upload (can't parallelize), template send, expired window.
-  const isDisabled = conversation.isWindowExpired || isSendingTemplate || isUploading;
+  const isDisabled = needsTemplate || isSendingTemplate || isUploading;
   // Show mic button when input is empty, no pending media, and not recording
   const showMicButton = !text.trim() && !pendingMedia && !isDisabled;
 
@@ -536,29 +541,56 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
     );
   }
 
-  // Show template selector when window expired or when manually opened
-  if (showTemplates || conversation.isWindowExpired) {
+  // Exibe seletor de template quando: janela expirada, conversa nova (outbound sem resposta), ou aberto manualmente
+  if (showTemplates || needsTemplate) {
+    // Conversa iniciada pelo negócio sem nenhuma resposta do contato ainda
+    const isNewOutbound =
+      conversation.channelProvider === 'meta-cloud' && !conversation.windowExpiresAt;
+
     return (
       <div className="border-t border-slate-200 dark:border-white/10">
-        {conversation.isWindowExpired && !showTemplates && (
-          <div className="p-4 bg-orange-50 dark:bg-orange-900/20">
-            <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
-              <Clock className="w-5 h-5" />
-              <div>
-                <p className="font-medium">Janela de resposta expirada</p>
-                <p className="text-sm opacity-80">
-                  Use um template aprovado para reabrir a conversa
-                </p>
+        {needsTemplate && !showTemplates && (
+          isNewOutbound ? (
+            // Banner azul: conversa outbound nova, nunca houve resposta
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20">
+              <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                <Clock className="w-5 h-5" />
+                <div>
+                  <p className="font-medium">Aguardando primeira resposta do contato</p>
+                  <p className="text-sm opacity-80">
+                    Esta conversa foi iniciada por você. O WhatsApp exige o envio de um template aprovado para a primeira mensagem.
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowTemplates(true)}
+                className="mt-3 px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              >
+                Escolher template
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowTemplates(true)}
-              className="mt-3 px-4 py-2 text-sm font-medium bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
-            >
-              Enviar template
-            </button>
-          </div>
+          ) : (
+            // Banner laranja: janela de 24h expirada
+            <div className="p-4 bg-orange-50 dark:bg-orange-900/20">
+              <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
+                <Clock className="w-5 h-5" />
+                <div>
+                  <p className="font-medium">Janela de resposta expirada</p>
+                  <p className="text-sm opacity-80">
+                    Use um template aprovado para reabrir a conversa
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTemplates(true)}
+                className="mt-3 px-4 py-2 text-sm font-medium bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+              >
+                Enviar template
+              </button>
+            </div>
+          )
         )}
         {showTemplates && (
           <div className="h-[400px] bg-white dark:bg-slate-900">
