@@ -1,13 +1,21 @@
 'use client';
 
-import React, { useState, useMemo, useCallback, memo } from 'react';
-import { Search, Filter, Inbox, CheckCircle, X, PenSquare } from 'lucide-react';
+import React, { useState, useMemo, useCallback, memo, useEffect, useRef } from 'react';
+import { Search, Filter, Inbox, CheckCircle, X, Plus, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConversationItem } from './ConversationItem';
 import { ChannelIndicator } from './ChannelIndicator';
 import { useConversations } from '@/lib/query/hooks/useConversationsQuery';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import type { ConversationFilters, ConversationStatus, ChannelType, ConversationView } from '@/lib/messaging/types';
 import type { PresenceStatus } from '@/lib/messaging/hooks/useContactPresence';
+
+interface ContactResult {
+  id: string;
+  name: string;
+  phone: string;
+}
 
 interface ConversationItemWrapperProps {
   conversation: ConversationView;
@@ -40,6 +48,7 @@ interface ConversationListProps {
   selectedId?: string;
   onSelect: (conversationId: string) => void;
   onNewConversation?: () => void;
+  onStartConversationWithContact?: (params: { contactId: string; contactName: string; contactPhone: string }) => void;
   businessUnitId?: string;
   getPresence?: (contactId: string) => 'online' | 'typing' | 'recording' | 'offline';
 }
@@ -56,14 +65,59 @@ export const ConversationList = memo(function ConversationList({
   selectedId,
   onSelect,
   onNewConversation,
+  onStartConversationWithContact,
   businessUnitId,
   getPresence,
 }: ConversationListProps) {
+  const { profile } = useAuth();
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all'>('open');
   const [searchQuery, setSearchQuery] = useState('');
   const [channelFilter, setChannelFilter] = useState<ChannelType | 'all'>('all');
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Busca de contatos paralela à busca de conversas
+  const [contactResults, setContactResults] = useState<ContactResult[]>([]);
+  const [isSearchingContacts, setIsSearchingContacts] = useState(false);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+
+    if (!searchQuery.trim() || searchQuery.length < 2 || !profile?.organization_id) {
+      setContactResults([]);
+      return;
+    }
+
+    searchTimeout.current = setTimeout(async () => {
+      setIsSearchingContacts(true);
+      try {
+        const { data } = await supabase
+          .from('contacts')
+          .select('id, name, phone')
+          .eq('organization_id', profile.organization_id)
+          .or(`name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%`)
+          .not('phone', 'is', null)
+          .neq('phone', '')
+          .limit(5);
+        setContactResults(data || []);
+      } catch {
+        setContactResults([]);
+      } finally {
+        setIsSearchingContacts(false);
+      }
+    }, 300);
+
+    return () => {
+      if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    };
+  }, [searchQuery, profile?.organization_id]);
+
+  // Limpar contatos ao limpar busca
+  const handleClearSearch = useCallback(() => {
+    setSearchQuery('');
+    setContactResults([]);
+  }, []);
 
   const filters: ConversationFilters = useMemo(() => ({
     status: statusFilter,
@@ -92,6 +146,8 @@ export const ConversationList = memo(function ConversationList({
     { id: 'resolved' as const, label: 'Resolvidas', icon: CheckCircle },
   ];
 
+  const showContactResults = searchQuery.length >= 2 && contactResults.length > 0 && !!onStartConversationWithContact;
+
   return (
     <div className="flex flex-col h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-white/10">
       {/* Header */}
@@ -101,46 +157,48 @@ export const ConversationList = memo(function ConversationList({
             Conversas
           </h2>
           <div className="flex items-center gap-1">
-            {onNewConversation && (
-              <button
-                type="button"
-                onClick={onNewConversation}
-                className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
-                title="Nova conversa"
-                aria-label="Nova conversa"
-              >
-                <PenSquare className="w-4 h-4" />
-              </button>
-            )}
-          <button
-            type="button"
-            onClick={() => setShowFilters(!showFilters)}
-            className={cn(
-              'relative p-2 rounded-lg transition-colors',
-              showFilters || activeFiltersCount > 0
-                ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-600 dark:text-primary-400'
-                : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-600 dark:hover:text-white'
-            )}
-            title="Filtros"
-            aria-label="Filtros"
-            aria-expanded={showFilters}
-          >
-            <Filter className="w-4 h-4" />
-            {activeFiltersCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center text-[10px] font-bold text-white bg-primary-500 rounded-full">
-                {activeFiltersCount}
-              </span>
-            )}
-          </button>
+            <button
+              type="button"
+              onClick={() => setShowFilters(!showFilters)}
+              className={cn(
+                'relative p-2 rounded-lg transition-colors',
+                showFilters || activeFiltersCount > 0
+                  ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-600 dark:text-primary-400'
+                  : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-600 dark:hover:text-white'
+              )}
+              title="Filtros"
+              aria-label="Filtros"
+              aria-expanded={showFilters}
+            >
+              <Filter className="w-4 h-4" />
+              {activeFiltersCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center text-[10px] font-bold text-white bg-primary-500 rounded-full">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Search */}
+        {/* Botão Nova Conversa — proeminente */}
+        {onNewConversation && (
+          <button
+            type="button"
+            onClick={onNewConversation}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 mb-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-sm font-semibold transition-colors shadow-sm"
+            aria-label="Nova conversa"
+          >
+            <Plus className="w-4 h-4" />
+            Nova conversa
+          </button>
+        )}
+
+        {/* Search — busca conversas e contatos */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Buscar conversas..."
+            placeholder="Buscar conversa ou contato..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-4 py-2 text-sm bg-slate-100 dark:bg-white/5 border border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-slate-900 dark:text-white placeholder-slate-400"
@@ -148,8 +206,9 @@ export const ConversationList = memo(function ConversationList({
           {searchQuery && (
             <button
               type="button"
-              onClick={() => setSearchQuery('')}
+              onClick={handleClearSearch}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              aria-label="Limpar busca"
             >
               <X className="w-4 h-4" />
             </button>
@@ -268,25 +327,88 @@ export const ConversationList = memo(function ConversationList({
           <div className="p-4 text-center text-red-500">
             Erro ao carregar conversas
           </div>
-        ) : conversations?.length === 0 ? (
-          <div className="p-8 text-center">
-            <Inbox className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-            <p className="text-slate-500 dark:text-slate-400">
-              {statusFilter === 'open'
-                ? 'Nenhuma conversa aberta'
-                : 'Nenhuma conversa resolvida'}
-            </p>
-          </div>
         ) : (
-          conversations?.map((conversation) => (
-            <ConversationItemWrapper
-              key={conversation.id}
-              conversation={conversation}
-              isSelected={conversation.id === selectedId}
-              onSelect={onSelect}
-              presenceStatus={conversation.contactId && getPresence ? getPresence(conversation.contactId) : undefined}
-            />
-          ))
+          <>
+            {/* Conversas encontradas */}
+            {conversations && conversations.length > 0 && (
+              <>
+                {searchQuery && (
+                  <p className="px-4 pt-3 pb-1 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                    Conversas
+                  </p>
+                )}
+                {conversations.map((conversation) => (
+                  <ConversationItemWrapper
+                    key={conversation.id}
+                    conversation={conversation}
+                    isSelected={conversation.id === selectedId}
+                    onSelect={onSelect}
+                    presenceStatus={conversation.contactId && getPresence ? getPresence(conversation.contactId) : undefined}
+                  />
+                ))}
+              </>
+            )}
+
+            {/* Contatos encontrados pela busca */}
+            {showContactResults && (
+              <div className={conversations && conversations.length > 0 ? 'border-t border-slate-100 dark:border-white/5 mt-1' : ''}>
+                <p className="px-4 pt-3 pb-1 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  Contatos
+                </p>
+                {contactResults.map((contact) => (
+                  <button
+                    key={contact.id}
+                    type="button"
+                    onClick={() => onStartConversationWithContact?.({
+                      contactId: contact.id,
+                      contactName: contact.name,
+                      contactPhone: contact.phone,
+                    })}
+                    className="w-full px-4 py-3 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left group"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                        {(contact.name || '?').charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{contact.name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{contact.phone}</p>
+                    </div>
+                    <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-semibold shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      Iniciar
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Estado vazio */}
+            {(!conversations || conversations.length === 0) && !showContactResults && (
+              <div className="p-8 text-center">
+                <Inbox className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+                <p className="text-slate-500 dark:text-slate-400 text-sm">
+                  {searchQuery
+                    ? isSearchingContacts
+                      ? 'Buscando...'
+                      : 'Nenhuma conversa ou contato encontrado'
+                    : statusFilter === 'open'
+                      ? 'Nenhuma conversa aberta'
+                      : 'Nenhuma conversa resolvida'}
+                </p>
+                {!searchQuery && onNewConversation && (
+                  <button
+                    type="button"
+                    onClick={onNewConversation}
+                    className="mt-3 text-sm text-emerald-600 dark:text-emerald-400 font-medium hover:underline"
+                  >
+                    Iniciar nova conversa
+                  </button>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

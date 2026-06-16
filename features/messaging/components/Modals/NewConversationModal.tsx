@@ -131,6 +131,14 @@ export function NewConversationModal({
     [channels]
   );
 
+  // Auto-seleciona o único canal disponível e pula direto para o destinatário
+  useEffect(() => {
+    if (isOpen && step === 'channel' && !isLoadingChannels && initiableChannels.length === 1) {
+      setSelectedChannel(initiableChannels[0]);
+      setStep('recipient');
+    }
+  }, [isOpen, step, isLoadingChannels, initiableChannels]);
+
   const handleSelectChannel = (channel: MessagingChannel) => {
     setSelectedChannel(channel);
     setStep('recipient');

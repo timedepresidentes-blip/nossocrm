@@ -58,6 +58,11 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
   );
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [isNewConversationOpen, setIsNewConversationOpen] = useState(false);
+  const [newConversationDefaults, setNewConversationDefaults] = useState<{
+    contactId?: string;
+    contactName?: string;
+    contactPhone?: string;
+  } | undefined>(undefined);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [replyToMessage, setReplyToMessage] = useState<import('@/lib/messaging/types').MessagingMessage | null>(null);
@@ -176,6 +181,20 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
     router.push(`/boards?contact=${contactId}`);
   }, [router]);
 
+  // Abrir modal de nova conversa pré-preenchido com dados de um contato
+  const handleStartConversationWithContact = useCallback((params: {
+    contactId: string;
+    contactName: string;
+    contactPhone: string;
+  }) => {
+    setNewConversationDefaults({
+      contactId: params.contactId,
+      contactName: params.contactName,
+      contactPhone: params.contactPhone,
+    });
+    setIsNewConversationOpen(true);
+  }, []);
+
   // Create a new outbound conversation
   const handleCreateConversation = useCallback(async (params: {
     channelId: string;
@@ -220,7 +239,11 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
         <ConversationList
           selectedId={selectedConversationId}
           onSelect={handleSelectConversation}
-          onNewConversation={() => setIsNewConversationOpen(true)}
+          onNewConversation={() => {
+            setNewConversationDefaults(undefined);
+            setIsNewConversationOpen(true);
+          }}
+          onStartConversationWithContact={handleStartConversationWithContact}
           getPresence={getPresence}
         />
       </div>
@@ -390,8 +413,14 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
       {/* New Conversation Modal */}
       <NewConversationModal
         isOpen={isNewConversationOpen}
-        onClose={() => setIsNewConversationOpen(false)}
+        onClose={() => {
+          setIsNewConversationOpen(false);
+          setNewConversationDefaults(undefined);
+        }}
         onCreateConversation={handleCreateConversation}
+        defaultContactId={newConversationDefaults?.contactId}
+        defaultContactName={newConversationDefaults?.contactName}
+        defaultContactPhone={newConversationDefaults?.contactPhone}
       />
 
       {/* Contact Link Modal */}
