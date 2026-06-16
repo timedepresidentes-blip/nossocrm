@@ -17,6 +17,9 @@ import crypto from 'crypto';
 // Sem isso o Vercel tenta compilar no Edge Runtime e a rota falha silenciosamente.
 export const runtime = 'nodejs';
 export const maxDuration = 120;
+// Aumenta o limite do body para suportar vídeos de até 20MB (Meta aceita até 16MB).
+// O padrão do Next.js é 4MB, o que rejeita vídeos maiores antes de chegar ao handler.
+export const bodySizeLimit = '20mb';
 
 const META_GRAPH_URL = 'https://graph.facebook.com/v25.0';
 
