@@ -132,6 +132,7 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
   const [isConverting, setIsConverting] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -371,6 +372,7 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
 
   const handleSendMedia = useCallback(async () => {
     if (!pendingMedia || isDisabled) return;
+    setUploadError(null);
 
     uploadMedia.mutate(
       { file: pendingMedia.file, conversationId: conversation.id },
@@ -394,8 +396,15 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
                 onCancelReply?.();
                 textareaRef.current?.focus();
               },
+              onError: (err) => {
+                setUploadError(err instanceof Error ? err.message : 'Erro ao enviar mensagem');
+              },
             }
           );
+        },
+        onError: (err) => {
+          const msg = err instanceof Error ? err.message : 'Erro ao fazer upload';
+          setUploadError(msg);
         },
       }
     );
@@ -635,6 +644,17 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
             aria-label="Cancelar resposta"
           >
             <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Erro de upload */}
+      {uploadError && (
+        <div className="mx-4 mt-3 flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg text-sm text-red-700 dark:text-red-300">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1">{uploadError}</span>
+          <button type="button" onClick={() => setUploadError(null)} className="text-red-400 hover:text-red-600">
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}

@@ -233,9 +233,9 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
   }, [queryClient, handleSelectConversation]);
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex">
+    <div className="h-[calc(100vh-4rem)] flex overflow-hidden">
       {/* Conversation List */}
-      <div className="w-80 flex-shrink-0">
+      <div className="w-80 flex-shrink-0 overflow-hidden">
         <ConversationList
           selectedId={selectedConversationId}
           onSelect={handleSelectConversation}
@@ -400,7 +400,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
       </div>
 
       {/* Contact Panel */}
-      <div className="w-80 border-l border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 flex-shrink-0">
+      <div className="w-80 border-l border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 flex-shrink-0 overflow-hidden">
         <ContactPanel
           conversation={selectedConversation}
           isLoading={isConversationLoading && !!selectedConversationId}
