@@ -349,13 +349,31 @@ const MessageContent = memo(function MessageContent({
       return <AudioPlayer content={audioContent} isOutbound={isOutbound} conversationId={conversationId} />;
     }
 
-    case 'video':
+    case 'video': {
+      const videoContent = content as { mediaUrl?: string; caption?: string };
+      const resolvedVideoUrl = resolveMediaUrl(videoContent.mediaUrl, conversationId);
       return (
-        <div className="flex items-center gap-2">
-          <Image className="w-5 h-5" />
-          <span>Vídeo</span>
+        <div className="space-y-1">
+          {resolvedVideoUrl ? (
+            <video
+              src={resolvedVideoUrl}
+              controls
+              playsInline
+              className="max-w-[280px] rounded-lg"
+              preload="metadata"
+            />
+          ) : (
+            <div className="flex items-center gap-2 p-2 bg-black/5 dark:bg-white/5 rounded-lg">
+              <Image className="w-5 h-5" />
+              <span>Vídeo</span>
+            </div>
+          )}
+          {videoContent.caption && (
+            <p className="whitespace-pre-wrap break-words">{videoContent.caption}</p>
+          )}
         </div>
       );
+    }
 
     case 'sticker': {
       const stickerUrl = resolveMediaUrl((content as { mediaUrl?: string }).mediaUrl, conversationId);

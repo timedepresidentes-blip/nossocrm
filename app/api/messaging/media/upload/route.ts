@@ -73,16 +73,18 @@ function getMaxSize(mediaType: string): number {
   }
 }
 
-// Faz upload de áudio direto para Meta usando o buffer já em memória
-async function uploadAudioToMeta(
+// Faz upload de qualquer mídia direto para Meta usando o buffer já em memória.
+// A Meta prefere media IDs em vez de URLs externas para evitar o erro 131053.
+async function uploadMediaToMeta(
   fileBuffer: Buffer,
   mimeType: string,
+  mediaType: string,
   phoneNumberId: string,
   accessToken: string,
 ): Promise<string | null> {
   try {
-    const ext = MIME_TO_EXT[mimeType] || 'mp3';
-    const filename = `audio.${ext}`;
+    const ext = MIME_TO_EXT[mimeType] || mediaType;
+    const filename = `${mediaType}.${ext}`;
 
     const metaForm = new FormData();
     metaForm.append('messaging_product', 'whatsapp');
@@ -97,13 +99,13 @@ async function uploadAudioToMeta(
 
     const data = await res.json() as { id?: string; error?: { message: string; code: number } };
     if (data.id) {
-      console.log('[upload] Áudio enviado para Meta, mediaId:', data.id);
+      console.log(`[upload] ${mediaType} enviado para Meta, mediaId:`, data.id);
       return data.id;
     }
-    console.error('[upload] Meta rejeitou upload de áudio:', JSON.stringify(data.error));
+    console.error(`[upload] Meta rejeitou upload de ${mediaType}:`, JSON.stringify(data.error));
     return null;
   } catch (err) {
-    console.error('[upload] Falha no upload de áudio para Meta:', err instanceof Error ? err.message : err);
+    console.error(`[upload] Falha no upload de ${mediaType} para Meta:`, err instanceof Error ? err.message : err);
     return null;
   }
 }
@@ -202,10 +204,10 @@ export async function POST(req: NextRequest) {
       .from('messaging-media')
       .getPublicUrl(storagePath);
 
-    // Para áudio via Meta Cloud: faz upload direto para Meta e retorna meta:mediaId.
-    // Isso evita o erro 131053 (Meta rejeita links externos para áudio).
-    // audio/webm não é suportado pela Meta — envia como audio/ogg (mesmo codec Opus, container compatível).
-    if (mediaType === 'audio') {
+    // Para mídia via Meta Cloud: faz upload direto para Meta e retorna meta:mediaId.
+    // Isso evita o erro 131053 (Meta rejeita URLs externas para áudio, vídeo e imagem).
+    // audio/webm não é suportado pela Meta — envia como audio/ogg (mesmo codec Opus).
+    if (mediaType === 'audio' || mediaType === 'video' || mediaType === 'image') {
       const supabaseAdmin = createStaticAdminClient();
       const { data: channelData } = await supabaseAdmin
         .from('messaging_channels')
@@ -221,7 +223,7 @@ export async function POST(req: NextRequest) {
           // audio/webm não é suportado pela Meta — trata como audio/ogg (mesmo codec Opus)
           const uploadMime = file.type === 'audio/webm' ? 'audio/ogg' : file.type;
 
-          const mediaId = await uploadAudioToMeta(fileBuffer, uploadMime, phone_number_id, access_token);
+          const mediaId = await uploadMediaToMeta(fileBuffer, uploadMime, mediaType, phone_number_id, access_token);
           if (mediaId) {
             return NextResponse.json({
               mediaUrl: `meta:${mediaId}`,
@@ -231,7 +233,7 @@ export async function POST(req: NextRequest) {
               fileSize: fileBuffer.length,
             });
           }
-          console.warn('[upload] Upload para Meta falhou — usando URL Supabase como fallback');
+          console.warn(`[upload] Upload de ${mediaType} para Meta falhou — usando URL Supabase como fallback`);
         } else {
           console.error('[upload] Credenciais ausentes no canal:', conversation.channel_id);
         }

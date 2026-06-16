@@ -217,7 +217,7 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
     if (!file) return;
 
     const mediaType = getMediaType(file.type);
-    const preview = mediaType === 'image' ? URL.createObjectURL(file) : null;
+    const preview = (mediaType === 'image' || mediaType === 'video') ? URL.createObjectURL(file) : null;
 
     setPendingMedia({ file, preview, mediaType });
 
@@ -643,7 +643,14 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
       {pendingMedia && (
         <div className="px-4 pt-3">
           <div className="flex items-center gap-3 p-2 bg-slate-50 dark:bg-white/5 rounded-lg border border-slate-200 dark:border-white/10">
-            {pendingMedia.preview ? (
+            {pendingMedia.preview && pendingMedia.mediaType === 'video' ? (
+              <video
+                src={pendingMedia.preview}
+                className="w-16 h-16 rounded-lg object-cover"
+                muted
+                playsInline
+              />
+            ) : pendingMedia.preview ? (
               <img
                 src={pendingMedia.preview}
                 alt="Preview"
