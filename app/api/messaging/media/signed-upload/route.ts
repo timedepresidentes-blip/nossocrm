@@ -108,6 +108,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     signedUrl: signed.signedUrl,
+    token: signed.token,
     storagePath,
     publicUrl: urlData.publicUrl,
     mediaType,

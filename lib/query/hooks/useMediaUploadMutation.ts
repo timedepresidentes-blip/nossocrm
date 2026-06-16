@@ -2,10 +2,12 @@
  * @fileoverview Media Upload Mutation — fluxo de 3 passos para evitar limite de body do Vercel.
  *
  * 1. Solicita URL assinada ao servidor (body pequeno — metadados do arquivo)
- * 2. Faz upload do arquivo DIRETO para o Supabase Storage (bypassa o Vercel)
+ * 2. Faz upload do arquivo DIRETO para o Supabase usando o client JS
+ *    (bypassa o Vercel, lida com CORS e autenticação corretamente)
  * 3. Solicita ao servidor o Media ID da Meta API (body pequeno — só o path)
  */
 import { useMutation } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 
 interface MediaUploadResult {
   mediaUrl: string;
@@ -36,25 +38,28 @@ export function useMediaUploadMutation() {
           conversationId,
         }),
       });
-      if (!res1.ok) {
-        const err = await res1.json().catch(() => ({})) as { error?: string };
-        throw new Error(err.error || 'Erro ao preparar upload');
-      }
-      const { signedUrl, storagePath, publicUrl, mediaType } = await res1.json() as {
-        signedUrl: string;
-        storagePath: string;
-        publicUrl: string;
-        mediaType: string;
-      };
 
-      // Passo 2: upload DIRETO para o Supabase (arquivo grande — não passa pelo Vercel)
-      const uploadRes = await fetch(signedUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': file.type },
-      });
-      if (!uploadRes.ok) {
-        throw new Error(`Falha ao enviar arquivo para o storage (${uploadRes.status})`);
+      let signedData: { signedUrl: string; token: string; storagePath: string; publicUrl: string; mediaType: string };
+      try {
+        if (!res1.ok) {
+          const err = await res1.json().catch(() => ({})) as { error?: string };
+          throw new Error(err.error || `Erro ao preparar upload (${res1.status})`);
+        }
+        signedData = await res1.json();
+      } catch (e) {
+        throw e instanceof Error ? e : new Error('Erro ao preparar upload');
+      }
+
+      const { signedUrl, token, storagePath, publicUrl, mediaType } = signedData;
+
+      // Passo 2: upload DIRETO para o Supabase usando o cliente JS (bypassa o Vercel)
+      // uploadToSignedUrl lida corretamente com CORS, retries e headers do Supabase.
+      const { error: uploadError } = await supabase.storage
+        .from('messaging-media')
+        .uploadToSignedUrl(storagePath, token, file, { contentType: file.type });
+
+      if (uploadError) {
+        throw new Error(`Falha ao enviar arquivo para o storage: ${uploadError.message}`);
       }
 
       // Passo 3: finalizar — servidor faz re-upload para Meta API e retorna mediaUrl
@@ -71,12 +76,16 @@ export function useMediaUploadMutation() {
           mediaType,
         }),
       });
-      if (!res3.ok) {
-        const err = await res3.json().catch(() => ({})) as { error?: string };
-        throw new Error(err.error || 'Erro ao finalizar upload');
-      }
 
-      return res3.json();
+      try {
+        if (!res3.ok) {
+          const err = await res3.json().catch(() => ({})) as { error?: string };
+          throw new Error(err.error || `Erro ao finalizar upload (${res3.status})`);
+        }
+        return res3.json();
+      } catch (e) {
+        throw e instanceof Error ? e : new Error('Erro ao finalizar upload');
+      }
     },
   });
 }
