@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search } from 'lucide-react';
+import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { sanitizeUrl } from '@/lib/utils/sanitize';
@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Modal } from '@/components/ui/Modal';
 import { useRealtimeSyncMessaging } from '@/lib/realtime/useRealtimeSync';
+import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
 import { queryKeys } from '@/lib/query';
 import { useContactPresence } from '@/lib/messaging/hooks/useContactPresence';
 import type { ConversationView } from '@/lib/messaging/types';
@@ -69,6 +70,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
 
   // Subscribe to realtime updates
   useRealtimeSyncMessaging();
+  const { play: playTestSound } = useNotificationSound();
 
   // Fetch selected conversation details
   const { data: selectedConversation, isLoading: isConversationLoading } = useConversation(selectedConversationId);

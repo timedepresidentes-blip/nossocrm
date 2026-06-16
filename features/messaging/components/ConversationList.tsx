@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, memo, useEffect, useRef } from 'react';
-import { Search, Filter, Inbox, CheckCircle, X, Plus, MessageSquare } from 'lucide-react';
+import { Search, Filter, Inbox, CheckCircle, X, Plus, MessageSquare, Volume2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConversationItem } from './ConversationItem';
 import { ChannelIndicator } from './ChannelIndicator';
 import { useConversations } from '@/lib/query/hooks/useConversationsQuery';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
 import type { ConversationFilters, ConversationStatus, ChannelType, ConversationView } from '@/lib/messaging/types';
 import type { PresenceStatus } from '@/lib/messaging/hooks/useContactPresence';
 
@@ -70,6 +71,7 @@ export const ConversationList = memo(function ConversationList({
   getPresence,
 }: ConversationListProps) {
   const { profile } = useAuth();
+  const { play: playSound } = useNotificationSound();
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all'>('open');
   const [searchQuery, setSearchQuery] = useState('');
   const [channelFilter, setChannelFilter] = useState<ChannelType | 'all'>('all');
@@ -157,6 +159,15 @@ export const ConversationList = memo(function ConversationList({
             Conversas
           </h2>
           <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => playSound('mensagem_recebida')}
+              className="p-2 rounded-lg transition-colors text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-600 dark:hover:text-white"
+              title="Testar som de notificação"
+              aria-label="Testar som"
+            >
+              <Volume2 className="w-4 h-4" />
+            </button>
             <button
               type="button"
               onClick={() => setShowFilters(!showFilters)}

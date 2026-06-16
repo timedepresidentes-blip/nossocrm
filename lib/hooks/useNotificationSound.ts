@@ -7,107 +7,76 @@ type SoundType =
   | 'lead_ganho'
   | 'lead_perdido';
 
-// Singleton — sobrevive a remontagens do componente.
 let _ctx: AudioContext | null = null;
 
-function getCtx(): AudioContext {
-  if (!_ctx || _ctx.state === 'closed') {
-    _ctx = new AudioContext();
-    // Quando o Chrome auto-suspende o contexto (idle), registramos
-    // um listener de clique para reativá-lo na próxima interação.
-    _ctx.addEventListener('statechange', () => {
-      if (_ctx?.state === 'suspended') {
-        const resume = () => {
-          _ctx?.resume().catch(() => {});
-        };
-        document.addEventListener('click',      resume, { once: true, passive: true });
-        document.addEventListener('keydown',    resume, { once: true, passive: true });
-        document.addEventListener('touchstart', resume, { once: true, passive: true });
-      }
-    });
+function getOrCreateCtx(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    if (!_ctx || _ctx.state === 'closed') {
+      _ctx = new AudioContext();
+    }
+    return _ctx;
+  } catch {
+    return null;
   }
-  return _ctx;
 }
 
-function tryResume() {
-  try {
-    const ctx = getCtx();
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
-  } catch {
-    // ignora — SSR ou browser sem suporte
+// Tenta resumir o AudioContext — só funciona dentro de gesto do usuário.
+export function unlockAudio() {
+  const ctx = getOrCreateCtx();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
   }
+}
+
+function beep(ctx: AudioContext, freq: number, delay: number, duration: number, vol: number) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+  gain.gain.value = vol;
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(ctx.currentTime + delay);
+  // Fade out nos últimos 30ms para evitar clique
+  gain.gain.setValueAtTime(vol, ctx.currentTime + delay + duration - 0.03);
+  gain.gain.linearRampToValueAtTime(0, ctx.currentTime + delay + duration);
+  osc.stop(ctx.currentTime + delay + duration + 0.01);
 }
 
 function createSound(ctx: AudioContext, type: SoundType) {
-  const master = ctx.createGain();
-  master.connect(ctx.destination);
-
-  const note = (freq: number, start: number, duration: number, vol = 0.4, wave: OscillatorType = 'sine') => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(master);
-    osc.type = wave;
-    osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
-    gain.gain.setValueAtTime(0, ctx.currentTime + start);
-    gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
-    osc.start(ctx.currentTime + start);
-    osc.stop(ctx.currentTime + start + duration + 0.05);
-  };
-
   switch (type) {
     case 'mensagem_recebida':
-      note(523, 0,    0.18, 0.35);
-      note(784, 0.15, 0.28, 0.40);
+      beep(ctx, 523, 0,    0.15, 0.4);
+      beep(ctx, 784, 0.15, 0.20, 0.4);
       break;
-
-    case 'mensagem_enviada': {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(master);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(400, ctx.currentTime);
-      osc.frequency.linearRampToValueAtTime(700, ctx.currentTime + 0.12);
-      gain.gain.setValueAtTime(0.25, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.22);
+    case 'mensagem_enviada':
+      beep(ctx, 440, 0,    0.05, 0.2);
+      beep(ctx, 660, 0.05, 0.10, 0.2);
       break;
-    }
-
     case 'lead_movido':
-      note(600, 0,    0.08, 0.30, 'sine');
-      note(900, 0.06, 0.07, 0.15, 'sine');
+      beep(ctx, 600, 0,    0.08, 0.25);
       break;
-
     case 'lead_ganho':
-      note(523, 0,    0.20, 0.35);
-      note(659, 0.12, 0.20, 0.35);
-      note(784, 0.24, 0.35, 0.40);
+      beep(ctx, 523, 0,    0.12, 0.3);
+      beep(ctx, 659, 0.12, 0.12, 0.3);
+      beep(ctx, 784, 0.24, 0.20, 0.4);
       break;
-
     case 'lead_perdido':
-      note(440, 0,    0.20, 0.30);
-      note(330, 0.18, 0.28, 0.28);
+      beep(ctx, 440, 0,    0.15, 0.25);
+      beep(ctx, 330, 0.15, 0.20, 0.25);
       break;
   }
 }
 
 export function useNotificationSound() {
   useEffect(() => {
-    const unlock = () => tryResume();
-
+    // Desbloqueia AudioContext no primeiro gesto do usuário
+    const unlock = () => unlockAudio();
     document.addEventListener('click',      unlock, { passive: true });
     document.addEventListener('keydown',    unlock, { passive: true });
     document.addEventListener('touchstart', unlock, { passive: true });
-
-    // Tenta desbloquear imediatamente — funciona se já houve gesto anterior na sessão
-    unlock();
-
     return () => {
       document.removeEventListener('click',      unlock);
       document.removeEventListener('keydown',    unlock);
@@ -116,19 +85,18 @@ export function useNotificationSound() {
   }, []);
 
   const play = useCallback((type: SoundType) => {
-    try {
-      const ctx = getCtx();
-      if (ctx.state === 'suspended') {
-        // Tenta resumir e tocar em seguida; se falhar (sem gesto recente),
-        // o statechange listener vai re-agendar para o próximo clique.
-        ctx.resume()
-          .then(() => createSound(ctx, type))
-          .catch(() => {});
-      } else {
-        createSound(ctx, type);
-      }
-    } catch {
-      // Som é progressivo — falha silenciosa
+    const ctx = getOrCreateCtx();
+    if (!ctx) return;
+
+    const doPlay = () => {
+      try { createSound(ctx, type); } catch { /* ignora */ }
+    };
+
+    if (ctx.state === 'running') {
+      doPlay();
+    } else {
+      // Contexto suspenso: tenta resumir e tocar
+      ctx.resume().then(doPlay).catch(() => {});
     }
   }, []);
 
