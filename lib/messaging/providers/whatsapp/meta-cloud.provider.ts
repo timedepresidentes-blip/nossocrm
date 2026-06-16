@@ -476,27 +476,32 @@ export class MetaCloudWhatsAppProvider extends BaseChannelProvider {
           text: { body: (content as TextContent).text },
         };
 
-      case 'image':
+      case 'image': {
         const imageContent = content as ImageContent;
+        const imageUrl = imageContent.mediaUrl ?? '';
+        const imageId = imageUrl.startsWith('meta:') ? imageUrl.slice(5) : null;
         return {
           ...base,
           type: 'image',
-          image: {
-            link: imageContent.mediaUrl,
-            caption: imageContent.caption,
-          },
+          image: imageId
+            ? { id: imageId, caption: imageContent.caption }
+            : { link: imageUrl, caption: imageContent.caption },
         };
+      }
 
-      case 'video':
+      case 'video': {
         const videoContent = content as VideoContent;
+        const videoUrl = videoContent.mediaUrl ?? '';
+        // Se o upload para Meta já ocorreu, a URL vem como "meta:{mediaId}"
+        const videoId = videoUrl.startsWith('meta:') ? videoUrl.slice(5) : null;
         return {
           ...base,
           type: 'video',
-          video: {
-            link: videoContent.mediaUrl,
-            caption: videoContent.caption,
-          },
+          video: videoId
+            ? { id: videoId, caption: videoContent.caption }
+            : { link: videoUrl, caption: videoContent.caption },
         };
+      }
 
       case 'audio': {
         const audioContent = content as AudioContent;
