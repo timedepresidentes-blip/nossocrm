@@ -93,6 +93,7 @@ export const ContactFormModalV2: React.FC<ContactFormModalProps> = ({
           placeholder="Ex: Ana Souza"
           error={errors.name}
           registration={register('name')}
+          required
         />
 
         <InputField
@@ -110,6 +111,7 @@ export const ContactFormModalV2: React.FC<ContactFormModalProps> = ({
             hint="Formato E.164 (ex.: +5511999999999)"
             error={errors.phone}
             registration={register('phone')}
+            required
           />
           <InputField
             label="Cargo"

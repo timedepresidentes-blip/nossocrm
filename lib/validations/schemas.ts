@@ -39,6 +39,16 @@ export const emailSchema = z
   .max(MAX_LENGTHS.EMAIL, `Email deve ter no máximo ${MAX_LENGTHS.EMAIL} caracteres`)
   .email(msg('EMAIL_INVALID'));
 
+export const optionalEmailSchema = z
+  .string()
+  .optional()
+  .transform(val => val || '')
+  .pipe(
+    z.string()
+      .max(MAX_LENGTHS.EMAIL, `Email deve ter no máximo ${MAX_LENGTHS.EMAIL} caracteres`)
+      .refine(val => val === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val), msg('EMAIL_INVALID'))
+  );
+
 export const phoneSchema = z
   .string()
   .optional()
@@ -50,6 +60,14 @@ export const phoneSchema = z
   )
   .transform(val => normalizePhoneE164(val))
   .refine(val => val === '' || isE164(val), msg('PHONE_INVALID'));
+
+export const requiredPhoneSchema = z
+  .string({ message: msg('FIELD_REQUIRED', { field: 'Telefone' }) })
+  .min(1, msg('FIELD_REQUIRED', { field: 'Telefone' }))
+  .max(MAX_LENGTHS.PHONE, `Telefone deve ter no máximo ${MAX_LENGTHS.PHONE} caracteres`)
+  .refine(val => /^[\d\s\-\(\)\+]+$/.test(val), msg('PHONE_INVALID'))
+  .transform(val => normalizePhoneE164(val))
+  .refine(val => isE164(val), msg('PHONE_INVALID'));
 
 /**
  * Função pública `requiredString` do projeto.
@@ -109,8 +127,8 @@ export const requiredDate = (field: string) =>
 
 export const contactFormSchema = z.object({
   name: requiredString('Nome', MAX_LENGTHS.NAME),
-  email: emailSchema,
-  phone: phoneSchema,
+  email: optionalEmailSchema,
+  phone: requiredPhoneSchema,
   role: optionalString.pipe(z.string().max(MAX_LENGTHS.SHORT_TEXT)),
   companyName: optionalString.pipe(z.string().max(MAX_LENGTHS.COMPANY_NAME)),
 });
