@@ -8,13 +8,23 @@ type SoundType =
   | 'lead_perdido';
 
 // Singleton — sobrevive a remontagens do componente.
-// AudioContext criado em resposta a gesto do usuário perde o estado "unlocked"
-// ao ser recriado, por isso mantemos uma instância global.
 let _ctx: AudioContext | null = null;
 
 function getCtx(): AudioContext {
   if (!_ctx || _ctx.state === 'closed') {
     _ctx = new AudioContext();
+    // Quando o Chrome auto-suspende o contexto (idle), registramos
+    // um listener de clique para reativá-lo na próxima interação.
+    _ctx.addEventListener('statechange', () => {
+      if (_ctx?.state === 'suspended') {
+        const resume = () => {
+          _ctx?.resume().catch(() => {});
+        };
+        document.addEventListener('click',      resume, { once: true, passive: true });
+        document.addEventListener('keydown',    resume, { once: true, passive: true });
+        document.addEventListener('touchstart', resume, { once: true, passive: true });
+      }
+    });
   }
   return _ctx;
 }
@@ -88,8 +98,6 @@ function createSound(ctx: AudioContext, type: SoundType) {
 }
 
 export function useNotificationSound() {
-  // Registra listeners de desbloqueio em cada montagem.
-  // Como _ctx é singleton, qualquer gesto em qualquer instância desbloqueia para todos.
   useEffect(() => {
     const unlock = () => tryResume();
 
@@ -97,7 +105,7 @@ export function useNotificationSound() {
     document.addEventListener('keydown',    unlock, { passive: true });
     document.addEventListener('touchstart', unlock, { passive: true });
 
-    // Tenta desbloquear imediatamente — pode funcionar se já houve gesto anterior
+    // Tenta desbloquear imediatamente — funciona se já houve gesto anterior na sessão
     unlock();
 
     return () => {
@@ -111,7 +119,11 @@ export function useNotificationSound() {
     try {
       const ctx = getCtx();
       if (ctx.state === 'suspended') {
-        ctx.resume().then(() => createSound(ctx, type)).catch(() => {});
+        // Tenta resumir e tocar em seguida; se falhar (sem gesto recente),
+        // o statechange listener vai re-agendar para o próximo clique.
+        ctx.resume()
+          .then(() => createSound(ctx, type))
+          .catch(() => {});
       } else {
         createSound(ctx, type);
       }

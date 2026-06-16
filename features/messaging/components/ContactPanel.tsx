@@ -1,6 +1,6 @@
 'use client';
 
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useEffect } from 'react';
 import {
   User,
   Phone,
@@ -109,28 +109,54 @@ export const ContactPanel = memo(function ContactPanel({
   const contactId = conversation?.contactId;
   const conversationMeta = conversation?.metadata as Record<string, unknown> | undefined;
 
-  // Júlia fica silenciada em dois casos:
-  //   1. ai_paused === true  → pausada explicitamente pelo operador
-  //   2. ai_paused !== false E assignedAt está setado → humano respondeu e Júlia entrou em silêncio
-  // Apenas ai_paused === false (valor explícito) garante que Júlia está ativa após intervenção humana.
-  const isAiPaused = contactId
+  // Valor real vindo do banco (via query)
+  const dbAiPaused = contactId
     ? (conversation?.contactAiPaused ?? false)
     : (
         conversationMeta?.ai_paused === true ||
         (conversationMeta?.ai_paused !== false && !!conversation?.assignedAt)
       );
+
+  // Estado local otimista: null = usa valor do banco, true/false = valor pendente
+  const [localAiPaused, setLocalAiPaused] = useState<boolean | null>(null);
+  const isAiPaused = localAiPaused !== null ? localAiPaused : dbAiPaused;
+
+  // Quando o banco atualizar (query refetch), descarta o estado local
+  useEffect(() => {
+    setLocalAiPaused(null);
+  }, [dbAiPaused]);
+
   const isPending = updateContact.isPending || toggleConversationAiPause.isPending;
 
-  function handleToggleAiPause() {
+  function handleActivateAi() {
     if (!conversation) return;
+    setLocalAiPaused(false);
     if (contactId) {
-      updateContact.mutate({ id: contactId, updates: { aiPaused: !isAiPaused } });
+      updateContact.mutate(
+        { id: contactId, updates: { aiPaused: false } },
+        { onError: () => setLocalAiPaused(null) }
+      );
     } else {
-      toggleConversationAiPause.mutate({
-        conversationId: conversation.id,
-        paused: !isAiPaused,
-        currentMetadata: conversation.metadata as Record<string, unknown>,
-      });
+      toggleConversationAiPause.mutate(
+        { conversationId: conversation.id, paused: false, currentMetadata: conversation.metadata as Record<string, unknown> },
+        { onError: () => setLocalAiPaused(null) }
+      );
+    }
+  }
+
+  function handlePauseAi() {
+    if (!conversation) return;
+    setLocalAiPaused(true);
+    if (contactId) {
+      updateContact.mutate(
+        { id: contactId, updates: { aiPaused: true } },
+        { onError: () => setLocalAiPaused(null) }
+      );
+    } else {
+      toggleConversationAiPause.mutate(
+        { conversationId: conversation.id, paused: true, currentMetadata: conversation.metadata as Record<string, unknown> },
+        { onError: () => setLocalAiPaused(null) }
+      );
     }
   }
 
@@ -304,41 +330,49 @@ export const ContactPanel = memo(function ContactPanel({
               {isAiPaused ? (
                 <BotOff className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
               ) : (
-                <Bot className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                <Bot className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
               )}
               <div className="min-w-0">
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  IA {contactId ? '(contato)' : '(conversa)'}
+                  Julia {contactId ? '(contato)' : '(conversa)'}
                 </p>
-                <p className="text-sm text-slate-900 dark:text-white">
+                <p className={cn(
+                  'text-sm font-medium',
+                  isAiPaused ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'
+                )}>
                   {isAiPaused ? 'Pausada' : 'Ativa'}
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={handleToggleAiPause}
-              className={cn(
-                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent',
-                'transition-colors duration-200 ease-in-out focus:outline-none',
-                isAiPaused ? 'bg-slate-200 dark:bg-slate-700' : 'bg-green-500',
-                isPending && 'opacity-50 cursor-not-allowed'
-              )}
-              title={
-                isAiPaused
-                  ? contactId ? 'Reativar IA para este contato' : 'Reativar IA para esta conversa'
-                  : contactId ? 'Pausar IA para este contato' : 'Pausar IA para esta conversa'
-              }
-            >
-              <span
+            {isAiPaused ? (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={handleActivateAi}
                 className={cn(
-                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0',
-                  'transition duration-200 ease-in-out',
-                  isAiPaused ? 'translate-x-0' : 'translate-x-4'
+                  'px-2.5 py-1 text-xs font-medium rounded-lg',
+                  'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400',
+                  'hover:bg-green-200 dark:hover:bg-green-500/20 transition-colors',
+                  isPending && 'opacity-50 cursor-not-allowed'
                 )}
-              />
-            </button>
+              >
+                Ativar
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={handlePauseAi}
+                className={cn(
+                  'px-2.5 py-1 text-xs font-medium rounded-lg',
+                  'bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400',
+                  'hover:bg-amber-100 dark:hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-400 transition-colors',
+                  isPending && 'opacity-50 cursor-not-allowed'
+                )}
+              >
+                Pausar
+              </button>
+            )}
           </div>
         </Section>
 
