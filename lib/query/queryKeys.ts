@@ -213,6 +213,20 @@ export const queryKeys = {
     },
 
     /**
+     * Contact notes query keys.
+     */
+    contactNotes: createExtendedQueryKeys('contactNotes', base => ({
+        byContact: (contactId: string) => [...base.all, 'byContact', contactId] as const,
+    })),
+
+    /**
+     * Labels (tags) query keys.
+     */
+    labels: createExtendedQueryKeys('labels', base => ({
+        byContact: (contactId: string) => [...base.all, 'byContact', contactId] as const,
+    })),
+
+    /**
      * Lifecycle stages query keys.
      */
     lifecycleStages: createQueryKeys('lifecycleStages'),
