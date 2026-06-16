@@ -4,6 +4,7 @@ import React from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Trash2, X } from 'lucide-react';
+import { Contact } from '@/types';
 import { useContactsController } from './hooks/useContactsController';
 import { ContactsHeader } from './components/ContactsHeader';
 import { ContactsFilters } from './components/ContactsFilters';
@@ -35,6 +36,10 @@ const MergeContactsModal = dynamic(
     () => import('./components/MergeContactsModal').then(m => ({ default: m.MergeContactsModal })),
     { ssr: false }
 );
+const NewConversationModal = dynamic(
+    () => import('@/features/messaging/components/Modals/NewConversationModal').then(m => ({ default: m.NewConversationModal })),
+    { ssr: false }
+);
 
 /**
  * Componente React `ContactsPage`.
@@ -45,6 +50,44 @@ export const ContactsPage: React.FC = () => {
     const router = useRouter();
     const [isImportExportOpen, setIsImportExportOpen] = React.useState(false);
     const [isMergeModalOpen, setIsMergeModalOpen] = React.useState(false);
+    const [startConversationContact, setStartConversationContact] = React.useState<Contact | null>(null);
+
+    const handleCreateConversation = React.useCallback(async (params: {
+        channelId: string;
+        phoneNumber: string;
+        contactName?: string;
+        contactId?: string;
+    }) => {
+        const res = await fetch('/api/messaging/conversations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                channelId: params.channelId,
+                externalContactId: params.phoneNumber,
+                externalContactName: params.contactName || params.phoneNumber,
+                contactId: params.contactId,
+            }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+            if (res.status === 409 && data.conversationId) {
+                // Conversa já existe — navegar direto para ela
+                setStartConversationContact(null);
+                router.push(`/messaging?id=${data.conversationId}`);
+                return;
+            }
+            throw new Error(data.error || 'Erro ao criar conversa');
+        }
+
+        setStartConversationContact(null);
+        if (data.conversation?.id) {
+            router.push(`/messaging?id=${data.conversation.id}`);
+        } else {
+            router.push('/messaging');
+        }
+    }, [router]);
 
     const { data: duplicateGroups = [] } = useDuplicateContactsQuery();
     const mergeMutation = useMergeContactsMutation();
@@ -164,6 +207,7 @@ export const ContactsPage: React.FC = () => {
                 onSort={controller.handleSort}
                 duplicateContactIds={duplicateContactIds}
                 onAddContact={controller.openCreateModal}
+                onStartConversation={setStartConversationContact}
             />
 
             {/* T021: Pagination Controls */}
@@ -284,6 +328,15 @@ export const ContactsPage: React.FC = () => {
                 groups={duplicateGroups}
                 contacts={controller.contacts}
                 onMerge={(sourceId, targetId) => mergeMutation.mutateAsync({ sourceId, targetId })}
+            />
+
+            <NewConversationModal
+                isOpen={!!startConversationContact}
+                onClose={() => setStartConversationContact(null)}
+                onCreateConversation={handleCreateConversation}
+                defaultContactId={startConversationContact?.id}
+                defaultContactName={startConversationContact?.name}
+                defaultContactPhone={startConversationContact?.phone}
             />
         </div>
     );

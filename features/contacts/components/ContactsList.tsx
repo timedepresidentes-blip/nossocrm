@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, Mail, Phone, Plus, Calendar, Pencil, Trash2, Globe, MoreHorizontal, ArrowUpDown, ArrowUp, ArrowDown, GitMerge, Users } from 'lucide-react';
+import { Building2, Mail, Phone, Plus, Calendar, Pencil, Trash2, Globe, MoreHorizontal, ArrowUpDown, ArrowUp, ArrowDown, GitMerge, Users, MessageSquare } from 'lucide-react';
 import { Contact, Company, ContactSortableColumn } from '@/types';
 import { StageBadge } from './ContactsStageTabs';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -94,6 +94,8 @@ interface ContactsListProps {
     duplicateContactIds?: Set<string>;
     // Empty state action
     onAddContact?: () => void;
+    // Iniciar conversa
+    onStartConversation?: (contact: Contact) => void;
 }
 
 /**
@@ -154,6 +156,7 @@ export const ContactsList: React.FC<ContactsListProps> = ({
     onSort,
     duplicateContactIds,
     onAddContact,
+    onStartConversation,
 }) => {
     const activeListIds = viewMode === 'people'
         ? filteredContacts.map(c => c.id)
@@ -283,8 +286,20 @@ export const ContactsList: React.FC<ContactsListProps> = ({
                                             <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 text-xs">
                                                 <Mail size={12} /> {contact.email || '---'}
                                             </div>
-                                            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 text-xs">
-                                                <Phone size={12} /> {contact.phone || '---'}
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <Phone size={12} className="text-slate-400 shrink-0" />
+                                                {contact.phone && onStartConversation ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => onStartConversation(contact)}
+                                                        className="text-primary-600 dark:text-primary-400 hover:underline font-medium truncate"
+                                                        title={`Iniciar conversa com ${contact.name}`}
+                                                    >
+                                                        {contact.phone}
+                                                    </button>
+                                                ) : (
+                                                    <span className="text-slate-600 dark:text-slate-400">{contact.phone || '---'}</span>
+                                                )}
                                             </div>
                                         </div>
                                     </td>
@@ -332,6 +347,16 @@ export const ContactsList: React.FC<ContactsListProps> = ({
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                            {onStartConversation && contact.phone && (
+                                                <button
+                                                    onClick={() => onStartConversation(contact)}
+                                                    className="p-1.5 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded transition-colors"
+                                                    aria-label={`Iniciar conversa com ${contact.name}`}
+                                                    title="Iniciar conversa"
+                                                >
+                                                    <MessageSquare size={16} aria-hidden="true" />
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={() => openEditModal(contact)}
                                                 className="p-1.5 text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded transition-colors"
