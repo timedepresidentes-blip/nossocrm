@@ -139,13 +139,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve o texto do template substituindo as variáveis {{1}}, {{2}}...
-    // para exibir o texto completo na bolha da mensagem
+    // Normaliza {{}} → {{1}}, {{2}}... e substitui com os parâmetros fornecidos
     const bodyComponent = (dbTemplate.components as { type: string; text?: string }[])
       ?.find((c) => c.type === 'BODY');
     let renderedText: string | undefined;
     if (bodyComponent?.text) {
-      renderedText = bodyComponent.text;
+      let counter = 0;
+      renderedText = bodyComponent.text.replace(/\{\{\}\}/g, () => `{{${++counter}}}`);
       const bodyParams = parameters?.body ?? [];
       bodyParams.forEach((param, i) => {
         renderedText = renderedText!.replace(new RegExp(`\\{\\{${i + 1}\\}\\}`, 'g'), param.text ?? '');

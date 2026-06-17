@@ -70,11 +70,18 @@ const STATUS_CONFIG: Record<TemplateStatus, { label: string; icon: typeof CheckC
 // HELPER FUNCTIONS
 // =============================================================================
 
+// Converte {{}} (sem número) em {{1}}, {{2}}... para compatibilidade com templates Meta
+function normalizeTemplateText(text: string): string {
+  let counter = 0;
+  return text.replace(/\{\{\}\}/g, () => `{{${++counter}}}`);
+}
+
 function extractVariables(text: string): string[] {
+  const normalized = normalizeTemplateText(text);
   const regex = /\{\{(\d+)\}\}/g;
   const matches: string[] = [];
   let match;
-  while ((match = regex.exec(text)) !== null) {
+  while ((match = regex.exec(normalized)) !== null) {
     matches.push(match[1]);
   }
   return matches;
@@ -215,7 +222,7 @@ interface TemplatePreviewProps {
 function TemplatePreview({ template, variables }: TemplatePreviewProps) {
   const renderText = (text?: string) => {
     if (!text) return '';
-    let result = text;
+    let result = normalizeTemplateText(text);
     Object.entries(variables).forEach(([key, value]) => {
       result = result.replaceAll(`{{${key}}}`, value || `{{${key}}}`);
     });
