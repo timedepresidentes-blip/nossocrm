@@ -54,7 +54,7 @@ import { prefetchRoute, RouteName } from '@/lib/prefetch';
 import { isDebugMode, enableDebugMode, disableDebugMode } from '@/lib/debug';
 import { SkipLink } from '@/lib/a11y';
 import { useResponsiveMode } from '@/hooks/useResponsiveMode';
-import { BottomNav, MoreMenuSheet, NavigationRail } from '@/components/navigation';
+import { BottomNav, MoreMenuSheet } from '@/components/navigation';
 import { useUnreadCount } from '@/lib/query/hooks/useConversationsQuery';
 
 // Lazy load AI Assistant (deprecated - using UIChat now)
@@ -186,8 +186,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const pathname = usePathname();
   const { mode } = useResponsiveMode();
   const isMobile = mode === 'mobile';
-  const isTablet = mode === 'tablet';
-  const isDesktop = mode === 'desktop';
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   // Hydration safety: `isDebugMode()` reads localStorage. On SSR it is always false.
@@ -241,12 +239,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   // instead of covering the navigation sidebar (works even for portals).
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    const width =
-      isDesktop ? (sidebarCollapsed ? '5rem' : `${leftWidth}px`)
-        : isTablet ? '5rem'
-          : '0px';
+    const width = !isMobile
+      ? (sidebarCollapsed ? '5rem' : `${leftWidth}px`)
+      : '0px';
     document.documentElement.style.setProperty('--app-sidebar-width', width);
-  }, [isDesktop, isTablet, sidebarCollapsed, leftWidth]);
+  }, [isMobile, sidebarCollapsed, leftWidth]);
 
   // Cleanup on unmount (e.g. leaving the app shell).
   useEffect(() => {
@@ -305,14 +302,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       {/* Skip Link for keyboard users */}
       <SkipLink targetId="main-content" />
 
-      {/* Tablet rail (shows full icon set; no "More" sheet needed) */}
-      {isTablet ? <NavigationRail /> : null}
-
-      {/* Sidebar - Collapsible + Resizable */}
-      {isDesktop ? (
+      {/* Sidebar - Collapsible + Resizable (desktop e tablet) */}
+      {!isMobile ? (
       <aside
         style={{ width: sidebarCollapsed ? 80 : leftWidth, transition: 'width 200ms ease' }}
-        className={`hidden md:flex flex-col z-20 glass border-r border-[var(--color-border-subtle)] shrink-0 ${sidebarCollapsed ? 'items-center' : ''}`}
+        className={`flex flex-col z-20 glass border-r border-[var(--color-border-subtle)] shrink-0 ${sidebarCollapsed ? 'items-center' : ''}`}
         aria-label="Menu principal"
       >
         <div className={`h-16 flex items-center border-b border-[var(--color-border-subtle)] transition-all duration-300 px-5 ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between'}`}>
@@ -500,8 +494,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       </aside>
       ) : null}
 
-      {/* Handle de redimensionamento da sidebar esquerda */}
-      {isDesktop && !sidebarCollapsed && (
+      {/* Handle de redimensionamento da sidebar esquerda (oculto quando colapsada) */}
+      {!isMobile && !sidebarCollapsed && (
         <ResizeHandle onResize={handleLeftResize} side="right" />
       )}
 
