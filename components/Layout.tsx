@@ -191,6 +191,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     setDebugEnabled(isDebugMode());
   }, []);
 
+  // Reidrata preferência do sidebar do localStorage após mount (evita mismatch SSR/CSR)
+  useEffect(() => {
+    useUIState.persist.rehydrate();
+  }, []);
+
   // If the user signed out (or session expired), leave protected shell ASAP.
   // This prevents rendering fallbacks like "Usuário" while unauthenticated.
   useEffect(() => {
