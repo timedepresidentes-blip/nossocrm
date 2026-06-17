@@ -7,20 +7,28 @@ export type SoundType =
   | 'lead_ganho'
   | 'lead_perdido';
 
-// Singleton AudioContext compartilhado entre todos os hooks
+// ─── Singleton AudioContext ───────────────────────────────────────────────────
+
 let _ctx: AudioContext | null = null;
-// Fila de sons pendentes enquanto AudioContext está suspenso
+
+// Fila de sons pendentes: cada item expira em 8s para não soar defasado
 const _queue: Array<{ type: SoundType; expiresAt: number }> = [];
-// Promise de desbloqueio em andamento para evitar múltiplas chamadas concorrentes
-let _resumePromise: Promise<void> | null = null;
+const QUEUE_TTL_MS = 8_000;
 
-const QUEUE_TTL_MS = 5000; // Sons expiram após 5s na fila
+// Promise de resume em andamento — evita múltiplos ctx.resume() simultâneos
+let _resuming: Promise<void> | null = null;
 
-function getOrCreateCtx(): AudioContext | null {
+function getCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   try {
     if (!_ctx || _ctx.state === 'closed') {
       _ctx = new AudioContext();
+      // Sempre que o contexto mudar de estado, tenta re-ativar
+      _ctx.addEventListener('statechange', () => {
+        if (_ctx?.state === 'running' && _queue.length > 0) {
+          flushQueue(_ctx);
+        }
+      });
     }
     return _ctx;
   } catch {
@@ -28,43 +36,59 @@ function getOrCreateCtx(): AudioContext | null {
   }
 }
 
+// Drena a fila tocando todos os sons não expirados
 function flushQueue(ctx: AudioContext) {
   const now = Date.now();
   const pending = _queue.splice(0).filter(item => item.expiresAt > now);
   for (const { type } of pending) {
-    try { createSound(ctx, type); } catch { /* silencia erros de oscilador */ }
+    try { createSound(ctx, type); } catch { /* silencia */ }
   }
 }
 
-// Desbloqueia o AudioContext — deve ser chamado dentro de um gesto do usuário
-export function unlockAudio() {
-  const ctx = getOrCreateCtx();
-  if (!ctx) return;
+// Tenta ativar o AudioContext — funciona dentro de gestos do usuário
+async function tryResume(): Promise<void> {
+  const ctx = getCtx();
+  if (!ctx || ctx.state === 'running') return;
+  if (_resuming) return _resuming;
 
+  _resuming = ctx.resume()
+    .then(() => {
+      _resuming = null;
+      // Toca um buffer silencioso para confirmar ativação (warm-up real)
+      try {
+        const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        src.start(0);
+      } catch { /* silencia */ }
+      flushQueue(ctx);
+    })
+    .catch(() => { _resuming = null; });
+
+  return _resuming;
+}
+
+// Desbloqueio público — chamar em qualquer gesto do usuário
+export function unlockAudio(): void {
+  const ctx = getCtx();
+  if (!ctx) return;
   if (ctx.state === 'running') {
-    // Já desbloqueado — processa a fila imediatamente
     if (_queue.length > 0) flushQueue(ctx);
     return;
   }
-
-  if (ctx.state === 'suspended') {
-    if (_resumePromise) {
-      // Resume já em andamento — encadeia o flush
-      _resumePromise.then(() => { if (_queue.length > 0) flushQueue(ctx); }).catch(() => {});
-      return;
-    }
-    _resumePromise = ctx.resume()
-      .then(() => {
-        _resumePromise = null;
-        flushQueue(ctx);
-      })
-      .catch(() => {
-        _resumePromise = null;
-      });
-  }
+  tryResume().catch(() => {});
 }
 
-function beep(ctx: AudioContext, freq: number, delay: number, duration: number, vol: number) {
+// ─── Geração de sons ─────────────────────────────────────────────────────────
+
+function beep(
+  ctx: AudioContext,
+  freq: number,
+  startDelay: number,
+  duration: number,
+  vol: number,
+) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = 'sine';
@@ -72,84 +96,90 @@ function beep(ctx: AudioContext, freq: number, delay: number, duration: number, 
   gain.gain.value = vol;
   osc.connect(gain);
   gain.connect(ctx.destination);
-  osc.start(ctx.currentTime + delay);
-  // Fade-out suave nos últimos 30ms para evitar click auditivo
-  gain.gain.setValueAtTime(vol, ctx.currentTime + delay + duration - 0.03);
-  gain.gain.linearRampToValueAtTime(0, ctx.currentTime + delay + duration);
-  osc.stop(ctx.currentTime + delay + duration + 0.01);
+  const t = ctx.currentTime + startDelay;
+  osc.start(t);
+  gain.gain.setValueAtTime(vol, t + duration - 0.03);
+  gain.gain.linearRampToValueAtTime(0, t + duration);
+  osc.stop(t + duration + 0.01);
 }
 
 function createSound(ctx: AudioContext, type: SoundType) {
   switch (type) {
     case 'mensagem_recebida':
-      // Dois tons ascendentes — ding-dong suave
+      // Dois tons ascendentes — ding-dong
       beep(ctx, 523, 0,    0.15, 0.4);
       beep(ctx, 784, 0.15, 0.20, 0.4);
       break;
     case 'mensagem_enviada':
-      // Tom curto discreto
+      // Tique discreto duplo
       beep(ctx, 440, 0,    0.05, 0.2);
-      beep(ctx, 660, 0.05, 0.10, 0.2);
+      beep(ctx, 660, 0.06, 0.10, 0.2);
       break;
     case 'lead_movido':
-      // Um clique médio
+      // Clique médio único
       beep(ctx, 600, 0, 0.08, 0.25);
       break;
     case 'lead_ganho':
       // Fanfarra ascendente — conquista
-      beep(ctx, 523, 0,    0.12, 0.3);
-      beep(ctx, 659, 0.12, 0.12, 0.3);
-      beep(ctx, 784, 0.24, 0.20, 0.4);
+      beep(ctx, 523, 0,    0.10, 0.3);
+      beep(ctx, 659, 0.10, 0.10, 0.3);
+      beep(ctx, 784, 0.20, 0.20, 0.45);
       break;
     case 'lead_perdido':
       // Dois tons descendentes — perda suave
       beep(ctx, 440, 0,    0.15, 0.25);
-      beep(ctx, 330, 0.15, 0.20, 0.25);
+      beep(ctx, 330, 0.16, 0.20, 0.25);
       break;
   }
 }
 
+// ─── Hook ────────────────────────────────────────────────────────────────────
+
 export function useNotificationSound() {
   useEffect(() => {
-    // Desbloqueia o AudioContext no primeiro gesto do usuário
+    // Cria o AudioContext na montagem para garantir que existe antes de qualquer gesto
+    getCtx();
+
+    // Eventos de desbloqueio: o mais amplo possível para capturar o primeiro gesto
     const unlock = () => unlockAudio();
-    document.addEventListener('click',      unlock, { passive: true });
-    document.addEventListener('keydown',    unlock, { passive: true });
-    document.addEventListener('touchstart', unlock, { passive: true });
+    const opts = { passive: true, capture: true } as const;
+    document.addEventListener('click',      unlock, opts);
+    document.addEventListener('mousedown',  unlock, opts);
+    document.addEventListener('pointerdown',unlock, opts);
+    document.addEventListener('keydown',    unlock, opts);
+    document.addEventListener('touchstart', unlock, opts);
+
+    // Quando a aba volta ao foco, tenta reativar (Chrome pode suspender em background)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') unlockAudio();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
-      document.removeEventListener('click',      unlock);
-      document.removeEventListener('keydown',    unlock);
-      document.removeEventListener('touchstart', unlock);
+      document.removeEventListener('click',      unlock, opts);
+      document.removeEventListener('mousedown',  unlock, opts);
+      document.removeEventListener('pointerdown',unlock, opts);
+      document.removeEventListener('keydown',    unlock, opts);
+      document.removeEventListener('touchstart', unlock, opts);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
 
   const play = useCallback((type: SoundType) => {
-    const ctx = getOrCreateCtx();
+    const ctx = getCtx();
     if (!ctx) return;
 
     if (ctx.state === 'running') {
-      // Contexto ativo — toca imediatamente
       try { createSound(ctx, type); } catch { /* silencia */ }
       return;
     }
 
-    // Contexto suspenso — coloca na fila (expira em 5s para não soar defasado)
+    // Contexto suspenso: coloca na fila e tenta desbloquear
     _queue.push({ type, expiresAt: Date.now() + QUEUE_TTL_MS });
-
-    // Tenta resumir (só funciona se houver gesto de usuário pendente ou em andamento)
-    if (!_resumePromise) {
-      _resumePromise = ctx.resume()
-        .then(() => {
-          _resumePromise = null;
-          flushQueue(ctx);
-        })
-        .catch(() => {
-          _resumePromise = null;
-          // Sem gesto do usuário disponível — sons serão tocados no próximo unlock
-        });
-    } else {
-      _resumePromise.then(() => flushQueue(ctx)).catch(() => {});
-    }
+    tryResume().catch(() => {
+      // Se tryResume falhar (sem gesto disponível), a fila será drenada
+      // no próximo gesto do usuário via o listener de click/mousedown
+    });
   }, []);
 
   return { play };

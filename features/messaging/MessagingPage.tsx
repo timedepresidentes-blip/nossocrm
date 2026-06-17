@@ -502,6 +502,18 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
         <ResizeHandle onResize={handleMsgRightResize} side="left" />
       )}
 
+      {/* Aba de expandir painel direito quando colapsado */}
+      {rightCollapsed && (
+        <button
+          type="button"
+          onClick={toggleRightPanel}
+          title="Expandir painel do contato"
+          className="self-start mt-3 p-1.5 rounded-l-lg border border-r-0 border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-sm"
+        >
+          <PanelRightOpen className="w-4 h-4" />
+        </button>
+      )}
+
       {/* Coluna direita: Painel do contato */}
       <div
         style={{ width: rightCollapsed ? 0 : msgRightWidth, transition: 'width 200ms ease' }}
@@ -514,6 +526,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
             onLinkContact={() => setIsLinkModalOpen(true)}
             onViewContact={handleViewContact}
             onViewDeals={handleViewDeals}
+            onCollapse={toggleRightPanel}
           />
         )}
       </div>

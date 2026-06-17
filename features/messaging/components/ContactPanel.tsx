@@ -22,6 +22,7 @@ import {
   Trash2,
   Check,
   Target,
+  PanelRightClose,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -44,6 +45,7 @@ interface ContactPanelProps {
   onViewDeals?: (contactId: string) => void;
   hasDuplicate?: boolean;
   onResolveDuplicate?: () => void;
+  onCollapse?: () => void;
   className?: string;
 }
 
@@ -106,6 +108,7 @@ export const ContactPanel = memo(function ContactPanel({
   onViewDeals,
   hasDuplicate,
   onResolveDuplicate,
+  onCollapse,
   className,
 }: ContactPanelProps) {
   // Hooks must be called unconditionally before any early returns
@@ -276,6 +279,19 @@ export const ContactPanel = memo(function ContactPanel({
     <div className={cn('flex flex-col h-full', className)}>
       {/* Header */}
       <div className="p-4 border-b border-slate-200 dark:border-white/10">
+        {/* Botão de recolher painel */}
+        {onCollapse && (
+          <div className="flex justify-end mb-2">
+            <button
+              type="button"
+              onClick={onCollapse}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+              title="Recolher painel do contato"
+            >
+              <PanelRightClose className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         {/* Avatar & Name */}
         <div className="flex items-start gap-3">
           <div className="relative flex-shrink-0">
