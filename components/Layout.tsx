@@ -24,7 +24,7 @@
  * ```
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
@@ -46,6 +46,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen
 } from 'lucide-react';
+import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useUIState } from '@/store/uiState';
@@ -94,6 +95,15 @@ const getPageTitle = (pathname: string): string => {
 interface LayoutProps {
   children: React.ReactNode;
 }
+
+// Limites das colunas ajustáveis
+const SIDEBAR_MIN = 160;
+const SIDEBAR_MAX = 400;
+const SIDEBAR_DEFAULT = 256;
+const AI_MIN = 280;
+const AI_MAX = 600;
+const AI_DEFAULT = 384;
+const clampWidth = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
 
 /**
  * Item de navegação da sidebar
@@ -184,6 +194,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   // Initialize deterministically and sync on mount to avoid hydration mismatch warnings.
   const [debugEnabled, setDebugEnabled] = useState(false);
 
+  // Larguras ajustáveis das colunas (persistidas no localStorage)
+  const [leftWidth, setLeftWidth] = useState(SIDEBAR_DEFAULT);
+  const [rightWidth, setRightWidth] = useState(AI_DEFAULT);
+
   // Messaging unread count for notification badge
   const { data: unreadMessagesCount = 0 } = useUnreadCount();
 
@@ -194,6 +208,26 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   // Reidrata preferência do sidebar do localStorage após mount (evita mismatch SSR/CSR)
   useEffect(() => {
     useUIState.persist.rehydrate();
+    const storedLeft = localStorage.getItem('nossocrm-sidebar-width');
+    if (storedLeft) setLeftWidth(clampWidth(parseInt(storedLeft, 10), SIDEBAR_MIN, SIDEBAR_MAX));
+    const storedRight = localStorage.getItem('nossocrm-aipanel-width');
+    if (storedRight) setRightWidth(clampWidth(parseInt(storedRight, 10), AI_MIN, AI_MAX));
+  }, []);
+
+  const handleLeftResize = useCallback((delta: number) => {
+    setLeftWidth(prev => {
+      const next = clampWidth(prev + delta, SIDEBAR_MIN, SIDEBAR_MAX);
+      localStorage.setItem('nossocrm-sidebar-width', String(next));
+      return next;
+    });
+  }, []);
+
+  const handleRightResize = useCallback((delta: number) => {
+    setRightWidth(prev => {
+      const next = clampWidth(prev + delta, AI_MIN, AI_MAX);
+      localStorage.setItem('nossocrm-aipanel-width', String(next));
+      return next;
+    });
   }, []);
 
   // If the user signed out (or session expired), leave protected shell ASAP.
@@ -208,11 +242,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const width =
-      isDesktop ? (sidebarCollapsed ? '5rem' : '16rem')
+      isDesktop ? (sidebarCollapsed ? '5rem' : `${leftWidth}px`)
         : isTablet ? '5rem'
           : '0px';
     document.documentElement.style.setProperty('--app-sidebar-width', width);
-  }, [isDesktop, isTablet, sidebarCollapsed]);
+  }, [isDesktop, isTablet, sidebarCollapsed, leftWidth]);
 
   // Cleanup on unmount (e.g. leaving the app shell).
   useEffect(() => {
@@ -274,11 +308,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       {/* Tablet rail (shows full icon set; no "More" sheet needed) */}
       {isTablet ? <NavigationRail /> : null}
 
-      {/* Sidebar - Collapsible */}
+      {/* Sidebar - Collapsible + Resizable */}
       {isDesktop ? (
       <aside
-        className={`hidden md:flex flex-col z-20 glass border-r border-[var(--color-border-subtle)] transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'w-20 items-center' : 'w-64'
-          }`}
+        style={{ width: sidebarCollapsed ? 80 : leftWidth, transition: 'width 200ms ease' }}
+        className={`hidden md:flex flex-col z-20 glass border-r border-[var(--color-border-subtle)] shrink-0 ${sidebarCollapsed ? 'items-center' : ''}`}
         aria-label="Menu principal"
       >
         <div className={`h-16 flex items-center border-b border-[var(--color-border-subtle)] transition-all duration-300 px-5 ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between'}`}>
@@ -466,6 +500,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       </aside>
       ) : null}
 
+      {/* Handle de redimensionamento da sidebar esquerda */}
+      {isDesktop && !sidebarCollapsed && (
+        <ResizeHandle onResize={handleLeftResize} side="right" />
+      )}
+
       {/* Main Content Wrapper */}
       <div className="flex-1 flex min-w-0 overflow-hidden relative">
         {/* Middle Content (Header + Page) */}
@@ -530,15 +569,26 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </main>
         </div>
 
-        {/* Right Sidebar (AI Assistant) */}
+        {/* Handle de redimensionamento do painel direito (IA) */}
+        {isGlobalAIOpen && (
+          <ResizeHandle onResize={handleRightResize} side="left" />
+        )}
+
+        {/* Right Sidebar (AI Assistant) - Collapsible + Resizable */}
         <aside
           aria-label="Assistente de IA"
           aria-hidden={!isGlobalAIOpen}
-          className={`border-l border-[var(--color-border)] bg-surface transition-all duration-300 ease-in-out overflow-hidden flex flex-col ${isGlobalAIOpen ? 'w-96 opacity-100' : 'w-0 opacity-0'}`}
+          style={{
+            width: isGlobalAIOpen ? rightWidth : 0,
+            opacity: isGlobalAIOpen ? 1 : 0,
+            transition: 'width 200ms ease, opacity 200ms ease',
+          }}
+          className="border-l border-[var(--color-border)] bg-surface overflow-hidden flex flex-col shrink-0"
         >
-          <div className="w-96 h-full">
+          {/* Div interno com largura fixa para evitar colapso durante animação */}
+          <div style={{ width: rightWidth }} className="h-full flex flex-col">
             {isGlobalAIOpen && (
-              <UIChat />
+              <UIChat onClose={() => setIsGlobalAIOpen(false)} />
             )}
           </div>
         </aside>
