@@ -62,6 +62,7 @@ export interface DbMessagingTemplate {
   channel_id: string;
   external_id: string | null;
   name: string;
+  display_name: string | null;
   language: string;
   category: TemplateCategory;
   components: TemplateComponent[];
@@ -83,6 +84,7 @@ export interface MessagingTemplate {
   channelId: string;
   externalId?: string;
   name: string;
+  displayName?: string;
   language: string;
   category: TemplateCategory;
   components: TemplateComponent[];
@@ -183,6 +185,7 @@ export function transformTemplate(db: DbMessagingTemplate): MessagingTemplate {
     channelId: db.channel_id,
     externalId: db.external_id ?? undefined,
     name: db.name,
+    displayName: db.display_name ?? undefined,
     language: db.language,
     category: db.category,
     components: db.components,

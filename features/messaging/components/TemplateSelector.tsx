@@ -118,9 +118,16 @@ function TemplateCard({ template, isSelected, onClick }: TemplateCardProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <FileText className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
-            <span className="text-sm font-medium text-[var(--color-text-primary)] truncate">
-              {template.name}
-            </span>
+            <div className="min-w-0">
+              <span className="text-sm font-medium text-[var(--color-text-primary)] truncate block">
+                {template.displayName ?? template.name}
+              </span>
+              {template.displayName && (
+                <span className="text-xs text-[var(--color-text-muted)] truncate block">
+                  {template.name}
+                </span>
+              )}
+            </div>
           </div>
           <p className="text-xs text-[var(--color-text-muted)] line-clamp-2">
             {getTemplatePreview(template)}
@@ -275,6 +282,7 @@ export function TemplateSelector({
     return templates.filter(
       (t) =>
         t.name.toLowerCase().includes(query) ||
+        (t.displayName ?? '').toLowerCase().includes(query) ||
         getTemplatePreview(t).toLowerCase().includes(query)
     );
   }, [templates, search]);
