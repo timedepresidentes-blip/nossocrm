@@ -211,7 +211,7 @@ export async function processIncomingMessage(
   // 1. Buscar deal associado à conversa para pegar o stage + assignment
   const { data: conversation } = await supabase
     .from('messaging_conversations')
-    .select('metadata, assigned_user_id, assigned_at, contact_id')
+    .select('metadata, assigned_user_id, assigned_at, contact_id, closing_mode')
     .eq('id', conversationId)
     .single();
 
@@ -423,6 +423,7 @@ export async function processIncomingMessage(
     stageConfig: config,
     incomingMessage,
     aiConfig,
+    closingMode: conversation?.closing_mode ?? false,
   });
 
   // Record rate call only on actual AI response (not on skipped/handoff)
@@ -530,17 +531,19 @@ interface GenerateResponseParams {
   stageConfig: StageAIConfig;
   incomingMessage: string;
   aiConfig: OrgAIConfig;
+  closingMode?: boolean;
 }
 
 async function generateResponse(params: GenerateResponseParams): Promise<AgentDecision> {
-  const { context, stageConfig, incomingMessage, aiConfig } = params;
+  const { context, stageConfig, incomingMessage, aiConfig, closingMode } = params;
 
   const systemPrompt = buildSystemPrompt(
     context,
     stageConfig,
     aiConfig.learnedPatterns,
     aiConfig.configMode,
-    aiConfig.baseSystemPrompt
+    aiConfig.baseSystemPrompt,
+    closingMode
   );
   const contextText = formatContextForPrompt(context);
 
@@ -590,12 +593,24 @@ Responda de forma natural, seguindo as instruções do sistema.
   }
 }
 
+const CLOSING_MODE_INSTRUCTIONS = `
+
+## ⚡ MODO FECHAMENTO ATIVO
+Seu objetivo PRINCIPAL agora é fechar a venda. Seja direto, assertivo e focado em levar o cliente à decisão.
+- Resuma os benefícios já discutidos e proponha o próximo passo concreto (ex: "Posso enviar o contrato agora?")
+- Use urgência genuína quando aplicável (disponibilidade limitada, prazo de proposta)
+- Faça perguntas de fechamento diretas ("Podemos fechar isso hoje?", "O que falta para você decidir?")
+- Remova objeções restantes com segurança e empatia
+- Não prolongue a conversa com perguntas genéricas — mire no "sim" do cliente
+`;
+
 function buildSystemPrompt(
   context: LeadContext,
   config: StageAIConfig,
   learnedPatterns: LearnedPattern | null,
   configMode: AIConfigMode,
-  orgBasePrompt: string | null
+  orgBasePrompt: string | null,
+  closingMode?: boolean
 ): string {
   // Usa prompt base da org (editável em Settings > IA) ou o padrão embutido
   const basePrompt = orgBasePrompt || DEFAULT_BASE_SYSTEM_PROMPT;
@@ -623,7 +638,7 @@ ${config.advancement_criteria.map((c) => `- ${c}`).join('\n')}
 
 ## Instruções Adicionais
 ${config.system_prompt}
-`;
+${closingMode ? CLOSING_MODE_INSTRUCTIONS : ''}`;
   }
 
   // Modo padrão (zero_config, template, advanced)
@@ -640,7 +655,7 @@ ${stageSection}
 
 INSTRUÇÕES ESPECÍFICAS:
 ${config.system_prompt}
-`;
+${closingMode ? CLOSING_MODE_INSTRUCTIONS : ''}`;
 }
 
 // =============================================================================

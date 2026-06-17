@@ -21,6 +21,7 @@ import {
   Plus,
   Trash2,
   Check,
+  Target,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -31,7 +32,7 @@ import { ChannelIndicator } from './ChannelIndicator';
 import { WindowExpiryBadge } from './WindowExpiryBadge';
 import { ContactPanelSkeleton } from './skeletons/ContactPanelSkeleton';
 import { useUpdateContact } from '@/lib/query/hooks/useContactsQuery';
-import { useToggleConversationAiPause } from '@/lib/query/hooks/useMessagingConversationsQuery';
+import { useToggleConversationAiPause, useToggleClosingMode } from '@/lib/query/hooks/useMessagingConversationsQuery';
 import { useContactNotes, useCreateContactNote, useDeleteContactNote } from '@/lib/query/hooks/useContactNotesQuery';
 import { useLabels, useContactLabels, useAssignLabel, useRemoveLabel, useCreateLabel } from '@/lib/query/hooks/useLabelsQuery';
 
@@ -110,6 +111,7 @@ export const ContactPanel = memo(function ContactPanel({
   // Hooks must be called unconditionally before any early returns
   const updateContact = useUpdateContact();
   const toggleConversationAiPause = useToggleConversationAiPause();
+  const toggleClosingMode = useToggleClosingMode();
 
   const contactId = conversation?.contactId;
 
@@ -173,7 +175,33 @@ export const ContactPanel = memo(function ContactPanel({
     setLocalAiPaused(null);
   }, [dbAiPaused]);
 
+  // Modo Fechamento: estado otimista
+  const dbClosingMode = conversation?.closingMode ?? false;
+  const [localClosingMode, setLocalClosingMode] = useState<boolean | null>(null);
+  const isClosingMode = localClosingMode !== null ? localClosingMode : dbClosingMode;
+
+  useEffect(() => { setLocalClosingMode(null); }, [dbClosingMode]);
+
+  function handleActivateClosingMode() {
+    if (!conversation) return;
+    setLocalClosingMode(true);
+    toggleClosingMode.mutate(
+      { conversationId: conversation.id, closingMode: true },
+      { onError: () => setLocalClosingMode(null) }
+    );
+  }
+
+  function handleDeactivateClosingMode() {
+    if (!conversation) return;
+    setLocalClosingMode(false);
+    toggleClosingMode.mutate(
+      { conversationId: conversation.id, closingMode: false },
+      { onError: () => setLocalClosingMode(null) }
+    );
+  }
+
   const isPending = updateContact.isPending || toggleConversationAiPause.isPending;
+  const isClosingModePending = toggleClosingMode.isPending;
 
   function handleActivateAi() {
     if (!conversation) return;
@@ -361,91 +389,6 @@ export const ContactPanel = memo(function ContactPanel({
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto p-4">
-        {/* Contact Info */}
-        <Section title="Informações">
-          {contactPhone && (
-            <InfoRow icon={Phone} label="Telefone" value={contactPhone} />
-          )}
-          {contactEmail && (
-            <InfoRow icon={Mail} label="Email" value={contactEmail} />
-          )}
-          {assignedUserName && (
-            <InfoRow icon={User} label="Atribuído para" value={assignedUserName} />
-          )}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-start gap-3">
-              {isAiPaused ? (
-                <BotOff className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
-              ) : (
-                <Bot className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-              )}
-              <div className="min-w-0">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Julia {contactId ? '(contato)' : '(conversa)'}
-                </p>
-                <p className={cn(
-                  'text-sm font-medium',
-                  isAiPaused ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'
-                )}>
-                  {isAiPaused ? 'Pausada' : 'Ativa'}
-                </p>
-              </div>
-            </div>
-            {isAiPaused ? (
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={handleActivateAi}
-                className={cn(
-                  'px-2.5 py-1 text-xs font-medium rounded-lg',
-                  'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400',
-                  'hover:bg-green-200 dark:hover:bg-green-500/20 transition-colors',
-                  isPending && 'opacity-50 cursor-not-allowed'
-                )}
-              >
-                Ativar
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={handlePauseAi}
-                className={cn(
-                  'px-2.5 py-1 text-xs font-medium rounded-lg',
-                  'bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400',
-                  'hover:bg-amber-100 dark:hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-400 transition-colors',
-                  isPending && 'opacity-50 cursor-not-allowed'
-                )}
-              >
-                Pausar
-              </button>
-            )}
-          </div>
-        </Section>
-
-        {/* Conversation Stats */}
-        <Section title="Conversa">
-          <InfoRow
-            icon={MessageSquare}
-            label="Mensagens"
-            value={`${messageCount} mensage${messageCount === 1 ? 'm' : 'ns'}`}
-          />
-          <InfoRow
-            icon={Calendar}
-            label="Iniciada em"
-            value={createdAt ? format(new Date(createdAt), "d 'de' MMMM 'de' yyyy", { locale: ptBR }) : '-'}
-          />
-          <InfoRow
-            icon={Clock}
-            label="Última mensagem"
-            value={
-              lastMessageAt
-                ? formatDistanceToNow(new Date(lastMessageAt), { addSuffix: true, locale: ptBR })
-                : '-'
-            }
-          />
-        </Section>
-
         {/* Etiquetas */}
         {contactId && (
           <Section title="Etiquetas" defaultOpen>
@@ -592,6 +535,134 @@ export const ContactPanel = memo(function ContactPanel({
             )}
           </Section>
         )}
+
+        {/* Contact Info */}
+        <Section title="Informações">
+          {contactPhone && (
+            <InfoRow icon={Phone} label="Telefone" value={contactPhone} />
+          )}
+          {contactEmail && (
+            <InfoRow icon={Mail} label="Email" value={contactEmail} />
+          )}
+          {assignedUserName && (
+            <InfoRow icon={User} label="Atribuído para" value={assignedUserName} />
+          )}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              {isAiPaused ? (
+                <BotOff className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+              ) : (
+                <Bot className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+              )}
+              <div className="min-w-0">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Julia {contactId ? '(contato)' : '(conversa)'}
+                </p>
+                <p className={cn(
+                  'text-sm font-medium',
+                  isAiPaused ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'
+                )}>
+                  {isAiPaused ? 'Pausada' : 'Ativa'}
+                </p>
+              </div>
+            </div>
+            {isAiPaused ? (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={handleActivateAi}
+                className={cn(
+                  'px-2.5 py-1 text-xs font-medium rounded-lg',
+                  'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400',
+                  'hover:bg-green-200 dark:hover:bg-green-500/20 transition-colors',
+                  isPending && 'opacity-50 cursor-not-allowed'
+                )}
+              >
+                Ativar
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={handlePauseAi}
+                className={cn(
+                  'px-2.5 py-1 text-xs font-medium rounded-lg',
+                  'bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400',
+                  'hover:bg-amber-100 dark:hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-400 transition-colors',
+                  isPending && 'opacity-50 cursor-not-allowed'
+                )}
+              >
+                Pausar
+              </button>
+            )}
+          </div>
+
+          {/* Modo Fechamento */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <Target className={cn('w-4 h-4 mt-0.5 flex-shrink-0', isClosingMode ? 'text-purple-500' : 'text-slate-400')} />
+              <div className="min-w-0">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Modo Fechamento</p>
+                <p className={cn('text-sm font-medium', isClosingMode ? 'text-purple-600 dark:text-purple-400' : 'text-slate-400 dark:text-slate-500')}>
+                  {isClosingMode ? 'Ativo' : 'Inativo'}
+                </p>
+              </div>
+            </div>
+            {isClosingMode ? (
+              <button
+                type="button"
+                disabled={isClosingModePending}
+                onClick={handleDeactivateClosingMode}
+                className={cn(
+                  'px-2.5 py-1 text-xs font-medium rounded-lg',
+                  'bg-purple-100 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400',
+                  'hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-500 dark:hover:text-slate-400 transition-colors',
+                  isClosingModePending && 'opacity-50 cursor-not-allowed'
+                )}
+              >
+                Desativar
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={isClosingModePending}
+                onClick={handleActivateClosingMode}
+                className={cn(
+                  'px-2.5 py-1 text-xs font-medium rounded-lg',
+                  'bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400',
+                  'hover:bg-purple-100 dark:hover:bg-purple-500/10 hover:text-purple-700 dark:hover:text-purple-400 transition-colors',
+                  isClosingModePending && 'opacity-50 cursor-not-allowed'
+                )}
+              >
+                Ativar
+              </button>
+            )}
+          </div>
+        </Section>
+
+        {/* Conversation Stats */}
+        <Section title="Conversa">
+          <InfoRow
+            icon={MessageSquare}
+            label="Mensagens"
+            value={`${messageCount} mensage${messageCount === 1 ? 'm' : 'ns'}`}
+          />
+          <InfoRow
+            icon={Calendar}
+            label="Iniciada em"
+            value={createdAt ? format(new Date(createdAt), "d 'de' MMMM 'de' yyyy", { locale: ptBR }) : '-'}
+          />
+          <InfoRow
+            icon={Clock}
+            label="Última mensagem"
+            value={
+              lastMessageAt
+                ? formatDistanceToNow(new Date(lastMessageAt), { addSuffix: true, locale: ptBR })
+                : '-'
+            }
+          />
+        </Section>
+
       </div>
     </div>
   );

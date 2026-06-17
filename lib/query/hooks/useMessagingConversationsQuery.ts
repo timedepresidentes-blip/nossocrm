@@ -509,6 +509,43 @@ export function useToggleConversationAiPause() {
 }
 
 /**
+ * Toggle closing mode on a conversation (Julia becomes focused on closing the deal).
+ */
+export function useToggleClosingMode() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      conversationId,
+      closingMode,
+    }: {
+      conversationId: string;
+      closingMode: boolean;
+    }): Promise<void> => {
+      const supabase = getClient();
+
+      const { error } = await supabase
+        .from('messaging_conversations')
+        .update({
+          closing_mode: closingMode,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', conversationId);
+
+      if (error) throw error;
+    },
+    onSettled: (_, _err, { conversationId }) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messagingConversations.detail(conversationId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.messagingConversations.all,
+      });
+    },
+  });
+}
+
+/**
  * Link a conversation to a CRM contact.
  */
 export function useLinkConversationToContact() {

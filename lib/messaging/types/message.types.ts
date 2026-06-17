@@ -123,6 +123,9 @@ export interface DbMessagingConversation {
   last_message_preview: string | null;
   last_message_direction: MessageDirection | null;
   metadata: Record<string, unknown>;
+  closing_mode?: boolean;
+  reactivation_attempts?: number;
+  last_reactivation_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -180,6 +183,9 @@ export interface MessagingConversation {
   lastMessagePreview?: string;
   lastMessageDirection?: MessageDirection;
   metadata: Record<string, unknown>;
+  closingMode?: boolean;
+  reactivationAttempts?: number;
+  lastReactivationAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -475,6 +481,9 @@ export function transformConversation(db: DbMessagingConversation): MessagingCon
     lastMessagePreview: db.last_message_preview ?? undefined,
     lastMessageDirection: db.last_message_direction ?? undefined,
     metadata: db.metadata,
+    closingMode: db.closing_mode ?? false,
+    reactivationAttempts: db.reactivation_attempts ?? 0,
+    lastReactivationAt: db.last_reactivation_at ?? undefined,
     createdAt: db.created_at,
     updatedAt: db.updated_at,
   };
