@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2 } from 'lucide-react';
+import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose } from 'lucide-react';
+import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { sanitizeUrl } from '@/lib/utils/sanitize';
@@ -42,6 +43,11 @@ import { queryKeys } from '@/lib/query';
 import { useContactPresence } from '@/lib/messaging/hooks/useContactPresence';
 import type { ConversationView } from '@/lib/messaging/types';
 
+// Limites de largura das colunas do messaging (em px)
+const MSG_LEFT_MIN = 200, MSG_LEFT_MAX = 500, MSG_LEFT_DEFAULT = 320;
+const MSG_RIGHT_MIN = 220, MSG_RIGHT_MAX = 500, MSG_RIGHT_DEFAULT = 320;
+const clampMsgWidth = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+
 interface MessagingPageProps {
   initialConversationId?: string;
 }
@@ -67,6 +73,55 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [replyToMessage, setReplyToMessage] = useState<import('@/lib/messaging/types').MessagingMessage | null>(null);
+
+  // Larguras e estados de colapso das colunas (persistidos no localStorage)
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [msgLeftWidth, setMsgLeftWidth] = useState(MSG_LEFT_DEFAULT);
+  const [msgRightWidth, setMsgRightWidth] = useState(MSG_RIGHT_DEFAULT);
+
+  useEffect(() => {
+    const lw = localStorage.getItem('nossocrm-msg-left-width');
+    const rw = localStorage.getItem('nossocrm-msg-right-width');
+    const lc = localStorage.getItem('nossocrm-msg-left-collapsed');
+    const rc = localStorage.getItem('nossocrm-msg-right-collapsed');
+    if (lw) setMsgLeftWidth(clampMsgWidth(parseInt(lw, 10), MSG_LEFT_MIN, MSG_LEFT_MAX));
+    if (rw) setMsgRightWidth(clampMsgWidth(parseInt(rw, 10), MSG_RIGHT_MIN, MSG_RIGHT_MAX));
+    if (lc === 'true') setLeftCollapsed(true);
+    if (rc === 'true') setRightCollapsed(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleMsgLeftResize = useCallback((delta: number) => {
+    setMsgLeftWidth(prev => {
+      const next = clampMsgWidth(prev + delta, MSG_LEFT_MIN, MSG_LEFT_MAX);
+      localStorage.setItem('nossocrm-msg-left-width', String(next));
+      return next;
+    });
+  }, []);
+
+  const handleMsgRightResize = useCallback((delta: number) => {
+    setMsgRightWidth(prev => {
+      // side='left' já inverte o delta: delta positivo = mover direita = painel direito encolhe
+      const next = clampMsgWidth(prev + delta, MSG_RIGHT_MIN, MSG_RIGHT_MAX);
+      localStorage.setItem('nossocrm-msg-right-width', String(next));
+      return next;
+    });
+  }, []);
+
+  const toggleLeftPanel = useCallback(() => {
+    setLeftCollapsed(v => {
+      localStorage.setItem('nossocrm-msg-left-collapsed', String(!v));
+      return !v;
+    });
+  }, []);
+
+  const toggleRightPanel = useCallback(() => {
+    setRightCollapsed(v => {
+      localStorage.setItem('nossocrm-msg-right-collapsed', String(!v));
+      return !v;
+    });
+  }, []);
 
   // Subscribe to realtime updates
   useRealtimeSyncMessaging();
@@ -236,26 +291,47 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
 
   return (
     <div className="h-[calc(100vh-4rem)] flex overflow-hidden">
-      {/* Conversation List */}
-      <div className="w-80 flex-shrink-0 overflow-hidden">
-        <ConversationList
-          selectedId={selectedConversationId}
-          onSelect={handleSelectConversation}
-          onNewConversation={() => {
-            setNewConversationDefaults(undefined);
-            setIsNewConversationOpen(true);
-          }}
-          onStartConversationWithContact={handleStartConversationWithContact}
-          getPresence={getPresence}
-        />
+      {/* Coluna esquerda: Lista de conversas */}
+      <div
+        style={{ width: leftCollapsed ? 0 : msgLeftWidth, transition: 'width 200ms ease' }}
+        className="flex-shrink-0 overflow-hidden border-r border-slate-200 dark:border-white/10"
+      >
+        {!leftCollapsed && (
+          <ConversationList
+            selectedId={selectedConversationId}
+            onSelect={handleSelectConversation}
+            onNewConversation={() => {
+              setNewConversationDefaults(undefined);
+              setIsNewConversationOpen(true);
+            }}
+            onStartConversationWithContact={handleStartConversationWithContact}
+            getPresence={getPresence}
+          />
+        )}
       </div>
 
-      {/* Message Thread */}
+      {/* Handle de resize da coluna esquerda */}
+      {!leftCollapsed && (
+        <ResizeHandle onResize={handleMsgLeftResize} side="right" />
+      )}
+
+      {/* Coluna central: Thread de mensagens */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900/50">
         {selectedConversation ? (
           <>
             {/* Header */}
             <div className="h-16 px-4 flex items-center gap-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-white/10">
+              {/* Botão expandir lista de conversas quando colapsada */}
+              {leftCollapsed && (
+                <button
+                  type="button"
+                  onClick={toggleLeftPanel}
+                  className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors shrink-0"
+                  title="Expandir lista de conversas"
+                >
+                  <PanelLeftOpen className="w-5 h-5" />
+                </button>
+              )}
               <div className="relative">
                 {sanitizeUrl(selectedConversation.externalContactAvatar) ? (
                   <img
@@ -297,6 +373,17 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
                   conversationId={selectedConversation.id}
                   assignedUserId={selectedConversation.assignedUserId}
                 />
+                {/* Botão colapsar lista de conversas (quando expandida) */}
+                {!leftCollapsed && (
+                  <button
+                    type="button"
+                    onClick={toggleLeftPanel}
+                    className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                    title="Recolher lista de conversas"
+                  >
+                    <PanelLeftClose className="w-5 h-5" />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowSearch((v) => !v)}
@@ -337,6 +424,15 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
                   title="Excluir conversa"
                 >
                   <Trash2 className="w-5 h-5" />
+                </button>
+                {/* Botão colapsar/expandir painel de contato */}
+                <button
+                  type="button"
+                  onClick={toggleRightPanel}
+                  className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                  title={rightCollapsed ? 'Expandir painel do contato' : 'Recolher painel do contato'}
+                >
+                  {rightCollapsed ? <PanelRightOpen className="w-5 h-5" /> : <PanelRightClose className="w-5 h-5" />}
                 </button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -401,15 +497,25 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
         )}
       </div>
 
-      {/* Contact Panel */}
-      <div className="w-80 border-l border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 flex-shrink-0 overflow-hidden">
-        <ContactPanel
-          conversation={selectedConversation}
-          isLoading={isConversationLoading && !!selectedConversationId}
-          onLinkContact={() => setIsLinkModalOpen(true)}
-          onViewContact={handleViewContact}
-          onViewDeals={handleViewDeals}
-        />
+      {/* Handle de resize da coluna direita */}
+      {!rightCollapsed && (
+        <ResizeHandle onResize={handleMsgRightResize} side="left" />
+      )}
+
+      {/* Coluna direita: Painel do contato */}
+      <div
+        style={{ width: rightCollapsed ? 0 : msgRightWidth, transition: 'width 200ms ease' }}
+        className="flex-shrink-0 overflow-hidden border-l border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900"
+      >
+        {!rightCollapsed && (
+          <ContactPanel
+            conversation={selectedConversation}
+            isLoading={isConversationLoading && !!selectedConversationId}
+            onLinkContact={() => setIsLinkModalOpen(true)}
+            onViewContact={handleViewContact}
+            onViewDeals={handleViewDeals}
+          />
+        )}
       </div>
 
       {/* New Conversation Modal */}
