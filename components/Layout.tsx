@@ -309,29 +309,39 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         className={`flex flex-col z-20 glass border-r border-[var(--color-border-subtle)] shrink-0 ${sidebarCollapsed ? 'items-center' : ''}`}
         aria-label="Menu principal"
       >
-        <div className={`h-16 flex items-center border-b border-[var(--color-border-subtle)] transition-all duration-300 px-5 ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between'}`}>
-          <div className={`flex items-center transition-all duration-300 ${sidebarCollapsed ? 'gap-0 justify-center' : 'gap-3'}`}>
+        <div className={`h-16 flex items-center justify-between border-b border-[var(--color-border-subtle)] px-3 gap-1`}>
+          <div className={`flex items-center gap-3 min-w-0 transition-all duration-200 ${sidebarCollapsed ? 'justify-center w-full' : ''}`}>
             <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-primary-500/20 shrink-0" aria-hidden="true">
               N
             </div>
-            <span className={`text-xl font-bold font-display tracking-tight text-slate-900 dark:text-white whitespace-nowrap overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'w-0 opacity-0' : 'w-auto opacity-100'}`}>
+            <span className={`text-xl font-bold font-display tracking-tight text-slate-900 dark:text-white whitespace-nowrap overflow-hidden transition-all duration-200 ${sidebarCollapsed ? 'w-0 opacity-0 pointer-events-none' : 'w-auto opacity-100'}`}>
               NossoCRM
             </span>
           </div>
 
-          {/* Header Toggle Button - Only visible when expanded */}
+          {/* Toggle sempre visível no cabeçalho */}
           {!sidebarCollapsed && (
             <button
               onClick={() => setSidebarCollapsed(true)}
-              className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors p-1 rounded-md hover:bg-slate-100 dark:hover:bg-white/5"
-              title="Recolher Menu"
+              className="shrink-0 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5"
+              title="Recolher menu"
             >
-              <PanelLeftClose size={20} />
+              <PanelLeftClose size={18} />
             </button>
           )}
         </div>
 
         <nav className={`flex-1 p-4 space-y-2 flex flex-col ${sidebarCollapsed ? 'items-center px-2' : ''}`} aria-label="Navegação do sistema">
+          {/* Botão de expandir visível no topo da nav quando colapsada */}
+          {sidebarCollapsed && (
+            <button
+              onClick={() => setSidebarCollapsed(false)}
+              className="w-10 h-10 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors mb-1"
+              title="Expandir menu"
+            >
+              <PanelLeftOpen size={18} />
+            </button>
+          )}
           {[
             { to: '/inbox', icon: Inbox, label: 'Inbox', prefetch: 'inbox' as const, badge: undefined },
             { to: '/messaging', icon: MessageSquare, label: 'Mensagens', prefetch: undefined, badge: unreadMessagesCount },
@@ -394,18 +404,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           })}
         </nav>
 
-        {/* Sidebar Toggle Button (Footer) - Only visible when collapsed */}
-        {sidebarCollapsed && (
-          <div className="px-4 pb-2 flex justify-center">
-            <button
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="flex items-center justify-center w-10 h-10 p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-all"
-              title="Expandir Menu"
-            >
-              <PanelLeftOpen size={20} />
-            </button>
-          </div>
-        )}
 
         <div className={`p-4 border-t border-[var(--color-border-subtle)] ${sidebarCollapsed ? 'flex justify-center' : ''}`}>
           <div className="relative">
