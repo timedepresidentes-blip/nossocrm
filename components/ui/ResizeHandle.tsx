@@ -4,10 +4,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
 interface ResizeHandleProps {
-  /** Callback chamado com o delta de pixels a aplicar na coluna que expande */
   onResize: (delta: number) => void;
-  /** 'right' = handle está na borda direita do painel esquerdo (padrão)
-   *  'left'  = handle está na borda esquerda do painel direito (delta invertido) */
   side?: 'right' | 'left';
   className?: string;
 }
@@ -16,23 +13,26 @@ export function ResizeHandle({ onResize, side = 'right', className }: ResizeHand
   const isDragging = useRef(false);
   const lastX = useRef(0);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
+  const startDrag = useCallback((clientX: number) => {
     isDragging.current = true;
-    lastX.current = e.clientX;
+    lastX.current = clientX;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
-    // Impede que iframes capturem o evento durante o drag
+    // Desativa pointer-events no body para evitar que iframes capturem o drag
     document.body.style.pointerEvents = 'none';
   }, []);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    startDrag(e.clientX);
+  }, [startDrag]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDragging.current) return;
       const delta = e.clientX - lastX.current;
       lastX.current = e.clientX;
-      // Para handle na direita: delta positivo = arrastar para direita = painel cresce
-      // Para handle na esquerda: delta positivo = arrastar para direita = painel diminui (invertido)
       onResize(side === 'right' ? delta : -delta);
     };
 
@@ -44,39 +44,44 @@ export function ResizeHandle({ onResize, side = 'right', className }: ResizeHand
       document.body.style.pointerEvents = '';
     };
 
+    // Listeners no document para capturar eventos mesmo fora do elemento
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      // Garante limpeza se o componente desmontar durante drag
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.body.style.pointerEvents = '';
     };
   }, [onResize, side]);
 
   return (
+    /*
+     * Largura total de 12px para área de clique confortável.
+     * A linha visual de 2px fica centralizada via flex.
+     * cursor-col-resize em toda a área facilita a descoberta.
+     */
     <div
       onMouseDown={handleMouseDown}
       role="separator"
       aria-orientation="vertical"
-      title="Arrastar para redimensionar"
+      title="Arrastar para redimensionar coluna"
       className={cn(
-        'w-1.5 shrink-0 cursor-col-resize relative group z-10 select-none',
-        'hover:bg-primary-400/20 active:bg-primary-500/30',
-        'transition-colors duration-150',
+        'w-3 shrink-0 flex items-stretch justify-center cursor-col-resize select-none group z-10',
         className
       )}
     >
-      {/* Linha visual no centro */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className={cn(
-          'w-px rounded-full',
-          'bg-[var(--color-border-subtle)]',
-          'group-hover:bg-primary-400 group-active:bg-primary-500',
-          'h-8 group-hover:h-16 group-active:h-20',
-          'transition-all duration-150'
-        )} />
-      </div>
-      {/* Área de hit ampliada para facilitar o clique */}
-      <div className="absolute -inset-x-1 inset-y-0" />
+      {/* Linha visual — fina em repouso, mais grossa e colorida no hover/drag */}
+      <div
+        className={cn(
+          'w-0.5 self-stretch rounded-full transition-all duration-150',
+          'bg-slate-200 dark:bg-slate-700',
+          'group-hover:w-1 group-hover:bg-primary-400 dark:group-hover:bg-primary-500',
+          'group-active:w-1 group-active:bg-primary-500 dark:group-active:bg-primary-400',
+        )}
+      />
     </div>
   );
 }

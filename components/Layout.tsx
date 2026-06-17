@@ -508,10 +508,24 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
 
           {/* Header */}
-          <header className="h-16 glass border-b border-[var(--color-border-subtle)] flex items-center justify-between px-6 z-40 shrink-0" role="banner">
-            <h1 className="text-lg font-semibold font-display text-slate-900 dark:text-white">
-              {getPageTitle(pathname)}
-            </h1>
+          <header className="h-16 glass border-b border-[var(--color-border-subtle)] flex items-center justify-between px-4 z-40 shrink-0" role="banner">
+            <div className="flex items-center gap-2">
+              {/* Toggle sidebar — sempre visível no header */}
+              {!isMobile && (
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                  className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors active:scale-95 focus-visible-ring"
+                  title={sidebarCollapsed ? 'Expandir sidebar' : 'Recolher sidebar'}
+                  aria-label={sidebarCollapsed ? 'Expandir sidebar' : 'Recolher sidebar'}
+                >
+                  {sidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+                </button>
+              )}
+              <h1 className="text-lg font-semibold font-display text-slate-900 dark:text-white">
+                {getPageTitle(pathname)}
+              </h1>
+            </div>
             <div className="flex items-center gap-4">
               <button
                 type="button"
