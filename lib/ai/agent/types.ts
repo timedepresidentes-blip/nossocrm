@@ -57,7 +57,7 @@ export interface AIConversationLog {
   created_at: string;
 }
 
-export type AIAction = 'responded' | 'advanced_stage' | 'handoff' | 'skipped';
+export type AIAction = 'responded' | 'advanced_stage' | 'handoff' | 'skipped' | 'generation_failed';
 
 // =============================================================================
 // Context Types

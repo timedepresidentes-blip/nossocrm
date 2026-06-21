@@ -231,7 +231,7 @@ export async function processIncomingMessage(
   // 1. Buscar deal associado à conversa para pegar o stage + assignment
   const { data: conversation } = await supabase
     .from('messaging_conversations')
-    .select('metadata, assigned_user_id, assigned_at, contact_id, closing_mode')
+    .select('metadata, assigned_user_id, assigned_at, contact_id, closing_mode, window_expires_at, channel_id, external_contact_id')
     .eq('id', conversationId)
     .single();
 
@@ -413,6 +413,33 @@ export async function processIncomingMessage(
 
   console.log('[AIAgent] Context built, ai_messages_count:', context.stats.ai_messages_count, 'max:', config.settings.max_messages_per_conversation);
 
+  // 5b. Verificar janela de 24h — se expirada, Julia não pode enviar mensagem comum
+  const windowExpiresAt = (conversation as Record<string, unknown>)?.window_expires_at as string | null | undefined;
+  if (windowExpiresAt && new Date(windowExpiresAt) < new Date()) {
+    if (triggerContext) {
+      // Disparado pelo botão "Devolver para Júlia": janela expirou, envia template de retomada
+      console.log('[AIAgent] Janela de 24h expirada — enviando template retomada_conversa_24h');
+      await sendTemplateAsAI({
+        supabase,
+        conversationId,
+        channelId: (conversation as Record<string, unknown>)?.channel_id as string,
+        externalContactId: (conversation as Record<string, unknown>)?.external_contact_id as string,
+        templateName: 'retomada_conversa_24h',
+        parameters: [{ type: 'text', text: context.contact?.name || 'cliente' }],
+        senderLabel: 'Julia',
+      });
+    } else {
+      console.log('[AIAgent] Janela de 24h expirada — aguardando resposta do cliente para reabrir');
+    }
+    return {
+      success: true,
+      decision: {
+        action: 'skipped',
+        reason: 'Janela de 24h expirada' + (triggerContext ? ' — template de retomada enviado' : ''),
+      },
+    };
+  }
+
   // 6. Verificar limite de mensagens
   if (context.stats.ai_messages_count >= config.settings.max_messages_per_conversation) {
     console.log('[AIAgent] Skipping: message limit reached');
@@ -466,6 +493,35 @@ export async function processIncomingMessage(
   // Record rate call only on actual AI response (not on skipped/handoff)
   if (decision.action === 'responded') {
     recordRateCall(conversationId);
+  }
+
+  // 9b. Falha de geração: todos os providers AI falharam — notifica cliente via template
+  if (decision.action === 'generation_failed') {
+    console.warn('[AIAgent] Geração falhou — enviando template inicio_atendimento_humano');
+    const channelId = (conversation as Record<string, unknown>)?.channel_id as string;
+    const externalContactId = (conversation as Record<string, unknown>)?.external_contact_id as string;
+    if (channelId && externalContactId) {
+      await sendTemplateAsAI({
+        supabase,
+        conversationId,
+        channelId,
+        externalContactId,
+        templateName: 'inicio_atendimento_humano',
+        parameters: [
+          { type: 'text', text: context.contact?.name || 'cliente' },
+          { type: 'text', text: 'nossa equipe' },
+        ],
+        senderLabel: 'Julia',
+      });
+    }
+    return {
+      success: false,
+      decision: {
+        action: 'handoff',
+        reason: decision.reason,
+      },
+      error: { code: 'ALL_PROVIDERS_FAILED', message: decision.reason || 'Todos os providers falharam' },
+    };
   }
 
   // 10. Se deve responder, enviar mensagem
@@ -629,7 +685,7 @@ Responda de forma natural, seguindo as instruções do sistema.
     const msg = error instanceof Error ? error.message : 'Unknown';
     console.error('[AIAgent] All providers failed. Summary:', msg);
     return {
-      action: 'skipped',
+      action: 'generation_failed',
       reason: `Erro na geração: ${msg}`,
     };
   }
@@ -828,6 +884,65 @@ async function sendAIResponse(params: {
         message: error instanceof Error ? error.message : 'Erro ao enviar',
       },
     };
+  }
+}
+
+// =============================================================================
+// Template Fallback
+// =============================================================================
+
+async function sendTemplateAsAI(params: {
+  supabase: SupabaseClient;
+  conversationId: string;
+  channelId: string;
+  externalContactId: string;
+  templateName: string;
+  parameters: Array<{ type: string; text: string }>;
+  senderLabel: string;
+}): Promise<void> {
+  const { supabase, conversationId, channelId, externalContactId, templateName, parameters, senderLabel } = params;
+
+  const { data: message } = await supabase
+    .from('messaging_messages')
+    .insert({
+      conversation_id: conversationId,
+      direction: 'outbound',
+      content_type: 'template',
+      content: { type: 'template', templateName, parameters },
+      status: 'pending',
+      sender_type: 'ai',
+      sender_name: senderLabel,
+      metadata: { sent_by_ai: true, template_fallback: true },
+    })
+    .select('id')
+    .single();
+
+  if (!message?.id) return;
+
+  try {
+    const router = getChannelRouter();
+    const result = await router.sendTemplate(channelId, {
+      conversationId,
+      to: externalContactId,
+      templateName,
+      templateLanguage: 'pt_BR',
+      components: [{ type: 'body', parameters }],
+    });
+
+    await supabase
+      .from('messaging_messages')
+      .update(
+        result.success
+          ? { external_id: result.externalMessageId, status: 'sent', sent_at: new Date().toISOString() }
+          : { status: 'failed', error_code: result.error?.code || 'TEMPLATE_FAILED', error_message: result.error?.message, failed_at: new Date().toISOString() }
+      )
+      .eq('id', message.id);
+  } catch (err) {
+    console.error('[AIAgent] sendTemplateAsAI error:', err);
+    await supabase
+      .from('messaging_messages')
+      .update({ status: 'failed', error_code: 'EXCEPTION', error_message: String(err), failed_at: new Date().toISOString() })
+      .eq('id', message.id);
   }
 }
 
