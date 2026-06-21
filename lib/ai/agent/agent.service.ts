@@ -127,8 +127,17 @@ export async function getOrgAIConfig(
   const apiKey = getApiKey();
 
   if (!apiKey) {
-    console.warn('[AIAgent] No API key configured for provider:', provider);
-    return null;
+    // Verificar se algum provider de fallback tem chave disponível
+    const fallbackKey =
+      orgSettings.ai_anthropic_key || process.env['ANTHROPIC_API_KEY'] ||
+      orgSettings.ai_openai_key || process.env['OPENAI_API_KEY'] ||
+      (provider !== 'google' ? (orgSettings.ai_google_key || process.env['GOOGLE_GENERATIVE_AI_API_KEY']) : null);
+
+    if (!fallbackKey) {
+      console.warn('[AIAgent] No API key configured for any provider. Primary:', provider);
+      return null;
+    }
+    console.warn(`[AIAgent] No key for primary provider "${provider}" — fallback available, will continue`);
   }
 
   // Parse learned patterns - pode ser {} vazio, null, ou objeto válido

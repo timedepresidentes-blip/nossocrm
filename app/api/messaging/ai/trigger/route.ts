@@ -15,7 +15,6 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { processIncomingMessage } from '@/lib/ai/agent';
-import { waitUntil } from '@vercel/functions';
 
 export const maxDuration = 60;
 
@@ -72,20 +71,25 @@ export async function POST(request: NextRequest) {
     })
     .eq('id', conversationId);
 
-  // Aciona Julia em background — ela deve se apresentar e retomar o atendimento
+  // Aciona Julia diretamente (síncrono para capturar erros nos logs)
   const triggerContext = `O atendente acabou de transferir esta conversa para você agora. Apresente-se ao cliente pelo seu nome e dê continuidade ao atendimento de forma natural, considerando o histórico da conversa acima. Não mencione que houve uma transferência — apenas retome o atendimento como se você já estivesse acompanhando desde o início.`;
 
-  waitUntil(
-    processIncomingMessage({
+  let juliaResult: Record<string, unknown> = {};
+  try {
+    const result = await processIncomingMessage({
       supabase,
       conversationId,
       organizationId: profile.organization_id,
       incomingMessage: '',
       triggerContext,
-    }).catch((err) => {
-      console.error('[AI Trigger] Erro ao acionar Julia:', err);
-    })
-  );
+    });
+    juliaResult = { action: result.decision?.action, reason: result.decision?.reason, success: result.success };
+    console.log('[AI Trigger] Julia concluiu:', juliaResult);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[AI Trigger] Erro ao acionar Julia:', msg);
+    juliaResult = { error: msg };
+  }
 
-  return NextResponse.json({ triggered: true });
+  return NextResponse.json({ triggered: true, julia: juliaResult });
 }
