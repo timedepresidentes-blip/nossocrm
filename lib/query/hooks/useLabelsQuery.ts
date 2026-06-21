@@ -8,6 +8,7 @@ export interface Label {
   name: string;
   color: string;
   stageId?: string | null;
+  syncsWithLost?: boolean;
 }
 
 export function useLabels() {
@@ -20,7 +21,7 @@ export function useLabels() {
       const sb = getClient();
       const { data, error } = await sb
         .from('labels')
-        .select('id, name, color, stage_id')
+        .select('id, name, color, stage_id, syncs_with_lost')
         .order('name');
       if (error) throw error;
       return (data ?? []).map((r: Record<string, unknown>) => ({
@@ -28,6 +29,7 @@ export function useLabels() {
         name: r.name as string,
         color: r.color as string,
         stageId: r.stage_id as string | null,
+        syncsWithLost: r.syncs_with_lost as boolean | undefined,
       }));
     },
   });
@@ -43,10 +45,18 @@ export function useContactLabels(contactId: string | undefined) {
       const sb = getClient();
       const { data, error } = await sb
         .from('contact_labels')
-        .select('label:label_id(id, name, color)')
+        .select('label:label_id(id, name, color, syncs_with_lost)')
         .eq('contact_id', contactId!);
       if (error) throw error;
-      return (data ?? []).map((r: Record<string, unknown>) => r.label as Label);
+      return (data ?? []).map((r: Record<string, unknown>) => {
+        const label = r.label as Record<string, unknown>;
+        return {
+          id: label.id as string,
+          name: label.name as string,
+          color: label.color as string,
+          syncsWithLost: label.syncs_with_lost as boolean | undefined,
+        };
+      });
     },
   });
 }
@@ -64,29 +74,48 @@ export function useAssignLabel() {
         .insert({ contact_id: contactId, label_id: labelId });
       if (error && error.code !== '23505') throw error;
 
-      // Sincroniza pipeline: se a etiqueta tem stage_id, move o deal
+      // Busca dados da etiqueta para verificar sincronizações
       const { data: labelData } = await sb
         .from('labels')
-        .select('stage_id')
+        .select('stage_id, syncs_with_lost')
         .eq('id', labelId)
         .single();
 
-      if (labelData?.stage_id) {
-        // Busca deals ativos via conversas deste contato
+      // Busca deals ativos via conversas deste contato (usado em ambas sincronizações)
+      const fetchDealIds = async () => {
         const { data: convs } = await sb
           .from('messaging_conversations')
           .select('metadata')
           .eq('contact_id', contactId)
           .eq('status', 'open');
-
-        const dealIds = (convs ?? [])
+        return (convs ?? [])
           .map((c: Record<string, unknown>) => ((c.metadata as Record<string, unknown>)?.deal_id as string | undefined))
           .filter((id): id is string => Boolean(id));
+      };
 
+      // Sincroniza pipeline: move deal para estágio da etiqueta
+      if (labelData?.stage_id) {
+        const dealIds = await fetchDealIds();
         if (dealIds.length > 0) {
           await sb
             .from('deals')
             .update({ stage_id: labelData.stage_id, updated_at: new Date().toISOString() })
+            .in('id', dealIds);
+        }
+      }
+
+      // Sincroniza perdido: marca deal como is_lost quando etiqueta "Perdido" é atribuída
+      if (labelData?.syncs_with_lost) {
+        const dealIds = await fetchDealIds();
+        if (dealIds.length > 0) {
+          await sb
+            .from('deals')
+            .update({
+              is_lost: true,
+              is_won: false,
+              closed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
             .in('id', dealIds);
         }
       }
@@ -148,7 +177,6 @@ export function useDeleteLabel() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.labels.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.labels.all });
     },
   });

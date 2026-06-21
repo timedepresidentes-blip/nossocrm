@@ -146,6 +146,9 @@ export function useConversations(filters?: ConversationFilters) {
       if (filters?.hasUnread) {
         query = query.gt('unread_count', 0);
       }
+      if (filters?.dateFrom) {
+        query = query.gte('last_message_at', filters.dateFrom);
+      }
       if (filters?.search) {
         const safe = sanitizePostgrestValue(filters.search);
         if (safe) {
@@ -153,6 +156,19 @@ export function useConversations(filters?: ConversationFilters) {
             `external_contact_name.ilike.%${safe}%,last_message_preview.ilike.%${safe}%`
           );
         }
+      }
+
+      // Filtro por etiqueta: busca contact_ids que têm essa label e filtra
+      if (filters?.labelId) {
+        const { data: labelContacts } = await supabase
+          .from('contact_labels')
+          .select('contact_id')
+          .eq('label_id', filters.labelId);
+        const contactIds = (labelContacts ?? []).map((r: { contact_id: string }) => r.contact_id);
+        if (contactIds.length === 0) {
+          return []; // nenhum contato com essa etiqueta → lista vazia
+        }
+        query = query.in('contact_id', contactIds);
       }
 
       const { data, error } = await query;

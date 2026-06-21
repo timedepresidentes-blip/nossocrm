@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Search, Send, ChevronDown, ChevronUp, X, FileText, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { Search, Send, ChevronDown, ChevronUp, X, FileText, CheckCircle, Clock, XCircle, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type {
   MessagingTemplate,
@@ -282,6 +282,7 @@ export function TemplateSelector({
   const [selectedTemplate, setSelectedTemplate] = useState<MessagingTemplate | null>(null);
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [showPreview, setShowPreview] = useState(false);
+  const [varError, setVarError] = useState<string | null>(null);
 
   // Filter approved templates by search
   const filteredTemplates = useMemo(() => {
@@ -303,12 +304,12 @@ export function TemplateSelector({
 
   const handleVariableChange = (key: string, value: string) => {
     setVariables((prev) => ({ ...prev, [key]: value }));
+    setVarError(null);
   };
 
   const handleSend = () => {
     if (!selectedTemplate) return;
 
-    // Check if all variables are filled
     const templateVariables: string[] = [];
     selectedTemplate.components.forEach((comp) => {
       if (comp.text) {
@@ -318,11 +319,11 @@ export function TemplateSelector({
 
     const missingVars = templateVariables.filter((v) => !variables[v]?.trim());
     if (missingVars.length > 0) {
-      // Could show a toast here
-      console.warn('Missing variables:', missingVars);
+      setVarError(`Preencha: ${missingVars.map((v) => `{{${v}}}`).join(', ')}`);
       return;
     }
 
+    setVarError(null);
     onSelect(selectedTemplate, variables);
   };
 
@@ -425,7 +426,13 @@ export function TemplateSelector({
               </div>
 
               {/* Send Button */}
-              <div className="p-4 border-t border-[var(--color-border)]">
+              <div className="p-4 border-t border-[var(--color-border)] space-y-2">
+                {varError && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg text-xs text-red-700 dark:text-red-300">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>{varError}</span>
+                  </div>
+                )}
                 <button
                   onClick={handleSend}
                   className={cn(

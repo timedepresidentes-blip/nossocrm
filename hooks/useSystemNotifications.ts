@@ -1,11 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 
 export interface SystemNotification {
     id: string;
-    type: string; // 'SYSTEM_ALERT' | 'SYSTEM_INFO' | 'SYSTEM_WARNING' | 'SYSTEM_SUCCESS' etc
+    type: string;
     title: string;
     message: string;
     timestamp: Date;
@@ -14,26 +14,25 @@ export interface SystemNotification {
     readAt?: string | null;
 }
 
-/**
- * Hook React `useSystemNotifications` que encapsula uma lógica reutilizável.
- * @returns {{ notifications: { id: string; type: string; title: string; message: string; timestamp: Date; actionLink: string | undefined; severity: "low" | "medium" | "high"; readAt: string | null | undefined; }[]; count: number; hasHighSeverity: boolean; markAsRead: UseMutateFunction<...>; markAllAsRead: UseMutateFunction<...>...} Retorna um valor do tipo `{ notifications: { id: string; type: string; title: string; message: string; timestamp: Date; actionLink: string | undefined; severity: "low" | "medium" | "high"; readAt: string | null | undefined; }[]; count: number; hasHighSeverity: boolean; markAsRead: UseMutateFunction<...>; markAllAsRead: UseMutateFunction<...>...`.
- */
 export const useSystemNotifications = () => {
     const { user } = useAuth();
     const queryClient = useQueryClient();
-
     const sb = supabase;
 
+    const queryKey = ['system_notifications', user?.id];
+
     const { data: notifications = [] } = useQuery({
-        queryKey: ['system_notifications'],
+        queryKey,
         queryFn: async () => {
-            if (!sb) return [];
-            // Fetch System Notifications
+            if (!sb || !user) return [];
+
             const { data, error } = await sb
                 .from('system_notifications')
                 .select('*')
+                // Mostra notificações da org toda (user_id IS NULL) + as direcionadas ao usuário
+                .or(`user_id.is.null,user_id.eq.${user.id}`)
                 .order('created_at', { ascending: false })
-                .limit(20);
+                .limit(30);
 
             if (error) throw error;
 
@@ -60,22 +59,46 @@ export const useSystemNotifications = () => {
             }));
         },
         enabled: !!user && !!sb,
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: 1000 * 60 * 5,
     });
 
-    // Derived state
+    // Realtime: atualiza instantaneamente quando uma nova notificação chega
+    useEffect(() => {
+        if (!sb || !user) return;
+
+        const channel = sb
+            .channel(`system_notifications:${user.id}`)
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'system_notifications' },
+                () => {
+                    queryClient.invalidateQueries({ queryKey });
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'system_notifications' },
+                () => {
+                    queryClient.invalidateQueries({ queryKey });
+                }
+            )
+            .subscribe();
+
+        return () => { sb.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.id]);
+
     const unreadCount = useMemo(() =>
         notifications.filter(n => !n.readAt).length
-        , [notifications]);
+    , [notifications]);
 
     const hasHighSeverity = useMemo(() =>
         notifications.some(n => n.severity === 'high' && !n.readAt)
-        , [notifications]);
+    , [notifications]);
 
-    // Mutation to mark as read
     const markAsRead = useMutation({
         mutationFn: async (id: string) => {
-            if (!sb) throw new Error('Supabase não está configurado');
+            if (!sb) throw new Error('Supabase não configurado');
             const { error } = await sb
                 .from('system_notifications')
                 .update({ read_at: new Date().toISOString() })
@@ -83,23 +106,22 @@ export const useSystemNotifications = () => {
             if (error) throw error;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['system_notifications'] });
+            queryClient.invalidateQueries({ queryKey });
         }
     });
 
     const markAllAsRead = useMutation({
         mutationFn: async () => {
-            // Naive implementation: update all displayed unread. 
-            // Faster would be a single query update where read_at is null.
-            if (!sb) throw new Error('Supabase não está configurado');
+            if (!sb || !user) throw new Error('Supabase não configurado');
             const { error } = await sb
                 .from('system_notifications')
                 .update({ read_at: new Date().toISOString() })
-                .is('read_at', null);
+                .is('read_at', null)
+                .or(`user_id.is.null,user_id.eq.${user.id}`);
             if (error) throw error;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['system_notifications'] });
+            queryClient.invalidateQueries({ queryKey });
         }
     });
 

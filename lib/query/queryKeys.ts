@@ -240,6 +240,15 @@ export const queryKeys = {
      * Org-level + user settings query keys.
      */
     orgSettings: createQueryKeys('orgSettings'),
+
+    /**
+     * Calendar reminders query keys.
+     */
+    reminders: createExtendedQueryKeys('reminders', base => ({
+        byMonth: (year: number, month: number) => [...base.all, 'byMonth', year, month] as const,
+        due: () => [...base.all, 'due'] as const,
+        byContact: (contactId: string) => [...base.all, 'byContact', contactId] as const,
+    })),
 };
 
 /**

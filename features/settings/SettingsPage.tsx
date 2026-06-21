@@ -13,10 +13,11 @@ import { BusinessUnitsSection } from './components/BusinessUnitsSection';
 import { DataStorageSettings } from './components/DataStorageSettings';
 import { ProductsCatalogManager } from './components/ProductsCatalogManager';
 import { AICenterSettings } from './AICenterSettings';
+import { QuickRepliesSection } from './components/QuickRepliesSection';
 
 import { UsersPage } from './UsersPage';
 import { useAuth } from '@/context/AuthContext';
-import { Settings as SettingsIcon, Users, Database, Sparkles, Plug, Package, Building2, CheckCircle2, Loader2 } from 'lucide-react';
+import { Settings as SettingsIcon, Users, Database, Sparkles, Plug, Package, Building2, CheckCircle2, Loader2, PenLine } from 'lucide-react';
 import { SelectField } from '@/components/ui/FormField';
 import { Button } from '@/components/ui/button';
 
@@ -27,8 +28,12 @@ function SignatureSection() {
   const [value, setValue] = useState(profile?.signature ?? '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [enabled, setEnabled] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('crm_signature_enabled') !== 'false';
+  });
 
-  // Sincroniza quando o perfil carrega pela primeira vez
+  // Sincroniza quando o perfil carrega
   useEffect(() => {
     if (profile?.signature !== undefined) {
       setValue(profile.signature ?? '');
@@ -55,12 +60,36 @@ function SignatureSection() {
     }
   };
 
+  const toggleEnabled = () => {
+    const next = !enabled;
+    setEnabled(next);
+    localStorage.setItem('crm_signature_enabled', String(next));
+  };
+
   return (
     <div className="mb-12">
       <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6">
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Assinatura do Atendente</h3>
+        <div className="flex items-start justify-between gap-4 mb-1">
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Assinatura do Atendente</h3>
+          {/* Toggle ativar/desativar */}
+          <button
+            type="button"
+            onClick={toggleEnabled}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm font-medium transition-colors ${
+              enabled
+                ? 'border-primary-400/50 text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30'
+                : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'
+            }`}
+            title={enabled ? 'Clique para desativar' : 'Clique para ativar'}
+          >
+            <PenLine className="w-4 h-4" />
+            {enabled ? 'Assinatura ativa' : 'Assinatura desativada'}
+          </button>
+        </div>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-          Será adicionada automaticamente ao final de cada mensagem de texto que você enviar.
+          {enabled
+            ? 'Será exibida automaticamente no início de cada mensagem, identificando quem está enviando.'
+            : 'A assinatura está desativada e não será adicionada às mensagens.'}
         </p>
         <textarea
           value={value}
@@ -71,8 +100,8 @@ function SignatureSection() {
         />
         {value.trim() && (
           <div className="mb-3 p-3 rounded-lg bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap">
-            <span className="block text-[10px] uppercase font-medium mb-1 text-slate-400">Prévia:</span>
-            {`Olá! Segue a proposta... [texto da mensagem]\n\n--\n${value.trim()}`}
+            <span className="block text-[10px] uppercase font-medium mb-1 text-slate-400">Prévia (como vai aparecer na mensagem):</span>
+            {`Atendente: ${value.trim()}\n\nSua mensagem aqui...`}
           </div>
         )}
         <Button
@@ -148,6 +177,10 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ hash, isAdmin }) => {
       </div>
 
       <SignatureSection />
+
+      <div id="quick-replies" className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 p-6 scroll-mt-20">
+        <QuickRepliesSection />
+      </div>
 
       {isAdmin && (
         <>

@@ -922,15 +922,15 @@ async function handleInboundMessage(
     })
     .eq("id", conversationId);
 
-  // Trigger AI processing for text messages (fire-and-forget)
+  // Aciona AI para mensagens de texto — await garante que o fetch completa
+  // antes do handler Deno retornar (sem await o runtime cancela a requisição)
   if (content.type === "text" && content.text) {
-    triggerAIProcessing({
+    await triggerAIProcessing({
       conversationId,
       organizationId: channel.organization_id,
       messageText: content.text,
       messageId: externalMessageId,
     }).catch((err) => {
-      // Log but don't fail the webhook
       console.error("[Webhook] AI processing trigger error:", err);
     });
   }
@@ -1454,15 +1454,15 @@ async function handleInstagramInboundMessage(
     })
     .eq("id", conversationId);
 
-  // Trigger AI processing for text messages (fire-and-forget)
+  // Aciona AI para mensagens de texto — await garante que o fetch completa
+  // antes do handler Deno retornar (sem await o runtime cancela a requisição)
   if (content.type === "text" && content.text) {
-    triggerAIProcessing({
+    await triggerAIProcessing({
       conversationId,
       organizationId: channel.organization_id,
       messageText: content.text,
       messageId: externalMessageId,
     }).catch((err) => {
-      // Log but don't fail the webhook
       console.error("[Webhook/IG] AI processing trigger error:", err);
     });
   }

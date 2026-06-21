@@ -184,7 +184,13 @@ export function useSendTemplateMutation() {
         throw new Error(error.error || error.message || 'Failed to send template');
       }
 
-      return response.json();
+      const data = await response.json();
+      // A API retorna HTTP 200 mesmo quando o provider falha — checar status da mensagem
+      if (data.status === 'failed') {
+        const errMsg = data.errorMessage || data.error_message || 'O template não foi entregue pelo provedor';
+        throw new Error(errMsg);
+      }
+      return data;
     },
     onSettled: (_, _err, variables) => {
       // Invalidate messages for the conversation

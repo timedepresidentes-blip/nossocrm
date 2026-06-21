@@ -10,7 +10,7 @@ declare global {
     flush(): Int8Array;
   }};
 }
-import { Send, Paperclip, Smile, Clock, FileText, X, Loader2, Image, File as FileIcon, Mic, Square, Reply, AlertCircle } from 'lucide-react';
+import { Send, Paperclip, Smile, Clock, FileText, X, Loader2, Image, File as FileIcon, Mic, Square, Reply, AlertCircle, CalendarClock, Zap, PenLine } from 'lucide-react';
 import EmojiPicker, { type EmojiClickData, Theme } from 'emoji-picker-react';
 import { cn } from '@/lib/utils';
 import { useSendTextMessage, useSendMessage } from '@/lib/query/hooks/useMessagingMessagesQuery';
@@ -22,6 +22,10 @@ import {
   useSendTemplateMutation,
 } from '@/lib/query/hooks/useTemplatesQuery';
 import { TemplateSelector, type TemplateData } from './TemplateSelector';
+import { QuickRepliesMenu } from './QuickRepliesMenu';
+import { useQuickReplies } from '@/lib/query/hooks/useQuickRepliesQuery';
+import { ScheduleMessageModal } from './ScheduleMessageModal';
+import { useRouter } from 'next/navigation';
 import type { ConversationView, MessageContent, MessagingMessage } from '@/lib/messaging/types';
 
 interface MessageInputProps {
@@ -126,13 +130,23 @@ function formatFileSize(bytes: number): string {
 export function MessageInput({ conversation, replyTo, onCancelReply }: MessageInputProps) {
   const [text, setText] = useState('');
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showQrPicker, setShowQrPicker] = useState(false);
+  const [qrActiveIndex, setQrActiveIndex] = useState(0);
+  const { data: allQuickReplies = [] } = useQuickReplies();
   const [pendingMedia, setPendingMedia] = useState<PendingMedia | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [templateSentOk, setTemplateSentOk] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const [signatureEnabled, setSignatureEnabled] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('crm_signature_enabled') !== 'false';
+  });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -140,6 +154,7 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const router = useRouter();
   const { profile } = useAuth();
   const { mutate: sendTextMessage } = useSendTextMessage();
   const sendMessage = useSendMessage();
@@ -164,9 +179,24 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
   const needsTemplate =
     conversation.isWindowExpired ||
     (conversation.channelProvider === 'meta-cloud' && !conversation.windowExpiresAt);
+
+  // Reseta estados de template quando muda de conversa
+  useEffect(() => {
+    setTemplateSentOk(false);
+    setTemplateError(null);
+    setShowTemplates(false);
+  }, [conversation.id]);
+
+  // Limpa templateSentOk quando a janela de 24h abre (contato respondeu)
+  useEffect(() => {
+    if (!needsTemplate) setTemplateSentOk(false);
+  }, [needsTemplate]);
+
+  // templateSentOk=true suspende o banner enquanto aguardamos resposta do contato
+  const blockingNeedsTemplate = needsTemplate && !templateSentOk;
   // Text sends use optimistic updates — no need to block the input while the API is in flight.
   // Only block during: media upload (can't parallelize), template send, expired window.
-  const isDisabled = needsTemplate || isSendingTemplate || isUploading;
+  const isDisabled = blockingNeedsTemplate || isSendingTemplate || isUploading;
   // Show mic button when input is empty, no pending media, and not recording
   const showMicButton = !text.trim() && !pendingMedia && !isDisabled;
 
@@ -428,6 +458,14 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
         {
           onSuccess: () => {
             setShowTemplates(false);
+            setTemplateSentOk(true);
+            setTemplateError(null);
+          },
+          onError: (err) => {
+            setShowTemplates(false);
+            setTemplateError(
+              err instanceof Error ? err.message : 'Erro ao enviar template'
+            );
           },
         }
       );
@@ -448,9 +486,9 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
     const trimmedText = text.trim();
     if (!trimmedText || isDisabled) return;
 
-    // Appende a assinatura do atendente se configurada
-    const sig = profile?.signature?.trim();
-    const finalText = sig ? `${trimmedText}\n\n--\n${sig}` : trimmedText;
+    // Prefixa a identificação do atendente no topo da mensagem
+    const sig = signatureEnabled ? profile?.signature?.trim() : '';
+    const finalText = sig ? `Atendente: ${sig}\n\n${trimmedText}` : trimmedText;
 
     // Clear immediately — optimistic message already in cache via onMutate
     setText('');
@@ -462,14 +500,48 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
     claimConversation();
     sendTextMessage({ conversationId: conversation.id, text: finalText, replyToMessageId: replyTo?.id });
     onCancelReply?.();
-  }, [text, isDisabled, sendTextMessage, conversation.id, pendingMedia, handleSendMedia, replyTo, onCancelReply, claimConversation, profile?.signature]);
+  }, [text, isDisabled, sendTextMessage, conversation.id, pendingMedia, handleSendMedia, replyTo, onCancelReply, claimConversation, profile?.signature, signatureEnabled]);
+
+  // Respostas rápidas: filtra quando o texto começa com / ou picker manual aberto
+  const qrQuery = text.startsWith('/') ? text.slice(1).toLowerCase() : null;
+  const filteredReplies = qrQuery !== null
+    ? allQuickReplies.filter(r =>
+        r.shortcut.startsWith(qrQuery) || r.title.toLowerCase().includes(qrQuery)
+      )
+    : [];
+  // Picker manual mostra todas; filtrado mostra as do query /
+  const quickReplies = showQrPicker ? allQuickReplies : filteredReplies;
+  const showQrMenu = quickReplies.length > 0 || showQrPicker;
+
+  const applyQuickReply = useCallback((content: string) => {
+    setText(content);
+    setQrActiveIndex(0);
+    setShowQrPicker(false);
+    setTimeout(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      ta.focus();
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+    }, 0);
+  }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (showQrMenu) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setQrActiveIndex(i => Math.min(i + 1, quickReplies.length - 1)); return; }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setQrActiveIndex(i => Math.max(i - 1, 0)); return; }
+      if (e.key === 'Escape')    { e.preventDefault(); setText(''); setShowQrPicker(false); return; }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        applyQuickReply(quickReplies[qrActiveIndex]?.content ?? '');
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
     }
-  }, [handleSubmit]);
+  }, [handleSubmit, showQrMenu, quickReplies, qrActiveIndex, applyQuickReply]);
 
   const handleInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const textarea = e.target;
@@ -551,55 +623,70 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
   }
 
   // Exibe seletor de template quando: janela expirada, conversa nova (outbound sem resposta), ou aberto manualmente
-  if (showTemplates || needsTemplate) {
+  if (showTemplates || blockingNeedsTemplate) {
     // Conversa iniciada pelo negócio sem nenhuma resposta do contato ainda
     const isNewOutbound =
       conversation.channelProvider === 'meta-cloud' && !conversation.windowExpiresAt;
 
     return (
       <div className="border-t border-slate-200 dark:border-white/10">
-        {needsTemplate && !showTemplates && (
-          isNewOutbound ? (
-            // Banner azul: conversa outbound nova, nunca houve resposta
-            <div className="p-4 bg-blue-50 dark:bg-blue-900/20">
-              <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
-                <Clock className="w-5 h-5" />
-                <div>
-                  <p className="font-medium">Aguardando primeira resposta do contato</p>
-                  <p className="text-sm opacity-80">
-                    Esta conversa foi iniciada por você. O WhatsApp exige o envio de um template aprovado para a primeira mensagem.
-                  </p>
+        {blockingNeedsTemplate && !showTemplates && (
+          <>
+            {/* Erro do envio anterior */}
+            {templateError && (
+              <div className="mx-4 mt-3 flex items-start gap-2 px-3 py-2.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-xl text-sm text-red-700 dark:text-red-400">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium block">Falha ao enviar template</span>
+                  <span className="text-xs break-words">{templateError}</span>
                 </div>
+                <button type="button" onClick={() => setTemplateError(null)} className="text-red-400 hover:text-red-600 flex-shrink-0">
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowTemplates(true)}
-                className="mt-3 px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-              >
-                Escolher template
-              </button>
-            </div>
-          ) : (
-            // Banner laranja: janela de 24h expirada
-            <div className="p-4 bg-orange-50 dark:bg-orange-900/20">
-              <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
-                <Clock className="w-5 h-5" />
-                <div>
-                  <p className="font-medium">Janela de resposta expirada</p>
-                  <p className="text-sm opacity-80">
-                    Use um template aprovado para reabrir a conversa
-                  </p>
+            )}
+            {isNewOutbound ? (
+              // Banner azul: conversa outbound nova, nunca houve resposta
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20">
+                <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                  <Clock className="w-5 h-5" />
+                  <div>
+                    <p className="font-medium">Aguardando primeira resposta do contato</p>
+                    <p className="text-sm opacity-80">
+                      Esta conversa foi iniciada por você. O WhatsApp exige o envio de um template aprovado para a primeira mensagem.
+                    </p>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setShowTemplates(true)}
+                  className="mt-3 px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                >
+                  Escolher template
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowTemplates(true)}
-                className="mt-3 px-4 py-2 text-sm font-medium bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
-              >
-                Enviar template
-              </button>
-            </div>
-          )
+            ) : (
+              // Banner laranja: janela de 24h expirada
+              <div className="p-4 bg-orange-50 dark:bg-orange-900/20">
+                <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
+                  <Clock className="w-5 h-5" />
+                  <div>
+                    <p className="font-medium">Janela de resposta expirada</p>
+                    <p className="text-sm opacity-80">
+                      Use um template aprovado para reabrir a conversa
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowTemplates(true)}
+                  className="mt-3 px-4 py-2 text-sm font-medium bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+                >
+                  Enviar template
+                </button>
+              </div>
+            )}
+          </>
         )}
         {showTemplates && (
           <div className="h-[400px] bg-white dark:bg-slate-900">
@@ -720,10 +807,20 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
 
         {/* Input pill: attach + textarea + emoji + template */}
         <div className={cn(
-          'flex-1 flex items-end rounded-2xl transition-colors',
+          'flex-1 flex items-end rounded-2xl transition-colors relative',
           'bg-slate-100 dark:bg-white/5',
           'ring-1 ring-transparent focus-within:ring-primary-500/50 focus-within:bg-white dark:focus-within:bg-white/[0.07]'
         )}>
+          {/* Menu de respostas rápidas — aparece ao digitar / ou clicar no ícone Zap */}
+          {showQrMenu && (
+            <QuickRepliesMenu
+              items={quickReplies}
+              activeIndex={qrActiveIndex}
+              onSelect={(r) => applyQuickReply(r.content)}
+              onClose={() => { setText(''); setShowQrPicker(false); }}
+              onConfigure={() => { setShowQrPicker(false); router.push('/settings#quick-replies'); }}
+            />
+          )}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -786,6 +883,20 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
             </button>
             <button
               type="button"
+              onClick={() => { setShowQrPicker(prev => !prev); setShowEmojiPicker(false); }}
+              className={cn(
+                'p-2 rounded-xl transition-colors',
+                showQrPicker || (qrQuery !== null && filteredReplies.length > 0)
+                  ? 'text-amber-500'
+                  : 'text-slate-400 hover:text-amber-500 dark:hover:text-amber-400'
+              )}
+              title="Respostas rápidas"
+              aria-label="Respostas rápidas"
+            >
+              <Zap className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
               onClick={() => setShowTemplates(true)}
               className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-xl transition-colors"
               title="Enviar template"
@@ -795,6 +906,17 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
             </button>
           </div>
         </div>
+
+        {/* Botão de agendar mensagem */}
+        <button
+          type="button"
+          onClick={() => setShowScheduleModal(true)}
+          className="flex-shrink-0 p-2.5 rounded-full text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
+          title="Agendar mensagem"
+          aria-label="Agendar mensagem"
+        >
+          <CalendarClock className="w-5 h-5" />
+        </button>
 
         {/* Send or mic button (assinatura adicionada automaticamente ao enviar) */}
         {showMicButton ? (
@@ -823,13 +945,62 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
         )}
       </div>
 
-      {/* Indicador de assinatura ativa */}
-      {profile?.signature?.trim() && (
-        <div className="px-4 pb-2 text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
-          <span>✍️ Assinatura ativa</span>
-          <span className="truncate max-w-[180px] opacity-70">· {profile.signature.trim().split('\n')[0]}</span>
-        </div>
-      )}
+      {/* Toggle de assinatura — sempre visível para o atendente */}
+      <div className="px-4 pb-2 flex items-center gap-2">
+        {profile?.signature?.trim() ? (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                const next = !signatureEnabled;
+                setSignatureEnabled(next);
+                localStorage.setItem('crm_signature_enabled', String(next));
+              }}
+              className={cn(
+                'flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full border transition-colors',
+                signatureEnabled
+                  ? 'border-primary-400/50 text-primary-500 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30'
+                  : 'border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5'
+              )}
+              title={signatureEnabled ? 'Clique para desativar a assinatura' : 'Clique para ativar a assinatura'}
+            >
+              <PenLine className="w-3 h-3 flex-shrink-0" />
+              <span>Assinatura</span>
+              <span className={cn(
+                'font-medium',
+                signatureEnabled ? 'text-primary-500 dark:text-primary-400' : 'text-slate-400'
+              )}>
+                {signatureEnabled ? 'ativa' : 'desativada'}
+              </span>
+            </button>
+            {signatureEnabled && (
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[200px]">
+                · {profile.signature.trim().split('\n')[0]}
+              </span>
+            )}
+          </>
+        ) : (
+          <a
+            href="/settings"
+            className="flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full border border-dashed border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:border-slate-400 transition-colors"
+            title="Configure sua assinatura nas configurações"
+          >
+            <PenLine className="w-3 h-3 flex-shrink-0" />
+            <span>Configurar assinatura</span>
+          </a>
+        )}
+      </div>
+
+      {/* Modal de agendamento */}
+      <ScheduleMessageModal
+        isOpen={showScheduleModal}
+        onClose={() => setShowScheduleModal(false)}
+        conversationId={conversation.id}
+        channelId={conversation.channelId}
+        externalContactId={conversation.externalContactId}
+        contactName={conversation.contactName ?? conversation.externalContactName}
+        initialMessage={text}
+      />
     </form>
   );
 }

@@ -10,6 +10,7 @@ const SHELL_URLS = [
   '/inbox',
   '/contacts',
   '/activities',
+  '/calendar',
   '/icons/icon.svg',
   '/icons/maskable.svg',
 ];

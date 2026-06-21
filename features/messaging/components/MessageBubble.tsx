@@ -19,6 +19,22 @@ import type {
 
 const QUICK_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'] as const;
 
+// Tradução amigável dos erros mais comuns da Meta WhatsApp API
+const META_ERROR_MAP: Record<string, string> = {
+  '131049': 'O WhatsApp bloqueou a entrega para este contato (proteção anti-spam). O contato precisa enviar uma mensagem primeiro para desbloquear.',
+  '131000': 'Parâmetros inválidos na requisição ao WhatsApp.',
+  '132000': 'Número de variáveis não corresponde ao template.',
+  '132005': 'Template não encontrado ou idioma inválido.',
+  '131021': 'Número de telefone inválido ou não registrado no WhatsApp.',
+  '131026': 'Mensagem não entregue — o contato não aceitou os Termos do WhatsApp.',
+  '130472': 'Número máximo de templates de marketing atingido para este contato hoje.',
+};
+
+function describeFailure(errorCode?: string, errorMessage?: string): string {
+  if (errorCode && META_ERROR_MAP[errorCode]) return META_ERROR_MAP[errorCode];
+  return errorMessage || 'Não foi possível entregar.';
+}
+
 // ---------------------------------------------------------------------------
 // Media URL helpers
 // ---------------------------------------------------------------------------
@@ -691,9 +707,14 @@ export const MessageBubble = memo(function MessageBubble({
             </div>
           )}
 
-          {/* Sender name (inbound only) */}
-          {!isOutbound && message.senderName && (
-            <p className="text-xs font-medium text-primary-600 dark:text-primary-400 mb-1">
+          {/* Nome do remetente — inbound: nome do contato/grupo; outbound: atendente ou Julia */}
+          {message.senderName && (
+            <p className={cn(
+              'text-xs font-semibold mb-1',
+              isOutbound
+                ? 'text-white/80'
+                : 'text-primary-600 dark:text-primary-400',
+            )}>
               {message.senderName}
             </p>
           )}
@@ -754,20 +775,23 @@ export const MessageBubble = memo(function MessageBubble({
 
           {/* Error: botão de reenviar + mensagem amigável */}
           {(message.status === 'failed' || isStuck) && (
-            <div className="flex items-center gap-2 mt-1">
-              <p className="text-xs text-red-300 flex-1">
-                {isStuck ? 'Envio travado.' : 'Não foi possível entregar.'}
+            <div className="flex items-start gap-2 mt-1">
+              <p className="text-xs text-red-300 flex-1 leading-tight">
+                {isStuck ? 'Envio travado.' : describeFailure(message.errorCode, message.errorMessage)}
               </p>
-              <button
-                type="button"
-                disabled={isRetrying}
-                onClick={() => retryMessage(message.id)}
-                className="flex items-center gap-1 text-xs text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded px-1.5 py-0.5 transition-colors disabled:opacity-50"
-                aria-label="Reenviar mensagem"
-              >
-                <RotateCcw className={cn('w-3 h-3', isRetrying && 'animate-spin')} />
-                {isRetrying ? 'Reenviando...' : 'Reenviar'}
-              </button>
+              {/* Reenviar não ajuda para templates bloqueados pela Meta (131049) */}
+              {!(message.contentType === 'template' && message.errorCode === '131049') && (
+                <button
+                  type="button"
+                  disabled={isRetrying}
+                  onClick={() => retryMessage(message.id)}
+                  className="flex-shrink-0 flex items-center gap-1 text-xs text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded px-1.5 py-0.5 transition-colors disabled:opacity-50"
+                  aria-label="Reenviar mensagem"
+                >
+                  <RotateCcw className={cn('w-3 h-3', isRetrying && 'animate-spin')} />
+                  {isRetrying ? 'Reenviando...' : 'Reenviar'}
+                </button>
+              )}
             </div>
           )}
         </div>

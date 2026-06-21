@@ -17,6 +17,7 @@ import { dealsService } from '@/lib/supabase';
 import { boardsService } from '@/lib/supabase/boards'; // Added
 import { activitiesService } from '@/lib/supabase/activities';
 import { contactsService } from '@/lib/supabase/contacts';
+import { getClient } from '@/lib/supabase/client';
 import type { Deal, DealView, Board, Activity } from '@/types';
 
 interface MoveDealParams {
@@ -134,7 +135,42 @@ export const useMoveDeal = () => {
       }
       // #endregion
 
-      // 2. Create activity "Moveu para X" (fire and forget - don't block UI)
+      // 2. Sincroniza etiqueta "Perdido" com o estado is_lost do deal (fire and forget)
+      if (deal.contactId) {
+        (async () => {
+          try {
+            const sb = getClient();
+            const { data: lostLabel } = await sb
+              .from('labels')
+              .select('id')
+              .eq('syncs_with_lost', true)
+              .maybeSingle();
+
+            if (lostLabel) {
+              if (isLost === true) {
+                // Atribui etiqueta "Perdido" ao contato (ignora duplicata 23505)
+                const { error: insErr } = await sb
+                  .from('contact_labels')
+                  .insert({ contact_id: deal.contactId, label_id: lostLabel.id });
+                if (insErr && insErr.code !== '23505') {
+                  console.warn('[useMoveDeal] Falha ao atribuir etiqueta Perdido:', insErr.message);
+                }
+              } else if (isLost === false && (deal.isLost || deal.isWon)) {
+                // Remove etiqueta "Perdido" ao reabrir deal
+                await sb
+                  .from('contact_labels')
+                  .delete()
+                  .eq('contact_id', deal.contactId)
+                  .eq('label_id', lostLabel.id);
+              }
+            }
+          } catch (err) {
+            console.warn('[useMoveDeal] Erro ao sincronizar etiqueta Perdido:', err);
+          }
+        })();
+      }
+
+      // 3. Create activity "Moveu para X" (fire and forget - don't block UI)
       const stageLabel = targetStage?.label || targetStageId;
       activitiesService.create({
         dealId,
@@ -337,13 +373,17 @@ export const useMoveDeal = () => {
     // 3. onSettled invalidates → refetch (may get stale data if timing is off)
     // 4. Realtime UPDATE arrives → invalidates again → refetch (may overwrite with old data)
     // By skipping invalidation here, we let Realtime handle sync naturally.
-    onSettled: () => {
+    onSettled: (_data, _err, { deal }) => {
       // #region agent log
       if (process.env.NODE_ENV !== 'production') {
         console.log(`[useMoveDeal] ⏸️ onSettled called (skipping invalidation, waiting for Realtime)`);
       }
       // #endregion
-      // Let Realtime handle synchronization - it will invalidate when the UPDATE event arrives
+      // Let Realtime handle deal synchronization - it will invalidate when the UPDATE event arrives.
+      // Invalida cache de etiquetas do contato para refletir a sync da etiqueta "Perdido".
+      if (deal.contactId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.labels.byContact(deal.contactId) });
+      }
     },
   });
 };

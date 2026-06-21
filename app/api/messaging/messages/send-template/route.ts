@@ -162,6 +162,17 @@ export async function POST(request: NextRequest) {
       ...(renderedText && { renderedText }),
     };
 
+    // Busca nome do atendente para exibir na mensagem
+    const { data: senderProfile } = await supabase
+      .from('profiles')
+      .select('nickname, first_name, last_name')
+      .eq('id', user.id)
+      .maybeSingle();
+    const senderName = senderProfile?.nickname
+      || (senderProfile?.first_name ? `${senderProfile.first_name}${senderProfile.last_name ? ' ' + senderProfile.last_name : ''}` : null)
+      || user.email?.split('@')[0]
+      || null;
+
     // Create message record in database (pending state)
     const messageData = {
       conversation_id: conversationId,
@@ -171,6 +182,7 @@ export async function POST(request: NextRequest) {
       status: 'pending' as const,
       sender_user_id: user.id,
       sender_type: 'user' as const,
+      sender_name: senderName,
       metadata: {
         templateId: dbTemplate.id,
         templateExternalId: dbTemplate.external_id,
@@ -201,10 +213,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    if (parameters?.body && parameters.body.length > 0) {
+    // Conta variáveis numeradas {{N}} no corpo — {{}} vazio não conta como variável Meta
+    const bodyText = bodyComponent?.text ?? '';
+    const numberedVarCount = (bodyText.match(/\{\{\d+\}\}/g) ?? []).length;
+
+    if (parameters?.body && parameters.body.length > 0 && numberedVarCount > 0) {
+      // Envia apenas o número de parâmetros que o template realmente espera
       components.push({
         type: 'body',
-        parameters: parameters.body,
+        parameters: parameters.body.slice(0, numberedVarCount),
       });
     }
 

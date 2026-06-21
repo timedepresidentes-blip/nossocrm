@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, memo, useEffect, useRef } from 'react';
-import { Search, Filter, Inbox, CheckCircle, X, Plus, MessageSquare, Volume2 } from 'lucide-react';
+import { Search, Filter, Inbox, CheckCircle, X, Plus, MessageSquare, Volume2, Tag, UserCheck, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConversationItem } from './ConversationItem';
 import { ChannelIndicator } from './ChannelIndicator';
 import { useConversations } from '@/lib/query/hooks/useConversationsQuery';
+import { useLabels } from '@/lib/query/hooks/useLabelsQuery';
+import { useOrgMembersQuery } from '@/lib/query/hooks/useOrgMembersQuery';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
@@ -77,6 +79,12 @@ export const ConversationList = memo(function ConversationList({
   const [channelFilter, setChannelFilter] = useState<ChannelType | 'all'>('all');
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [labelFilter, setLabelFilter] = useState<string>('all');
+  const [agentFilter, setAgentFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all');
+
+  const { data: labels = [] } = useLabels();
+  const { data: members = [] } = useOrgMembersQuery();
 
   // Busca de contatos paralela à busca de conversas
   const [contactResults, setContactResults] = useState<ContactResult[]>([]);
@@ -121,13 +129,25 @@ export const ConversationList = memo(function ConversationList({
     setContactResults([]);
   }, []);
 
+  // Calcula dateFrom a partir do filtro de período selecionado
+  const dateFrom = useMemo(() => {
+    if (dateFilter === 'all') return undefined;
+    const days = dateFilter === '7d' ? 7 : dateFilter === '30d' ? 30 : 90;
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    return d.toISOString();
+  }, [dateFilter]);
+
   const filters: ConversationFilters = useMemo(() => ({
     status: statusFilter,
     businessUnitId,
     search: searchQuery || undefined,
     channelId: channelFilter !== 'all' ? channelFilter : undefined,
     hasUnread: showUnreadOnly || undefined,
-  }), [statusFilter, businessUnitId, searchQuery, channelFilter, showUnreadOnly]);
+    labelId: labelFilter !== 'all' ? labelFilter : undefined,
+    assignedUserId: agentFilter !== 'all' ? agentFilter : undefined,
+    dateFrom,
+  }), [statusFilter, businessUnitId, searchQuery, channelFilter, showUnreadOnly, labelFilter, agentFilter, dateFrom]);
 
   const { data: conversations, isLoading, error } = useConversations(filters);
 
@@ -135,12 +155,18 @@ export const ConversationList = memo(function ConversationList({
     let count = 0;
     if (channelFilter !== 'all') count++;
     if (showUnreadOnly) count++;
+    if (labelFilter !== 'all') count++;
+    if (agentFilter !== 'all') count++;
+    if (dateFilter !== 'all') count++;
     return count;
-  }, [channelFilter, showUnreadOnly]);
+  }, [channelFilter, showUnreadOnly, labelFilter, agentFilter, dateFilter]);
 
   const clearFilters = () => {
     setChannelFilter('all');
     setShowUnreadOnly(false);
+    setLabelFilter('all');
+    setAgentFilter('all');
+    setDateFilter('all');
   };
 
   const statusTabs = [
@@ -304,6 +330,98 @@ export const ConversationList = memo(function ConversationList({
                   )}
                 />
               </button>
+            </div>
+
+            {/* Etiqueta Filter */}
+            {labels.length > 0 && (
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                  <Tag className="w-3 h-3" /> Etiqueta
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setLabelFilter('all')}
+                    className={cn(
+                      'px-2.5 py-1 text-xs font-medium rounded-full transition-colors',
+                      labelFilter === 'all'
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 hover:border-primary-300'
+                    )}
+                  >
+                    Todas
+                  </button>
+                  {labels.map(label => (
+                    <button
+                      key={label.id}
+                      type="button"
+                      onClick={() => setLabelFilter(labelFilter === label.id ? 'all' : label.id)}
+                      className={cn(
+                        'flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full transition-colors',
+                        labelFilter === label.id
+                          ? 'text-white'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 hover:border-primary-300'
+                      )}
+                      style={labelFilter === label.id ? { backgroundColor: label.color } : {}}
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: labelFilter === label.id ? 'white' : label.color, opacity: labelFilter === label.id ? 0.8 : 1 }}
+                      />
+                      {label.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Atendente Filter */}
+            {members.length > 1 && (
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                  <UserCheck className="w-3 h-3" /> Atendente
+                </label>
+                <select
+                  value={agentFilter}
+                  onChange={e => setAgentFilter(e.target.value)}
+                  className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                >
+                  <option value="all">Todos os atendentes</option>
+                  <option value="unassigned">Sem atribuição</option>
+                  {members.map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Período Filter */}
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                <Calendar className="w-3 h-3" /> Período
+              </label>
+              <div className="flex gap-1.5">
+                {[
+                  { id: 'all', label: 'Tudo' },
+                  { id: '7d', label: '7 dias' },
+                  { id: '30d', label: '30 dias' },
+                  { id: '90d', label: '90 dias' },
+                ].map(opt => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setDateFilter(opt.id)}
+                    className={cn(
+                      'flex-1 py-1 text-xs font-medium rounded-lg transition-colors',
+                      dateFilter === opt.id
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 hover:border-primary-300'
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Clear Filters */}

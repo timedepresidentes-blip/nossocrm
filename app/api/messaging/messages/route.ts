@@ -91,6 +91,17 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Busca nome do atendente para exibir nas mensagens
+    const { data: senderProfile } = await supabase
+      .from('profiles')
+      .select('nickname, first_name, last_name')
+      .eq('id', user.id)
+      .maybeSingle();
+    const senderName = senderProfile?.nickname
+      || (senderProfile?.first_name ? `${senderProfile.first_name}${senderProfile.last_name ? ' ' + senderProfile.last_name : ''}` : null)
+      || user.email?.split('@')[0]
+      || null;
+
     // Cria a mensagem no banco (status pending)
     const messageData = {
       conversation_id: conversationId,
@@ -101,6 +112,7 @@ export async function POST(request: NextRequest) {
       status: 'pending' as const,
       sender_user_id: user.id,
       sender_type: 'user' as const,
+      sender_name: senderName,
       metadata: {},
     };
 

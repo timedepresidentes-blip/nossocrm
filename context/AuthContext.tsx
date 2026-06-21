@@ -59,6 +59,7 @@ interface Profile {
     phone?: string | null;
     avatar_url?: string | null;
     signature?: string | null;
+    status?: 'online' | 'away' | 'busy';
     created_at?: string;
 }
 

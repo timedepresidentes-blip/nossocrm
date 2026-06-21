@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase';
 export interface OrgMember {
   id: string;
   name: string;
+  status: 'online' | 'away' | 'busy';
 }
 
 export function useOrgMembersQuery() {
@@ -26,7 +27,7 @@ export function useOrgMembersQuery() {
     queryFn: async (): Promise<OrgMember[]> => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, name')
+        .select('id, name, status')
         .eq('organization_id', orgId!)
         .order('name');
 
@@ -34,10 +35,11 @@ export function useOrgMembersQuery() {
       return (data ?? []).map((p) => ({
         id: p.id,
         name: p.name ?? 'Sem nome',
+        status: (p.status as OrgMember['status']) ?? 'online',
       }));
     },
     enabled: !!orgId,
-    staleTime: 5 * 60 * 1000, // 5 minutos
-    gcTime: 30 * 60 * 1000, // 30 minutos
+    staleTime: 30_000, // 30s — status muda com frequência
+    gcTime: 5 * 60 * 1000,
   });
 }

@@ -20,6 +20,7 @@ import { useToast } from '@/context/ToastContext';
 import { ConfirmDialog as ConfirmModal } from '@/components/ui/confirm-dialog';
 import { LossReasonModal } from '@/components/ui/LossReasonModal';
 import { useMoveDealSimple } from '@/lib/query/hooks';
+import { useLabels, useAssignLabel } from '@/lib/query/hooks/useLabelsQuery';
 import { DEALS_VIEW_KEY } from '@/lib/query';
 import { FocusTrap, useFocusReturn } from '@/lib/a11y';
 import { Activity, DealView } from '@/types';
@@ -138,6 +139,8 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
 
   // Use unified TanStack Query hook for moving deals
   const { moveDeal } = useMoveDealSimple(dealBoard, lifecycleStages);
+  const { data: allLabels = [] } = useLabels();
+  const assignLabel = useAssignLabel();
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isEditingValue, setIsEditingValue] = useState(false);
@@ -1277,8 +1280,13 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
             if (targetStageId) {
               moveDeal(deal, targetStageId, reason);
             } else {
-              // Fallback: just mark as lost without moving
+              // Fallback: marca como perdido sem mover de estágio
               updateDeal(deal.id, { isLost: true, isWon: false, closedAt: new Date().toISOString(), lossReason: reason });
+              // Atribui etiqueta "Perdido" sincronizada
+              const lostLabel = allLabels.find(l => l.syncsWithLost);
+              if (lostLabel && deal.contactId) {
+                assignLabel.mutate({ contactId: deal.contactId, labelId: lostLabel.id });
+              }
             }
             setShowLossReasonModal(false);
             setPendingLostStageId(null);

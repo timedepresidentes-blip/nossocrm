@@ -23,6 +23,8 @@ import {
   Check,
   Target,
   PanelRightClose,
+  CalendarDays,
+  Bell,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -36,6 +38,8 @@ import { useUpdateContact } from '@/lib/query/hooks/useContactsQuery';
 import { useToggleConversationAiPause, useToggleClosingMode } from '@/lib/query/hooks/useMessagingConversationsQuery';
 import { useContactNotes, useCreateContactNote, useDeleteContactNote } from '@/lib/query/hooks/useContactNotesQuery';
 import { useLabels, useContactLabels, useAssignLabel, useRemoveLabel, useCreateLabel } from '@/lib/query/hooks/useLabelsQuery';
+import { useRemindersByContact, useCreateReminder, useUpdateReminder, useDeleteReminder, type CalendarReminder, type ReminderType } from '@/lib/query/hooks/useRemindersQuery';
+import { ReminderModal } from '@/features/calendar/components/ReminderModal';
 
 interface ContactPanelProps {
   conversation: ConversationView | null | undefined;
@@ -134,6 +138,39 @@ export const ContactPanel = memo(function ContactPanel({
   const [newLabelName, setNewLabelName] = useState('');
   const [newLabelColor, setNewLabelColor] = useState('#6366f1');
   const labelPickerRef = useRef<HTMLDivElement>(null);
+
+  // Lembretes do contato
+  const { data: contactReminders = [] } = useRemindersByContact(contactId);
+  const createReminder = useCreateReminder();
+  const updateReminder = useUpdateReminder();
+  const deleteReminder = useDeleteReminder();
+  const [reminderModalOpen, setReminderModalOpen] = useState(false);
+  const [editingReminder, setEditingReminder] = useState<CalendarReminder | undefined>();
+
+  function handleSaveReminder(data: {
+    title: string;
+    notes?: string;
+    type: ReminderType;
+    scheduledAt: string;
+    alarmMinutesBefore: number;
+  }) {
+    if (editingReminder) {
+      updateReminder.mutate({ id: editingReminder.id, ...data }, {
+        onSuccess: () => { setReminderModalOpen(false); setEditingReminder(undefined); },
+      });
+    } else {
+      createReminder.mutate({ ...data, contactId }, {
+        onSuccess: () => setReminderModalOpen(false),
+      });
+    }
+  }
+
+  function handleDeleteReminder() {
+    if (!editingReminder) return;
+    deleteReminder.mutate(editingReminder.id, {
+      onSuccess: () => { setReminderModalOpen(false); setEditingReminder(undefined); },
+    });
+  }
 
   // Fecha o picker de etiquetas ao clicar fora
   useEffect(() => {
@@ -551,6 +588,67 @@ export const ContactPanel = memo(function ContactPanel({
             )}
           </Section>
         )}
+
+        {/* Lembretes do contato */}
+        {contactId && (
+          <Section title="Lembretes" defaultOpen={false}>
+            <div className="space-y-2">
+              {/* Botão para novo lembrete */}
+              <button
+                type="button"
+                onClick={() => { setEditingReminder(undefined); setReminderModalOpen(true); }}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-slate-300 dark:border-white/20 text-slate-500 dark:text-slate-400 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-400 text-xs transition-colors"
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+                Agendar lembrete / compromisso
+              </button>
+
+              {/* Lista de lembretes existentes */}
+              {contactReminders.length > 0 && (
+                <div className="space-y-1.5 mt-2">
+                  {contactReminders.map(r => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => { setEditingReminder(r); setReminderModalOpen(true); }}
+                      className={cn(
+                        'w-full flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-colors',
+                        r.isDone
+                          ? 'border-slate-100 dark:border-white/5 bg-slate-50 dark:bg-white/5 opacity-50'
+                          : 'border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary-300 dark:hover:border-primary-700'
+                      )}
+                    >
+                      <Bell className={cn('w-3.5 h-3.5 mt-0.5 shrink-0', r.isDone ? 'text-slate-300' : 'text-primary-500')} />
+                      <div className="min-w-0 flex-1">
+                        <p className={cn('text-xs font-medium truncate', r.isDone ? 'line-through text-slate-400' : 'text-slate-800 dark:text-white')}>
+                          {r.title}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          {format(new Date(r.scheduledAt), "d MMM 'às' HH:mm", { locale: ptBR })}
+                        </p>
+                      </div>
+                      {r.isDone && <Check className="w-3.5 h-3.5 text-green-500 mt-0.5 shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {contactReminders.length === 0 && (
+                <p className="text-xs text-slate-400 mt-1">Nenhum lembrete para este contato.</p>
+              )}
+            </div>
+          </Section>
+        )}
+
+        {/* Lembrete modal */}
+        <ReminderModal
+          isOpen={reminderModalOpen}
+          onClose={() => { setReminderModalOpen(false); setEditingReminder(undefined); }}
+          onSave={handleSaveReminder}
+          onDelete={editingReminder ? handleDeleteReminder : undefined}
+          reminder={editingReminder}
+          isSaving={createReminder.isPending || updateReminder.isPending}
+        />
 
         {/* Contact Info */}
         <Section title="Informações">

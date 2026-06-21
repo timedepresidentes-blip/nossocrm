@@ -510,9 +510,10 @@ async function handleMessageUpsert(
     })
     .eq("id", conversationId);
 
-  // Trigger AI (text messages only)
+  // Aciona AI para mensagens de texto — await garante que o fetch completa
+  // antes do handler Deno retornar (sem await o runtime cancela a requisição)
   if (content.type === "text" && content.text) {
-    triggerAIProcessing({
+    await triggerAIProcessing({
       conversationId,
       organizationId: channel.organization_id,
       messageText: content.text,

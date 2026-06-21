@@ -18,6 +18,14 @@ import { periodToDateRange } from '@/lib/utils/periodToDateRange';
 // Types
 // =============================================================================
 
+export interface AgentStat {
+  user_id: string | null;
+  name: string;
+  conversations: number;
+  messages: number;
+  avg_response_seconds: number;
+}
+
 export interface MessagingMetrics {
   messagesSent: {
     total: number;
@@ -37,6 +45,8 @@ export interface MessagingMetrics {
     responded: number;
     total: number;
   };
+  dailyConversations: Array<{ date: string; count: number }>;
+  agentStats: AgentStat[];
 }
 
 // =============================================================================

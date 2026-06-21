@@ -44,7 +44,8 @@ import {
   Bug,
   CheckSquare,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Megaphone,
 } from 'lucide-react';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useAuth } from '../context/AuthContext';
@@ -62,7 +63,10 @@ import { useUnreadCount } from '@/lib/query/hooks/useConversationsQuery';
 import { UIChat } from './ai/UIChat';
 
 import { NotificationPopover } from './notifications/NotificationPopover';
+import { CalendarQuickButton } from './calendar/CalendarQuickButton';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { StatusPicker, StatusDot } from './StatusPicker';
+import { useMyStatus, useOrgStatusRealtime } from '@/lib/hooks/useAgentStatus';
 
 /**
  * Props do componente Layout
@@ -79,6 +83,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/activities': 'Atividades',
   '/decisions': 'Decisões',
   '/reports': 'Relatórios',
+  '/campaigns': 'Campanhas',
   '/settings': 'Configurações',
   '/profile': 'Perfil',
   '/ai': 'Assistente IA',
@@ -198,6 +203,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   // Messaging unread count for notification badge
   const { data: unreadMessagesCount = 0 } = useUnreadCount();
+
+  // Status do atendente
+  const { status: myStatus } = useMyStatus();
+  const { profile: profileForOrg } = useAuth();
+  useOrgStatusRealtime(profileForOrg?.organization_id);
 
   useEffect(() => {
     setDebugEnabled(isDebugMode());
@@ -350,6 +360,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             { to: '/contacts', icon: Users, label: 'Contatos', prefetch: 'contacts' as const, badge: undefined },
             { to: '/activities', icon: CheckSquare, label: 'Atividades', prefetch: 'activities' as const, badge: undefined },
             { to: '/reports', icon: BarChart3, label: 'Relatórios', prefetch: 'reports' as const, badge: undefined },
+            { to: '/campaigns', icon: Megaphone, label: 'Campanhas', prefetch: undefined, badge: undefined },
             { to: '/settings', icon: Settings, label: 'Configurações', prefetch: 'settings' as const, badge: undefined },
           ].map((item) => {
             if (sidebarCollapsed) {
@@ -413,22 +424,28 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               className={`flex items-center gap-3 rounded-xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all group focus-visible-ring ${sidebarCollapsed ? 'p-0 w-10 h-10 justify-center' : 'w-full p-3'
                 }`}
             >
-              {profile?.avatar_url ? (
-                <Image
-                  src={profile.avatar_url}
-                  alt=""
-                  width={40}
-                  height={40}
-                  className="w-10 h-10 rounded-full object-cover ring-2 ring-white dark:ring-slate-800 shadow-lg"
-                  unoptimized
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-sm ring-2 ring-white dark:ring-slate-800 shadow-lg shrink-0" aria-hidden="true">
-                  {profile?.first_name && profile?.last_name
-                    ? `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase()
-                    : profile?.nickname?.substring(0, 2).toUpperCase() || userInitials}
-                </div>
-              )}
+              <div className="relative shrink-0">
+                {profile?.avatar_url ? (
+                  <Image
+                    src={profile.avatar_url}
+                    alt=""
+                    width={40}
+                    height={40}
+                    className="w-10 h-10 rounded-full object-cover ring-2 ring-white dark:ring-slate-800 shadow-lg"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-sm ring-2 ring-white dark:ring-slate-800 shadow-lg" aria-hidden="true">
+                    {profile?.first_name && profile?.last_name
+                      ? `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase()
+                      : profile?.nickname?.substring(0, 2).toUpperCase() || userInitials}
+                  </div>
+                )}
+                {/* Indicador de status */}
+                <span className="absolute -bottom-0.5 -right-0.5">
+                  <StatusDot status={myStatus} size="sm" />
+                </span>
+              </div>
 
               {!sidebarCollapsed && (
                 <>
@@ -465,6 +482,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   className={`absolute bottom-full mb-2 z-50 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-150 ${sidebarCollapsed ? 'left-0 w-48' : 'left-0 right-0'}`}
                 >
                   <div className="p-1">
+                    {/* Seletor de status */}
+                    <StatusPicker />
+                    <div className="my-1 border-t border-slate-100 dark:border-slate-700" />
                     <Link
                       href="/profile"
                       onClick={() => setIsUserMenuOpen(false)}
@@ -551,6 +571,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </button>
               )}
 
+              <CalendarQuickButton />
               <NotificationPopover />
               <button
                 type="button"

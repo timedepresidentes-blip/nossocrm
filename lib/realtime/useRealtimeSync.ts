@@ -391,12 +391,27 @@ export function useRealtimeSync(
           // HTTP DELETE response. If we let it through, it queues a conversations-list refetch
           // that returns the conversation (still in DB at that instant), causing the flicker.
           if (table === 'messaging_conversations' && payload.eventType !== 'DELETE') {
+            // Nova conversa criada por inbound (webhook do WhatsApp)
+            if (payload.eventType === 'INSERT') {
+              playSound('nova_conversa');
+            }
+
             const convId = ((payload.new || payload.old) as Record<string, unknown>)?.id as string | undefined;
             if (convId && (pendingDeletionIds.has(convId) || confirmedDeletedIds.has(convId))) {
               if (DEBUG_REALTIME) {
                 console.log('[Realtime] ⏭️ Skip conversations UPDATE for pending/confirmed deletion:', convId.slice(0, 8));
               }
               return;
+            }
+
+            // Para UPDATE: invalida o detail query da conversa afetada
+            // Isso garante que isWindowExpired seja recalculado quando o cliente
+            // responde a um template e window_expires_at é atualizado no banco
+            if (payload.eventType === 'UPDATE' && convId) {
+              pendingInvalidationsRef.current.add(queryKeys.messagingConversations.detail(convId));
+              if (DEBUG_REALTIME) {
+                console.log('[Realtime] 🔄 Queued detail invalidation for conversation UPDATE:', convId.slice(0, 8));
+              }
             }
           }
 

@@ -9,9 +9,11 @@
  */
 
 import React, { useState } from 'react';
-import { Send, UserPlus, Clock, CheckCircle, MessageSquare, Inbox } from 'lucide-react';
+import { Send, UserPlus, Clock, CheckCircle, MessageSquare, Inbox, BarChart2, Users } from 'lucide-react';
 import { useMessagingMetricsQuery, useOrgMembersQuery } from '@/lib/query/hooks';
 import type { PeriodFilter } from '../hooks/useDashboardMetrics';
+import { DailyConversationsChart } from './DailyConversationsChart';
+import { AgentPerformanceTable } from './AgentPerformanceTable';
 
 // =============================================================================
 // Helpers
@@ -286,6 +288,25 @@ export function MessagingMetricsSection({ period }: { period: PeriodFilter }) {
           Distribuição por Remetente
         </h3>
         <SenderDistributionBar byType={messagesSent.byType} total={messagesSent.total} />
+      </div>
+
+      {/* Atendimentos por Dia + Performance por Atendente (lado a lado em telas grandes) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="glass p-5 rounded-xl border border-slate-200 dark:border-white/5 shadow-sm">
+          <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-1.5">
+            <BarChart2 size={14} />
+            Atendimentos por Dia
+          </h3>
+          <DailyConversationsChart data={data.dailyConversations ?? []} />
+        </div>
+
+        <div className="glass p-5 rounded-xl border border-slate-200 dark:border-white/5 shadow-sm">
+          <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-3 flex items-center gap-1.5">
+            <Users size={14} />
+            Performance por Atendente
+          </h3>
+          <AgentPerformanceTable data={data.agentStats ?? []} />
+        </div>
       </div>
     </div>
   );

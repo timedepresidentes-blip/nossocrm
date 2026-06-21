@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose } from 'lucide-react';
+import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, CalendarClock } from 'lucide-react';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,7 @@ import { ConversationList } from './components/ConversationList';
 import { MessageThread } from './components/MessageThread';
 import { MessageInput } from './components/MessageInput';
 import { ContactPanel } from './components/ContactPanel';
+import { ScheduledMessagesPanel } from './components/ScheduledMessagesPanel';
 import { ContactLinkModal } from './components/Modals/ContactLinkModal';
 import { NewConversationModal } from './components/Modals/NewConversationModal';
 import { ChannelIndicator } from './components/ChannelIndicator';
@@ -42,6 +43,7 @@ import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
 import { queryKeys } from '@/lib/query';
 import { useContactPresence } from '@/lib/messaging/hooks/useContactPresence';
 import type { ConversationView } from '@/lib/messaging/types';
+import { useScheduledMessagesQuery } from '@/lib/query/hooks/useScheduledMessagesQuery';
 
 // Limites de largura das colunas do messaging (em px)
 const MSG_LEFT_MIN = 200, MSG_LEFT_MAX = 500, MSG_LEFT_DEFAULT = 320;
@@ -72,6 +74,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
   } | undefined>(undefined);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showScheduledPanel, setShowScheduledPanel] = useState(false);
   const [replyToMessage, setReplyToMessage] = useState<import('@/lib/messaging/types').MessagingMessage | null>(null);
 
   // Larguras e estados de colapso das colunas (persistidos no localStorage)
@@ -127,8 +130,27 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
   useRealtimeSyncMessaging();
   const { play: playTestSound } = useNotificationSound();
 
+  // Listener para handoff da IA — servidor faz broadcast quando julia passa para humano
+  useEffect(() => {
+    const orgId = profile?.organization_id;
+    if (!orgId) return;
+
+    const channel = supabase
+      .channel(`org:${orgId}:notifications`)
+      .on('broadcast', { event: 'ai_handoff' }, () => {
+        playTestSound('ai_handoff');
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [profile?.organization_id, playTestSound]);
+
   // Fetch selected conversation details
   const { data: selectedConversation, isLoading: isConversationLoading } = useConversation(selectedConversationId);
+
+  // Contagem de mensagens agendadas pendentes para badge
+  const { data: scheduledMessages = [] } = useScheduledMessagesQuery(selectedConversationId);
+  const pendingScheduledCount = scheduledMessages.filter((m) => m.status === 'pending').length;
 
   // Mutations
   const { mutate: markAsRead } = useMarkConversationRead();
@@ -368,6 +390,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
                   assignedUserId={selectedConversation.assignedUserId}
                   conversationMetadata={selectedConversation.metadata}
                   assignedAt={selectedConversation.assignedAt}
+                  contactName={selectedConversation.contactName || selectedConversation.externalContactName}
                 />
                 <AssignmentDropdown
                   conversationId={selectedConversation.id}
@@ -396,6 +419,27 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
                   title="Buscar mensagens"
                 >
                   <Search className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowScheduledPanel((v) => !v);
+                    if (rightCollapsed) toggleRightPanel();
+                  }}
+                  className={cn(
+                    'relative p-2 rounded-lg transition-colors',
+                    showScheduledPanel
+                      ? 'text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10'
+                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
+                  )}
+                  title="Mensagens agendadas"
+                >
+                  <CalendarClock className="w-5 h-5" />
+                  {pendingScheduledCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] flex items-center justify-center px-0.5 text-[9px] font-bold text-white bg-indigo-500 rounded-full">
+                      {pendingScheduledCount}
+                    </span>
+                  )}
                 </button>
                 {selectedConversation.status === 'open' && (
                   <button
@@ -514,12 +558,17 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
         </button>
       )}
 
-      {/* Coluna direita: Painel do contato */}
+      {/* Coluna direita: Painel do contato ou mensagens agendadas */}
       <div
         style={{ width: rightCollapsed ? 0 : msgRightWidth, transition: 'width 200ms ease' }}
         className="flex-shrink-0 overflow-hidden border-l border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900"
       >
-        {!rightCollapsed && (
+        {!rightCollapsed && showScheduledPanel ? (
+          <ScheduledMessagesPanel
+            conversationId={selectedConversationId}
+            onClose={() => setShowScheduledPanel(false)}
+          />
+        ) : !rightCollapsed ? (
           <ContactPanel
             conversation={selectedConversation}
             isLoading={isConversationLoading && !!selectedConversationId}
@@ -528,7 +577,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
             onViewDeals={handleViewDeals}
             onCollapse={toggleRightPanel}
           />
-        )}
+        ) : null}
       </div>
 
       {/* New Conversation Modal */}

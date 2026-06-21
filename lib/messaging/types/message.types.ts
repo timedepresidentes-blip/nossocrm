@@ -449,6 +449,8 @@ export interface ConversationFilters {
   assignedUserId?: string | 'unassigned';
   hasUnread?: boolean;
   search?: string;
+  labelId?: string;
+  dateFrom?: string; // ISO — filtra por last_message_at >= dateFrom
   sortBy?: 'lastMessageAt' | 'createdAt' | 'unreadCount';
   sortOrder?: 'asc' | 'desc';
 }

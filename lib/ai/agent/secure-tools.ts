@@ -441,6 +441,7 @@ export function createSecureToolCollection(context: ToolContext) {
             content_type: 'text',
             status: 'pending',
             sender_type: 'agent',
+            sender_name: 'Julia',
             metadata: {
               sent_by: 'ai_agent',
               user_approved: true,

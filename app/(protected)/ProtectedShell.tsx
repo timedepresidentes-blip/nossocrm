@@ -10,6 +10,14 @@ import { AuthProvider } from '@/context/AuthContext'
 import { AIProvider } from '@/context/AIContext'
 import Layout from '@/components/Layout'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { useReminderAlarm } from '@/lib/hooks/useReminderAlarm'
+import { ReminderAlarmOverlay } from '@/components/calendar/ReminderAlarmOverlay'
+
+// Renderiza o overlay de alarme global quando há lembretes disparando
+function ReminderAlarmMount() {
+  const { activeAlarms, dismissAlarm } = useReminderAlarm();
+  return <ReminderAlarmOverlay alarms={activeAlarms} onDismiss={dismissAlarm} />;
+}
 
 export default function ProtectedShell({
     children,
@@ -66,6 +74,7 @@ export default function ProtectedShell({
                     <AuthProvider>
                         <AIProvider>
                             <TooltipProvider delayDuration={200}>
+                                <ReminderAlarmMount />
                                 {shouldUseAppShell ? <Layout>{children}</Layout> : children}
                             </TooltipProvider>
                         </AIProvider>
