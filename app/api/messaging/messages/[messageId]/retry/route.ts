@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createStaticAdminClient } from '@/lib/supabase/staticAdminClient';
 import { getChannelRouter, transformMessage } from '@/lib/messaging';
-import type { MessageContent, DbMessagingMessage, AudioContent } from '@/lib/messaging';
+import type { MessageContent, DbMessagingMessage, AudioContent, SendTemplateParams } from '@/lib/messaging';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -207,12 +207,33 @@ export async function POST(
       }
     }
 
-    const result = await router.sendMessage(conversation.channel_id, {
-      conversationId: conversation.id,
-      to: conversation.external_contact_id,
-      content,
-      replyToMessageId: message.reply_to_message_id || undefined,
-    });
+    // Template messages precisam de sendTemplate — sendMessage não suporta type:'template'
+    let result;
+    if (content.type === 'template') {
+      const tmplContent = content as unknown as {
+        templateName: string;
+        templateLanguage: string;
+        parameters?: { body?: { type: string; text?: string }[] };
+      };
+      const bodyParams = tmplContent.parameters?.body ?? [];
+      const sendTemplateParams: SendTemplateParams = {
+        conversationId: conversation.id,
+        to: conversation.external_contact_id,
+        templateName: tmplContent.templateName,
+        templateLanguage: tmplContent.templateLanguage,
+        components: bodyParams.length > 0
+          ? [{ type: 'body', parameters: bodyParams }]
+          : undefined,
+      };
+      result = await router.sendTemplate(conversation.channel_id, sendTemplateParams);
+    } else {
+      result = await router.sendMessage(conversation.channel_id, {
+        conversationId: conversation.id,
+        to: conversation.external_contact_id,
+        content,
+        replyToMessageId: message.reply_to_message_id || undefined,
+      });
+    }
 
     // Update status based on result
     if (result.success) {

@@ -101,18 +101,27 @@ export async function getOrgAIConfig(
 
   const provider = (orgSettings.ai_provider || AI_DEFAULT_PROVIDER) as AIProvider;
 
-  // Selecionar a chave correta baseado no provider
+  // Env vars como fallback quando chave não está no banco
+  const ENV_KEY_MAP: Record<AIProvider, string> = {
+    google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+    openai: 'OPENAI_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+  };
+
   const getApiKey = () => {
-    switch (provider) {
-      case 'google':
-        return orgSettings.ai_google_key || '';
-      case 'openai':
-        return orgSettings.ai_openai_key || '';
-      case 'anthropic':
-        return orgSettings.ai_anthropic_key || '';
-      default:
-        return '';
+    const dbKey = (() => {
+      switch (provider) {
+        case 'google': return orgSettings.ai_google_key || '';
+        case 'openai': return orgSettings.ai_openai_key || '';
+        case 'anthropic': return orgSettings.ai_anthropic_key || '';
+        default: return '';
+      }
+    })();
+    const envKey = process.env[ENV_KEY_MAP[provider]] || '';
+    if (!dbKey && envKey) {
+      console.log(`[AIAgent] Using env var key for provider ${provider} (not set in DB)`);
     }
+    return dbKey || envKey;
   };
 
   const apiKey = getApiKey();
@@ -147,9 +156,9 @@ export async function getOrgAIConfig(
     takeoverEnabled: orgSettings.ai_takeover_enabled === true,
     takeoverMinutes: orgSettings.ai_takeover_minutes ?? 15,
     allKeys: {
-      google: orgSettings.ai_google_key || null,
-      openai: orgSettings.ai_openai_key || null,
-      anthropic: orgSettings.ai_anthropic_key || null,
+      google: orgSettings.ai_google_key || process.env['GOOGLE_GENERATIVE_AI_API_KEY'] || null,
+      openai: orgSettings.ai_openai_key || process.env['OPENAI_API_KEY'] || null,
+      anthropic: orgSettings.ai_anthropic_key || process.env['ANTHROPIC_API_KEY'] || null,
     },
     baseSystemPrompt: orgSettings.ai_base_system_prompt || null,
     timezone: orgSettings.timezone || 'America/Sao_Paulo',
@@ -166,6 +175,8 @@ export interface ProcessMessageParams {
   organizationId: string;
   incomingMessage: string;
   messageId?: string;
+  /** Quando definido, bypassa a verificação de ai_paused e substitui o prompt de disparo */
+  triggerContext?: string;
 }
 
 // =============================================================================
@@ -191,9 +202,9 @@ export interface ProcessMessageParams {
 export async function processIncomingMessage(
   params: ProcessMessageParams
 ): Promise<AgentProcessResult> {
-  const { supabase, conversationId, organizationId, incomingMessage, messageId } = params;
+  const { supabase, conversationId, organizationId, incomingMessage, messageId, triggerContext } = params;
 
-  console.log('[AIAgent] Processing message:', { conversationId, messageId });
+  console.log('[AIAgent] Processing message:', { conversationId, messageId, trigger: !!triggerContext, org: organizationId });
 
   // 0a. Rate limit check (per-conversation)
   const rateCheck = checkRateLimit(conversationId);
@@ -216,8 +227,9 @@ export async function processIncomingMessage(
     .single();
 
   // 0b. Check if AI is paused for this conversation (metadata) or contact
+  // triggerContext bypassa esta verificação — o atendente já desbloqueou a Julia manualmente
   const conversationMetadata = (conversation?.metadata || {}) as Record<string, unknown>;
-  if (conversationMetadata.ai_paused === true) {
+  if (!triggerContext && conversationMetadata.ai_paused === true) {
     console.log('[AIAgent] AI paused for this conversation:', conversationId);
     return {
       success: true,
@@ -248,6 +260,7 @@ export async function processIncomingMessage(
   }
 
   const dealId = conversationMetadata.deal_id as string | undefined;
+  console.log('[AIAgent] Conversation meta:', { dealId, ai_paused: conversationMetadata.ai_paused, contact_id: conversation?.contact_id });
 
   if (!dealId) {
     console.log('[AIAgent] No deal associated, skipping AI processing');
@@ -267,7 +280,9 @@ export async function processIncomingMessage(
     .eq('id', dealId)
     .single();
 
+  console.log('[AIAgent] Deal fetched:', { id: deal?.id, stage_id: deal?.stage_id });
   if (!deal?.stage_id) {
+    console.log('[AIAgent] Skipping: deal without stage, dealId:', dealId);
     return {
       success: true,
       decision: {
@@ -285,6 +300,7 @@ export async function processIncomingMessage(
     .eq('enabled', true)
     .single();
 
+  console.log('[AIAgent] Stage config:', { found: !!stageConfig, stage_id: deal.stage_id });
   if (!stageConfig) {
     console.log('[AIAgent] AI not enabled for this stage');
     return {
@@ -339,8 +355,8 @@ export async function processIncomingMessage(
   }
 
   // 4b. Verificar inatividade do operador (AI Takeover).
-  // Verifica se existe mensagem humana recente, independente de atribuição formal.
-  if (aiConfig.takeoverEnabled) {
+  // triggerContext: atendente explicitamente devolveu para Julia — bypassa o check de takeover.
+  if (aiConfig.takeoverEnabled && !triggerContext) {
     const operatorActive = await isOperatorActive(
       supabase,
       conversationId,
@@ -360,6 +376,8 @@ export async function processIncomingMessage(
     }
 
     console.log(`[AIAgent] Operator inactive for >${aiConfig.takeoverMinutes}min, AI taking over`);
+  } else if (triggerContext) {
+    console.log('[AIAgent] Takeover check bypassed — manual handoff trigger');
   }
 
   // 5. Montar contexto do lead
@@ -370,6 +388,7 @@ export async function processIncomingMessage(
   });
 
   if (!context) {
+    console.log('[AIAgent] Skipping: context build failed for', conversationId);
     return {
       success: false,
       decision: {
@@ -383,8 +402,11 @@ export async function processIncomingMessage(
     };
   }
 
+  console.log('[AIAgent] Context built, ai_messages_count:', context.stats.ai_messages_count, 'max:', config.settings.max_messages_per_conversation);
+
   // 6. Verificar limite de mensagens
   if (context.stats.ai_messages_count >= config.settings.max_messages_per_conversation) {
+    console.log('[AIAgent] Skipping: message limit reached');
     return {
       success: true,
       decision: await handleHandoff(supabase, conversationId, organizationId, context, 'Limite de mensagens atingido'),
@@ -406,15 +428,20 @@ export async function processIncomingMessage(
     };
   }
 
-  // 8. Verificar horário comercial
+  // 8. Verificar horário comercial — ignorado em triggers manuais (atendente decidiu acionar)
   if (config.settings.business_hours_only && !isBusinessHours(config.settings.business_hours)) {
-    return {
-      success: true,
-      decision: {
-        action: 'skipped',
-        reason: 'Fora do horário comercial',
-      },
-    };
+    if (triggerContext) {
+      console.log('[AIAgent] Business hours check bypassed — manual handoff trigger');
+    } else {
+      console.log('[AIAgent] Skipping: outside business hours');
+      return {
+        success: true,
+        decision: {
+          action: 'skipped',
+          reason: 'Fora do horário comercial',
+        },
+      };
+    }
   }
 
   // 9. Gerar resposta usando configuração de AI do banco
@@ -424,6 +451,7 @@ export async function processIncomingMessage(
     incomingMessage,
     aiConfig,
     closingMode: conversation?.closing_mode ?? false,
+    triggerContext,
   });
 
   // Record rate call only on actual AI response (not on skipped/handoff)
@@ -532,10 +560,11 @@ interface GenerateResponseParams {
   incomingMessage: string;
   aiConfig: OrgAIConfig;
   closingMode?: boolean;
+  triggerContext?: string;
 }
 
 async function generateResponse(params: GenerateResponseParams): Promise<AgentDecision> {
-  const { context, stageConfig, incomingMessage, aiConfig, closingMode } = params;
+  const { context, stageConfig, incomingMessage, aiConfig, closingMode, triggerContext } = params;
 
   const systemPrompt = buildSystemPrompt(
     context,
@@ -547,7 +576,10 @@ async function generateResponse(params: GenerateResponseParams): Promise<AgentDe
   );
   const contextText = formatContextForPrompt(context);
 
-  const userPrompt = `
+  // triggerContext: acionado por handoff manual — Julia deve se apresentar e retomar
+  const userPrompt = triggerContext
+    ? `${contextText}\n\n---\n\n${triggerContext}\n\nResponda de forma natural, seguindo as instruções do sistema.`
+    : `
 ${contextText}
 
 ---
@@ -585,10 +617,11 @@ Responda de forma natural, seguindo as instruções do sistema.
       model_used: result.modelUsed || modelId,
     };
   } catch (error) {
-    console.error('[AIAgent] All providers failed:', error);
+    const msg = error instanceof Error ? error.message : 'Unknown';
+    console.error('[AIAgent] All providers failed. Summary:', msg);
     return {
       action: 'skipped',
-      reason: `Erro na geração: ${error instanceof Error ? error.message : 'Unknown'}`,
+      reason: `Erro na geração: ${msg}`,
     };
   }
 }
@@ -706,6 +739,7 @@ async function sendAIResponse(params: {
       content: { type: 'text', text: response },
       status: 'pending',
       sender_type: 'ai',
+      sender_name: 'Julia',
       metadata: { sent_by_ai: true },
     })
     .select('id')
@@ -1032,4 +1066,132 @@ async function getConversationHistory(
         ? (msg.content as { text?: string }).text || JSON.stringify(msg.content)
         : String(msg.content),
   }));
+}
+
+// =============================================================================
+// SLA Auto-Resume: Julia assume temporariamente quando atendente demora > 15 min
+// =============================================================================
+
+export interface ResumeByAIResult {
+  success: boolean;
+  conversationId: string;
+  messageSent?: string;
+  error?: string;
+}
+
+/**
+ * Reativa a Julia para uma conversa que estava com atendimento humano pausado,
+ * mas o atendente não respondeu em 15 minutos.
+ * Julia envia uma mensagem de intermediário e aguarda o atendente retomar.
+ */
+export async function resumeByAI(
+  supabase: SupabaseClient,
+  conversationId: string,
+  organizationId: string
+): Promise<ResumeByAIResult> {
+  try {
+    // 1. Busca config de IA da organização
+    const aiConfig = await getOrgAIConfig(supabase, organizationId);
+    if (!aiConfig || !aiConfig.enabled) {
+      return { success: false, conversationId, error: 'IA desabilitada para a organização' };
+    }
+
+    // 2. Busca histórico recente da conversa (últimas 20 mensagens para contexto)
+    const history = await getConversationHistory(supabase, conversationId, 20);
+    if (history.length === 0) {
+      return { success: false, conversationId, error: 'Sem histórico de mensagens' };
+    }
+
+    // 3. Busca nome do contato para personalizar
+    const { data: conv } = await supabase
+      .from('messaging_conversations')
+      .select('external_contact_name, contact_id, metadata, assigned_user_id')
+      .eq('id', conversationId)
+      .single();
+
+    const contactName = conv?.external_contact_name || 'cliente';
+
+    // 4. Busca nome do atendente que estava responsável (para mencionar)
+    let attendantName = 'atendente';
+    if (conv?.assigned_user_id) {
+      const { data: attendant } = await supabase
+        .from('profiles')
+        .select('nickname, first_name, last_name')
+        .eq('id', conv.assigned_user_id)
+        .maybeSingle();
+      attendantName = attendant?.nickname
+        || (attendant?.first_name ? `${attendant.first_name}${attendant.last_name ? ' ' + attendant.last_name : ''}` : null)
+        || 'atendente';
+    }
+
+    // 5. Formata o histórico como texto para o prompt
+    const historyText = history
+      .map(m => `${m.role === 'user' ? contactName : 'Atendente'}: ${m.content}`)
+      .join('\n');
+
+    // 6. Monta prompt especializado para retomada por SLA
+    const systemPrompt = `Você é Júlia, assistente virtual da empresa.
+Um atendente humano estava cuidando dessa conversa, mas ficou ausente por mais de 15 minutos.
+Sua missão AGORA é:
+1. Se apresentar de forma simpática e natural como assistente virtual
+2. Informar que o ${attendantName} vai retornar em breve e você vai ajudar no que puder enquanto isso
+3. Oferecer ajuda com o que o ${contactName} precisar no momento
+4. Ser breve: no máximo 3 frases
+5. NÃO revelar detalhes internos do sistema
+6. Use linguagem natural e acolhedora, não robótica`;
+
+    const userPrompt = `Histórico da conversa:
+${historyText}
+
+---
+Envie agora a mensagem de intermediário para ${contactName}.`;
+
+    // 7. Gera a mensagem
+    const providers = buildProviderList({
+      provider: aiConfig.provider,
+      apiKey: aiConfig.apiKey,
+      model: aiConfig.model,
+      allKeys: aiConfig.allKeys,
+    });
+
+    const result = await generateWithFailover({
+      providers,
+      system: systemPrompt,
+      prompt: userPrompt,
+      maxRetries: 2,
+    });
+
+    const message = result.text.trim();
+    if (!message) {
+      return { success: false, conversationId, error: 'IA não gerou resposta' };
+    }
+
+    // 8. Reativa Julia no banco (despausa)
+    const currentMeta = (conv?.metadata as Record<string, unknown>) || {};
+    await supabase
+      .from('messaging_conversations')
+      .update({
+        metadata: {
+          ...currentMeta,
+          ai_paused: false,
+          sla_resumed_by_ai: true,
+          sla_resumed_at: new Date().toISOString(),
+          sla_attendant: attendantName,
+        },
+      })
+      .eq('id', conversationId);
+
+    // 9. Envia a mensagem via canal
+    const sendResult = await sendAIResponse({ supabase, conversationId, response: message });
+    if (!sendResult.success) {
+      return { success: false, conversationId, error: sendResult.error?.message };
+    }
+
+    console.log(`[SLA-Resume] Julia assumiu conversa ${conversationId} após 15 min sem resposta`);
+    return { success: true, conversationId, messageSent: message };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+    console.error(`[SLA-Resume] Erro na conversa ${conversationId}:`, msg);
+    return { success: false, conversationId, error: msg };
+  }
 }

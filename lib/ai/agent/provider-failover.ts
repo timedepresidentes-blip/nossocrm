@@ -80,9 +80,14 @@ export async function generateWithFailover(
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
+      // Log detalhado para ajudar no diagnóstico: inclui cause e status HTTP
+      const cause = (error as { cause?: unknown })?.cause;
+      const status = (error as { status?: number })?.status;
       console.error(
-        `[AIAgent] Provider ${config.provider} failed:`,
-        errorMessage
+        `[AIAgent] Provider ${config.provider} (model: ${config.model || 'default'}) failed:`,
+        errorMessage,
+        cause ? `| cause: ${JSON.stringify(cause)}` : '',
+        status ? `| status: ${status}` : ''
       );
       errors.push({ provider: config.provider, error: errorMessage });
     }
@@ -95,9 +100,16 @@ export async function generateWithFailover(
   throw new Error(`All AI providers failed: ${summary}`);
 }
 
+// Mapa de env vars por provider (fallback quando chave do banco está errada)
+const ENV_KEY_MAP: Record<AIProvider, string> = {
+  google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+};
+
 /**
  * Build an ordered list of provider configs from org settings.
- * Primary provider first, then others that have API keys configured.
+ * Primary provider first, then env var fallback for same provider, then others with API keys.
  */
 export function buildProviderList(orgConfig: {
   provider: AIProvider;
@@ -108,9 +120,15 @@ export function buildProviderList(orgConfig: {
   const { provider: primary, apiKey, model, allKeys } = orgConfig;
   const providers: ProviderConfig[] = [];
 
-  // Primary always first
+  // Primary always first (chave do banco)
   if (apiKey) {
     providers.push({ provider: primary, apiKey, model });
+  }
+
+  // Fallback: env var do provider primário (caso chave do banco esteja errada)
+  const envKey = typeof process !== 'undefined' ? process.env[ENV_KEY_MAP[primary]] : undefined;
+  if (envKey && envKey !== apiKey) {
+    providers.push({ provider: primary, apiKey: envKey, model });
   }
 
   // Add others that have keys (in a fixed fallback order)
