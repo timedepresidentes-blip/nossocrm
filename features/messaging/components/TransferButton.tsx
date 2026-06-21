@@ -2,6 +2,8 @@
 
 import React from 'react';
 import { ArrowLeftRight, Bot, UserCheck } from 'lucide-react';
+import { StatusDot } from '@/components/StatusPicker';
+import type { AgentStatus } from '@/lib/hooks/useAgentStatus';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,12 +16,14 @@ import { useOrgMembersQuery } from '@/lib/query/hooks/useOrgMembersQuery';
 import { useAssignConversation } from '@/lib/query/hooks/useConversationsQuery';
 import { useToggleConversationAiPause } from '@/lib/query/hooks/useMessagingConversationsQuery';
 import { useAuth } from '@/context/AuthContext';
+import { getClient } from '@/lib/supabase/client';
 
 interface TransferButtonProps {
   conversationId: string;
   assignedUserId?: string | null;
   conversationMetadata: Record<string, unknown>;
   assignedAt?: string;
+  contactName?: string;
 }
 
 export function TransferButton({
@@ -27,8 +31,9 @@ export function TransferButton({
   assignedUserId,
   conversationMetadata,
   assignedAt,
+  contactName,
 }: TransferButtonProps) {
-  const { profile } = useAuth();
+  const { profile, organizationId } = useAuth();
   const { data: members = [] } = useOrgMembersQuery();
   const assignMutation = useAssignConversation();
   const aiPauseMutation = useToggleConversationAiPause();
@@ -37,11 +42,32 @@ export function TransferButton({
     conversationMetadata?.ai_paused === true ||
     (conversationMetadata?.ai_paused !== false && !!assignedAt);
 
-  // Outros membros (exclui o próprio usuário logado)
   const otherMembers = members.filter((m) => m.id !== profile?.id);
 
-  const handleTransferToMember = (userId: string) => {
-    // Atribui ao membro e pausa a Júlia
+  // Insere notificação no banco para o atendente que recebeu a transferência
+  const notifyReceiver = async (targetUserId: string, targetName: string) => {
+    try {
+      const sb = getClient();
+      const senderName = profile?.nickname
+        || (profile?.first_name ? `${profile.first_name}${profile.last_name ? ' ' + profile.last_name : ''}` : null)
+        || profile?.email?.split('@')[0]
+        || 'Atendente';
+      const contact = contactName || 'um cliente';
+      await sb.from('system_notifications').insert({
+        organization_id: organizationId,
+        user_id: targetUserId,
+        type: 'SYSTEM_INFO',
+        title: 'Conversa transferida para você',
+        message: `${senderName} transferiu a conversa com ${contact} para ${targetName}.`,
+        link: '/messaging',
+        severity: 'medium',
+      });
+    } catch {
+      // Notificação é best-effort — falha silenciosa
+    }
+  };
+
+  const handleTransferToMember = (userId: string, memberName: string) => {
     assignMutation.mutate({ conversationId, userId });
     if (!isAiPaused) {
       aiPauseMutation.mutate({
@@ -50,16 +76,23 @@ export function TransferButton({
         currentMetadata: conversationMetadata,
       });
     }
+    notifyReceiver(userId, memberName);
   };
 
-  const handleReturnToJulia = () => {
-    // Remove atribuição e reativa a Júlia
+  const handleReturnToJulia = async () => {
+    // Um único endpoint no servidor faz tudo: remove assignee, despausa e aciona Julia
+    try {
+      await fetch('/api/messaging/ai/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId }),
+      });
+    } catch (err) {
+      console.error('[TransferButton] Falha ao acionar Julia:', err);
+    }
+
+    // Invalida cache local para refletir a mudança na UI
     assignMutation.mutate({ conversationId, userId: null });
-    aiPauseMutation.mutate({
-      conversationId,
-      paused: false,
-      currentMetadata: conversationMetadata,
-    });
   };
 
   return (
@@ -82,12 +115,15 @@ export function TransferButton({
             {otherMembers.map((member) => (
               <DropdownMenuItem
                 key={member.id}
-                onClick={() => handleTransferToMember(member.id)}
+                onClick={() => handleTransferToMember(member.id, member.name)}
                 className="gap-2 cursor-pointer"
                 disabled={assignedUserId === member.id}
               >
-                <UserCheck className="w-4 h-4 text-slate-400" />
-                <span>{member.name}</span>
+                <div className="flex items-center gap-2 flex-1">
+                  <UserCheck className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span className="flex-1 truncate">{member.name}</span>
+                  <StatusDot status={(member.status ?? 'online') as AgentStatus} size="sm" />
+                </div>
                 {assignedUserId === member.id && (
                   <span className="ml-auto text-xs text-slate-400">atual</span>
                 )}
@@ -99,7 +135,7 @@ export function TransferButton({
         <DropdownMenuItem
           onClick={handleReturnToJulia}
           className="gap-2 cursor-pointer"
-          disabled={!isAiPaused && !assignedUserId}
+          disabled={!!assignedUserId && assignedUserId !== profile?.id}
         >
           <Bot className="w-4 h-4 text-violet-500" />
           <span>Devolver para Júlia</span>
