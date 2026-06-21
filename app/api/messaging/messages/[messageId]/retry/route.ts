@@ -215,14 +215,32 @@ export async function POST(
         templateLanguage: string;
         parameters?: { body?: { type: string; text?: string }[] };
       };
-      const bodyParams = tmplContent.parameters?.body ?? [];
+      const rawParams = tmplContent.parameters?.body ?? [];
+      const bodyParams = rawParams.map((p) => ({
+        type: 'text' as const,
+        text: p.text,
+      }));
+
+      // Busca o template no banco para saber quantas variáveis {{N}} ele tem
+      // (templates com {{}} vazio não têm variáveis numeradas no Meta)
+      const { data: dbTmpl } = await supabase
+        .from('messaging_templates')
+        .select('components')
+        .eq('channel_id', conversation.channel_id)
+        .eq('name', tmplContent.templateName)
+        .maybeSingle();
+
+      const tmplBodyText = (dbTmpl?.components as { type: string; text?: string }[] | null)
+        ?.find((c) => c.type === 'BODY')?.text ?? '';
+      const numberedVarCount = (tmplBodyText.match(/\{\{\d+\}\}/g) ?? []).length;
+
       const sendTemplateParams: SendTemplateParams = {
         conversationId: conversation.id,
         to: conversation.external_contact_id,
         templateName: tmplContent.templateName,
         templateLanguage: tmplContent.templateLanguage,
-        components: bodyParams.length > 0
-          ? [{ type: 'body', parameters: bodyParams }]
+        components: numberedVarCount > 0 && bodyParams.length > 0
+          ? [{ type: 'body' as const, parameters: bodyParams.slice(0, numberedVarCount) }]
           : undefined,
       };
       result = await router.sendTemplate(conversation.channel_id, sendTemplateParams);
