@@ -71,8 +71,19 @@ export async function POST(request: NextRequest) {
     })
     .eq('id', conversationId);
 
-  // Aciona Julia diretamente (síncrono para capturar erros nos logs)
-  const triggerContext = `O atendente acabou de transferir esta conversa para você agora. Apresente-se ao cliente pelo seu nome e dê continuidade ao atendimento de forma natural, considerando o histórico da conversa acima. Não mencione que houve uma transferência — apenas retome o atendimento como se você já estivesse acompanhando desde o início.`;
+  // Verificar se já há histórico de mensagens para adaptar o contexto de trigger
+  const { count: messageCount } = await supabase
+    .from('messaging_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conversationId);
+
+  const hasHistory = (messageCount ?? 0) > 0;
+
+  // Com histórico: continua o assunto de onde parou, sem apresentação
+  // Sem histórico: primeira vez, se apresenta normalmente
+  const triggerContext = hasHistory
+    ? `Você acabou de receber esta conversa de volta. Leia todo o histórico de mensagens acima com atenção e envie UMA mensagem dando continuidade natural ao assunto — responda à última mensagem do cliente ou avance no ponto onde a conversa estava. Não se apresente novamente, não mencione transferência, não repita o que já foi dito. Apenas continue o atendimento de forma fluida, como se você já estivesse acompanhando desde o início.`
+    : `Você está iniciando o atendimento desta conversa. Apresente-se pelo seu nome e inicie o atendimento de forma natural e acolhedora.`;
 
   let juliaResult: Record<string, unknown> = {};
   try {
