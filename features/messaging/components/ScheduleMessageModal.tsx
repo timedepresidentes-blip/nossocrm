@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { X, Clock, Send, CalendarClock } from 'lucide-react';
+import { X, Clock, Send, CalendarClock, AlertCircle } from 'lucide-react';
 import { useCreateScheduledMessage } from '@/lib/query/hooks/useScheduledMessagesQuery';
 import { useQuickReplies, type QuickReply } from '@/lib/query/hooks/useQuickRepliesQuery';
 import { QuickRepliesMenu } from './QuickRepliesMenu';
@@ -16,18 +16,24 @@ interface ScheduleMessageModalProps {
   initialMessage?: string;
 }
 
-// Retorna o datetime-local mínimo (agora + 2 minutos)
+// Formata Date como string local para input datetime-local (sem conversão UTC)
+function toLocalISOString(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// Retorna o datetime-local mínimo (agora + 2 minutos) em horário local
 function minDatetime(): string {
   const d = new Date(Date.now() + 2 * 60 * 1000);
   d.setSeconds(0, 0);
-  return d.toISOString().slice(0, 16);
+  return toLocalISOString(d);
 }
 
-// Retorna sugestão (próximo horário cheio)
+// Retorna sugestão (próximo horário cheio) em horário local
 function suggestDatetime(): string {
   const d = new Date(Date.now() + 60 * 60 * 1000);
   d.setMinutes(0, 0, 0);
-  return d.toISOString().slice(0, 16);
+  return toLocalISOString(d);
 }
 
 export function ScheduleMessageModal({
@@ -42,6 +48,7 @@ export function ScheduleMessageModal({
   const [message, setMessage] = useState(initialMessage);
   const [scheduledAt, setScheduledAt] = useState(suggestDatetime);
   const [qrActiveIndex, setQrActiveIndex] = useState(0);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: allQuickReplies = [] } = useQuickReplies();
   const createMutation = useCreateScheduledMessage();
@@ -52,6 +59,7 @@ export function ScheduleMessageModal({
       setMessage(initialMessage);
       setScheduledAt(suggestDatetime());
       setQrActiveIndex(0);
+      setSubmitError(null);
     }
   }, [isOpen, initialMessage]);
 
@@ -80,17 +88,21 @@ export function ScheduleMessageModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() || !scheduledAt) return;
+    setSubmitError(null);
 
-    await createMutation.mutateAsync({
-      conversationId,
-      channelId,
-      externalContactId,
-      contactName,
-      message: message.trim(),
-      scheduledAt: new Date(scheduledAt).toISOString(),
-    });
-
-    onClose();
+    try {
+      await createMutation.mutateAsync({
+        conversationId,
+        channelId,
+        externalContactId,
+        contactName,
+        message: message.trim(),
+        scheduledAt: new Date(scheduledAt).toISOString(),
+      });
+      onClose();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Erro ao agendar mensagem. Tente novamente.');
+    }
   };
 
   if (!isOpen) return null;
@@ -169,6 +181,14 @@ export function ScheduleMessageModal({
             />
             <p className="mt-1 text-xs text-slate-400 text-right">{message.length} caracteres</p>
           </div>
+
+          {/* Erro de envio */}
+          {submitError && (
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-xl text-sm text-red-600 dark:text-red-400">
+              <AlertCircle size={15} className="mt-0.5 shrink-0" />
+              <span>{submitError}</span>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex gap-3 pt-1">

@@ -56,12 +56,12 @@ function createSound(ctx: AudioContext, type: SoundType) {
   try {
     switch (type) {
       case 'mensagem_recebida':
-        beep(ctx, 523, 0,    0.15, 0.4);
-        beep(ctx, 784, 0.18, 0.20, 0.4);
+        beep(ctx, 523, 0,    0.15, 0.55);
+        beep(ctx, 784, 0.18, 0.22, 0.60);
         break;
       case 'mensagem_enviada':
-        beep(ctx, 440, 0,    0.06, 0.18);
-        beep(ctx, 660, 0.08, 0.10, 0.18);
+        beep(ctx, 440, 0,    0.07, 0.28);
+        beep(ctx, 660, 0.09, 0.12, 0.28);
         break;
       case 'lead_movido':
         beep(ctx, 600, 0, 0.08, 0.22);
@@ -100,9 +100,11 @@ export function useNotificationSound() {
     document.addEventListener('keydown',     unlockAudio, opts);
     document.addEventListener('touchstart',  unlockAudio, opts);
 
-    // Reativa ao voltar ao foco da aba (Chrome pode suspender em background)
+    // Reativa ao voltar ao foco da aba (Chrome suspende contextos em background)
     const onVisible = () => {
-      if (document.visibilityState === 'visible') unlockAudio();
+      if (document.visibilityState === 'visible' && _ctx?.state === 'suspended') {
+        _ctx.resume().catch(() => {});
+      }
     };
     document.addEventListener('visibilitychange', onVisible);
 
@@ -116,12 +118,21 @@ export function useNotificationSound() {
   }, []);
 
   const play = useCallback((type: SoundType) => {
-    const ctx = getRunningCtx();
-    if (ctx) {
-      createSound(ctx, type);
+    if (typeof window === 'undefined') return;
+    if (!_ctx || _ctx.state === 'closed') return;
+
+    if (_ctx.state === 'running') {
+      createSound(_ctx, type);
+      return;
     }
-    // Se ctx não está running (nenhum gesto ainda), o som é descartado —
-    // isso é aceitável pois o usuário não está interagindo com a página.
+
+    // Contexto suspenso (tab voltou do background ou ainda não interagiu):
+    // tenta resumir e tocar em seguida
+    if (_ctx.state === 'suspended') {
+      _ctx.resume().then(() => {
+        if (_ctx && _ctx.state === 'running') createSound(_ctx, type);
+      }).catch(() => {});
+    }
   }, []);
 
   return { play };
