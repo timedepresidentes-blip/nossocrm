@@ -232,16 +232,31 @@ export async function POST(
 
       const tmplBodyText = (dbTmpl?.components as { type: string; text?: string }[] | null)
         ?.find((c) => c.type === 'BODY')?.text ?? '';
-      const numberedVarCount = (tmplBodyText.match(/\{\{\d+\}\}/g) ?? []).length;
+      const numberedVars = tmplBodyText.match(/\{\{\d+\}\}/g) ?? [];
+      const namedVarMatches = [...tmplBodyText.matchAll(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g)];
+      const namedVarNames = [...new Map(namedVarMatches.map(m => [m[1], m[1]])).values()];
+
+      let bodyComponents: { type: 'body'; parameters: typeof bodyParams }[] = [];
+      if (bodyParams.length > 0) {
+        if (numberedVars.length > 0) {
+          bodyComponents = [{ type: 'body', parameters: bodyParams.slice(0, numberedVars.length) }];
+        } else if (namedVarNames.length > 0) {
+          bodyComponents = [{
+            type: 'body',
+            parameters: bodyParams.slice(0, namedVarNames.length).map((p, i) => ({
+              ...p,
+              parameter_name: namedVarNames[i],
+            })),
+          }];
+        }
+      }
 
       const sendTemplateParams: SendTemplateParams = {
         conversationId: conversation.id,
         to: conversation.external_contact_id,
         templateName: tmplContent.templateName,
         templateLanguage: tmplContent.templateLanguage,
-        components: numberedVarCount > 0 && bodyParams.length > 0
-          ? [{ type: 'body' as const, parameters: bodyParams.slice(0, numberedVarCount) }]
-          : undefined,
+        components: bodyComponents.length > 0 ? bodyComponents : undefined,
       };
       result = await router.sendTemplate(conversation.channel_id, sendTemplateParams);
     } else {
