@@ -78,13 +78,20 @@ function normalizeTemplateText(text: string): string {
 
 function extractVariables(text: string): string[] {
   const normalized = normalizeTemplateText(text);
-  const regex = /\{\{(\d+)\}\}/g;
+  // Captura {{N}} e {{N-nome}} — retorna só o índice numérico como chave
+  const regex = /\{\{(\d+)(?:-[a-zA-Z_][a-zA-Z0-9_]*)?\}\}/g;
   const matches: string[] = [];
   let match;
   while ((match = regex.exec(normalized)) !== null) {
-    matches.push(match[1]);
+    if (!matches.includes(match[1])) matches.push(match[1]);
   }
   return matches;
+}
+
+// Para {{N-nome}}, extrai o label human-readable ("nome"); caso {{N}}, retorna o índice
+function getVariableLabel(text: string, index: string): string {
+  const m = new RegExp(`\\{\\{${index}-([a-zA-Z_][a-zA-Z0-9_]*)\\}\\}`).exec(text);
+  return m ? m[1] : `variável ${index}`;
 }
 
 function getTemplatePreview(template: MessagingTemplate): string {
@@ -187,8 +194,11 @@ function VariableForm({ template, values, onChange }: VariableFormProps) {
       <div className="space-y-2">
         {variables.map((varNum) => (
           <div key={varNum}>
-            <label className="text-xs text-[var(--color-text-muted)] mb-1 block">
-              Variável {`{{${varNum}}}`}
+            <label className="text-xs text-[var(--color-text-muted)] mb-1 block capitalize">
+              {getVariableLabel(
+                template.components.find((c) => c.type === 'BODY')?.text ?? '',
+                varNum
+              )}
             </label>
             <input
               type="text"
@@ -223,8 +233,11 @@ function TemplatePreview({ template, variables }: TemplatePreviewProps) {
   const renderText = (text?: string) => {
     if (!text) return '';
     let result = normalizeTemplateText(text);
-    Object.entries(variables).forEach(([key, value]) => {
-      result = result.replaceAll(`{{${key}}}`, value || `{{${key}}}`);
+    Object.entries(variables).forEach(([index, value]) => {
+      // Substitui {{N}} e {{N-nome}}
+      result = result
+        .replaceAll(`{{${index}}}`, value || `{{${index}}}`)
+        .replace(new RegExp(`\\{\\{${index}-[a-zA-Z_][a-zA-Z0-9_]*\\}\\}`, 'g'), value || `{{${index}}}`);
     });
     return result;
   };

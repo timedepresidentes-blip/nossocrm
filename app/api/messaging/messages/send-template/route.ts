@@ -147,23 +147,13 @@ export async function POST(request: NextRequest) {
       let counter = 0;
       renderedText = bodyComponent.text.replace(/\{\{\}\}/g, () => `{{${++counter}}}`);
       const bodyParams = parameters?.body ?? [];
-      // Substitui {{N}} posicionais
+      // Substitui {{N}} e {{N-nome}} posicionais pelo valor do parâmetro correspondente
       bodyParams.forEach((param, i) => {
-        renderedText = renderedText!.replace(new RegExp(`\\{\\{${i + 1}\\}\\}`, 'g'), param.text ?? '');
+        const idx = i + 1;
+        renderedText = renderedText!
+          .replace(new RegExp(`\\{\\{${idx}\\}\\}`, 'g'), param.text ?? '')
+          .replace(new RegExp(`\\{\\{${idx}-[a-zA-Z_][a-zA-Z0-9_]*\\}\\}`, 'g'), param.text ?? '');
       });
-      // Substitui {{nome}} parâmetros nomeados em ordem de aparição
-      const namedMatches = [...renderedText.matchAll(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g)];
-      const seenNames = new Set<string>();
-      let namedIndex = 0;
-      for (const match of namedMatches) {
-        const paramName = match[1];
-        if (!seenNames.has(paramName)) {
-          seenNames.add(paramName);
-          const value = bodyParams[namedIndex]?.text ?? '';
-          renderedText = renderedText!.replace(new RegExp(`\\{\\{${paramName}\\}\\}`, 'g'), value);
-          namedIndex++;
-        }
-      }
     }
 
     // Build content object for the message record
@@ -227,26 +217,31 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Detecta variáveis no corpo: posicionais {{N}} ou nomeadas {{nome}}
+    // Detecta variáveis: {{N}}, {{N-nome}} (Meta named), {{nome}} (legacy named)
     const bodyText = bodyComponent?.text ?? '';
-    const numberedVars = bodyText.match(/\{\{\d+\}\}/g) ?? [];
-    const namedVarMatches = [...bodyText.matchAll(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g)];
-    const namedVarNames = [...new Map(namedVarMatches.map(m => [m[1], m[1]])).values()];
+    // {{N}} e {{N-nome}} — extrai índice e nome opcional
+    const positionalVarMatches = [...bodyText.matchAll(/\{\{(\d+)(?:-([a-zA-Z_][a-zA-Z0-9_]*))?\}\}/g)];
+    // {{nome}} puro (sem índice) — fallback legado
+    const legacyNamedMatches = [...bodyText.matchAll(/\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g)];
+    const legacyNamedNames = [...new Map(legacyNamedMatches.map(m => [m[1], m[1]])).values()];
 
     if (parameters?.body && parameters.body.length > 0) {
-      if (numberedVars.length > 0) {
-        // Parâmetros posicionais {{1}}, {{2}} — formato padrão
+      if (positionalVarMatches.length > 0) {
+        // {{N}} ou {{N-nome}}: inclui parameter_name quando o nome está presente
         components.push({
           type: 'body',
-          parameters: parameters.body.slice(0, numberedVars.length),
+          parameters: parameters.body.slice(0, positionalVarMatches.length).map((p, i) => {
+            const varName = positionalVarMatches[i]?.[2];
+            return varName ? { ...p, parameter_name: varName } : p;
+          }),
         });
-      } else if (namedVarNames.length > 0) {
-        // Parâmetros nomeados {{nome}}, {{data}} — requer parameter_name no payload
+      } else if (legacyNamedNames.length > 0) {
+        // {{nome}} puro — requer parameter_name no payload
         components.push({
           type: 'body',
-          parameters: parameters.body.slice(0, namedVarNames.length).map((p, i) => ({
+          parameters: parameters.body.slice(0, legacyNamedNames.length).map((p, i) => ({
             ...p,
-            parameter_name: namedVarNames[i],
+            parameter_name: legacyNamedNames[i],
           })),
         });
       }
