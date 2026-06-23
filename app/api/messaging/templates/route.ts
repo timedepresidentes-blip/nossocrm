@@ -1,6 +1,19 @@
 import { createClient } from '@/lib/supabase/server';
 import { transformTemplate } from '@/lib/messaging/types';
-import type { DbMessagingTemplate } from '@/lib/messaging/types';
+import type { DbMessagingTemplate, TemplateComponent } from '@/lib/messaging/types';
+
+// Normaliza {{N-nome}} → {{N}} no texto dos componentes retornados ao frontend.
+// Necessário para compatibilidade com versões do JS cacheadas no browser que usam
+// a regex antiga (\{\{\d+\}\}) e não reconhecem o formato de variável nomeada da Meta.
+// O endpoint de envio lê o texto original do banco e mantém o parameter_name correto.
+function normalizeComponentText(components: TemplateComponent[]): TemplateComponent[] {
+  return components.map((c) => ({
+    ...c,
+    ...(c.text
+      ? { text: c.text.replace(/\{\{(\d+)-[a-zA-Z_]\w*\}\}/g, '{{$1}}') }
+      : {}),
+  }));
+}
 
 function json<T>(body: T, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -85,8 +98,11 @@ export async function GET(req: Request) {
     return json({ error: 'Internal server error' }, 500);
   }
 
-  // Transform to app format
-  const transformedTemplates = (templates as DbMessagingTemplate[]).map(transformTemplate);
+  // Transform to app format e normaliza variáveis nomeadas para compatibilidade com frontend
+  const transformedTemplates = (templates as DbMessagingTemplate[]).map((t) => {
+    const transformed = transformTemplate(t);
+    return { ...transformed, components: normalizeComponentText(transformed.components) };
+  });
 
   return json({ templates: transformedTemplates });
 }
