@@ -204,7 +204,7 @@ function VariableForm({ template, values, onChange }: VariableFormProps) {
               type="text"
               value={values[varNum] || ''}
               onChange={(e) => onChange(varNum, e.target.value)}
-              placeholder={`Valor para {{${varNum}}}`}
+              placeholder={`Digite o valor para "${getVariableLabel(template.components.find((c) => c.type === 'BODY')?.text ?? '', varNum)}"`}
               className={cn(
                 'w-full px-3 py-2 text-sm rounded-lg border',
                 'bg-[var(--color-bg)] text-[var(--color-text-primary)]',
