@@ -8,6 +8,8 @@ import { ChannelIndicator } from './ChannelIndicator';
 import { useConversations } from '@/lib/query/hooks/useConversationsQuery';
 import { useLabels } from '@/lib/query/hooks/useLabelsQuery';
 import { useOrgMembersQuery } from '@/lib/query/hooks/useOrgMembersQuery';
+import { useScheduledMessagesQuery } from '@/lib/query/hooks/useScheduledMessagesQuery';
+import { useDueReminders } from '@/lib/query/hooks/useRemindersQuery';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
@@ -25,6 +27,9 @@ interface ConversationItemWrapperProps {
   isSelected: boolean;
   onSelect: (id: string) => void;
   presenceStatus?: PresenceStatus;
+  hasScheduled?: boolean;
+  hasReminder?: boolean;
+  currentUserId?: string;
 }
 
 const ConversationItemWrapper = memo(function ConversationItemWrapper({
@@ -32,6 +37,9 @@ const ConversationItemWrapper = memo(function ConversationItemWrapper({
   isSelected,
   onSelect,
   presenceStatus,
+  hasScheduled,
+  hasReminder,
+  currentUserId,
 }: ConversationItemWrapperProps) {
   const handleClick = useCallback(() => {
     onSelect(conversation.id);
@@ -43,6 +51,9 @@ const ConversationItemWrapper = memo(function ConversationItemWrapper({
       isSelected={isSelected}
       onClick={handleClick}
       presenceStatus={presenceStatus}
+      hasScheduled={hasScheduled}
+      hasReminder={hasReminder}
+      currentUserId={currentUserId}
     />
   );
 });
@@ -150,6 +161,20 @@ export const ConversationList = memo(function ConversationList({
   }), [statusFilter, businessUnitId, searchQuery, channelFilter, showUnreadOnly, labelFilter, agentFilter, dateFrom]);
 
   const { data: conversations, isLoading, error } = useConversations(filters);
+
+  // Mensagens agendadas pendentes e lembretes para exibir sinalizadores na lista
+  const { data: allScheduled = [] } = useScheduledMessagesQuery();
+  const { data: dueReminders = [] } = useDueReminders();
+
+  const scheduledConvIds = useMemo(
+    () => new Set(allScheduled.filter((m) => m.status === 'pending' && m.conversationId).map((m) => m.conversationId!)),
+    [allScheduled]
+  );
+
+  const reminderContactIds = useMemo(
+    () => new Set(dueReminders.filter((r) => r.contactId).map((r) => r.contactId!)),
+    [dueReminders]
+  );
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
@@ -473,6 +498,9 @@ export const ConversationList = memo(function ConversationList({
                     isSelected={conversation.id === selectedId}
                     onSelect={onSelect}
                     presenceStatus={conversation.contactId && getPresence ? getPresence(conversation.contactId) : undefined}
+                    hasScheduled={scheduledConvIds.has(conversation.id)}
+                    hasReminder={!!(conversation.contactId && reminderContactIds.has(conversation.contactId))}
+                    currentUserId={profile?.id}
                   />
                 ))}
               </>

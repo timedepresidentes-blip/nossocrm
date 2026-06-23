@@ -3,7 +3,7 @@
 import React, { memo } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Clock, User } from 'lucide-react';
+import { Bell, CalendarClock, Clock, User, UserCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sanitizeUrl } from '@/lib/utils/sanitize';
 import { ChannelIndicator } from './ChannelIndicator';
@@ -16,6 +16,12 @@ interface ConversationItemProps {
   isSelected: boolean;
   onClick: () => void;
   presenceStatus?: PresenceStatus;
+  /** Sinaliza mensagem agendada pendente nesta conversa */
+  hasScheduled?: boolean;
+  /** Sinaliza lembrete/tarefa pendente vinculado ao contato desta conversa */
+  hasReminder?: boolean;
+  /** ID do usuário logado — para destacar atribuição a outro atendente */
+  currentUserId?: string;
 }
 
 export const ConversationItem = memo(function ConversationItem({
@@ -23,6 +29,9 @@ export const ConversationItem = memo(function ConversationItem({
   isSelected,
   onClick,
   presenceStatus = 'offline',
+  hasScheduled = false,
+  hasReminder = false,
+  currentUserId,
 }: ConversationItemProps) {
   const {
     externalContactName,
@@ -35,8 +44,11 @@ export const ConversationItem = memo(function ConversationItem({
     isWindowExpired,
     windowMinutesRemaining,
     assignedUserName,
+    assignedUserId,
     status,
   } = conversation;
+
+  const isAssignedToOther = !!assignedUserId && !!currentUserId && assignedUserId !== currentUserId;
 
   const displayName = externalContactName || 'Contato desconhecido';
   const timeAgo = lastMessageAt
@@ -125,6 +137,26 @@ export const ConversationItem = memo(function ConversationItem({
             </span>
           )}
 
+          {/* Mensagem agendada */}
+          {hasScheduled && (
+            <span
+              title="Mensagem agendada"
+              className="flex items-center gap-0.5 text-xs text-indigo-600 dark:text-indigo-400"
+            >
+              <CalendarClock className="w-3 h-3" />
+            </span>
+          )}
+
+          {/* Lembrete/tarefa pendente */}
+          {hasReminder && (
+            <span
+              title="Tarefa agendada"
+              className="flex items-center gap-0.5 text-xs text-amber-600 dark:text-amber-400"
+            >
+              <Bell className="w-3 h-3" />
+            </span>
+          )}
+
           {/* Window expiry */}
           {!isWindowExpired && windowMinutesRemaining !== undefined && windowMinutesRemaining <= 60 && (
             <span className="flex items-center gap-1 text-xs text-orange-600 dark:text-orange-400">
@@ -136,9 +168,18 @@ export const ConversationItem = memo(function ConversationItem({
             <span className="text-xs text-red-500">Janela expirada</span>
           )}
 
-          {/* Assigned */}
+          {/* Atribuição */}
           {assignedUserName && (
-            <span className="text-xs text-slate-400 truncate max-w-[80px]">
+            <span
+              className={cn(
+                'flex items-center gap-0.5 text-xs truncate max-w-[90px]',
+                isAssignedToOther
+                  ? 'text-orange-500 dark:text-orange-400 font-medium'
+                  : 'text-slate-400'
+              )}
+              title={isAssignedToOther ? `Atribuído a ${assignedUserName}` : assignedUserName}
+            >
+              {isAssignedToOther && <UserCheck className="w-3 h-3 flex-shrink-0" />}
               {assignedUserName}
             </span>
           )}
