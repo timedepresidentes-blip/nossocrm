@@ -689,7 +689,7 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
           </>
         )}
         {showTemplates && (
-          <div className="h-[400px] bg-white dark:bg-slate-900">
+          <div className="h-[480px] bg-white dark:bg-slate-900">
             <TemplateSelector
               templates={templates}
               isLoading={isLoadingTemplates || isSendingTemplate}

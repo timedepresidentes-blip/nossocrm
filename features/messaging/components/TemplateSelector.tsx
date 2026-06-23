@@ -312,7 +312,11 @@ export function TemplateSelector({
     if (template.status !== 'approved') return;
     setSelectedTemplate(template);
     setVariables({});
-    setShowPreview(true);
+    // Colapsa a prévia quando o template tem variáveis para o formulário ficar visível de imediato
+    const hasVars = template.components.some(
+      (c) => c.text && extractVariables(c.text).length > 0
+    );
+    setShowPreview(!hasVars);
   };
 
   const handleVariableChange = (key: string, value: string) => {
