@@ -897,7 +897,7 @@ async function sendTemplateAsAI(params: {
   channelId: string;
   externalContactId: string;
   templateName: string;
-  parameters: Array<{ type: string; text: string }>;
+  parameters: Array<{ type: 'text'; text: string }>;
   senderLabel: string;
 }): Promise<void> {
   const { supabase, conversationId, channelId, externalContactId, templateName, parameters, senderLabel } = params;
