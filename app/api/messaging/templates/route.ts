@@ -1,12 +1,12 @@
 import { createClient } from '@/lib/supabase/server';
 import { transformTemplate } from '@/lib/messaging/types';
-import type { DbMessagingTemplate, TemplateComponent } from '@/lib/messaging/types';
+import type { DbMessagingTemplate, MessagingTemplateComponent } from '@/lib/messaging/types';
 
 // Normaliza {{N-nome}} → {{N}} no texto dos componentes retornados ao frontend.
 // Necessário para compatibilidade com versões do JS cacheadas no browser que usam
 // a regex antiga (\{\{\d+\}\}) e não reconhecem o formato de variável nomeada da Meta.
 // O endpoint de envio lê o texto original do banco e mantém o parameter_name correto.
-function normalizeComponentText(components: TemplateComponent[]): TemplateComponent[] {
+function normalizeComponentText(components: MessagingTemplateComponent[]): MessagingTemplateComponent[] {
   return components.map((c) => ({
     ...c,
     ...(c.text
