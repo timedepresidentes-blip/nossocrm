@@ -1,26 +1,46 @@
 /**
  * Endpoint de diagnóstico — testa a chave de IA configurada no banco.
  * GET /api/messaging/ai/test
- * Retorna o erro exato da API ou confirma que está funcionando.
+ * Requer sessão autenticada. Retorna o erro exato da API ou confirma funcionamento.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 import { getOrgAIConfig } from '@/lib/ai/agent/agent.service';
 import { buildProviderList, generateWithFailover } from '@/lib/ai/agent/provider-failover';
 
 export const maxDuration = 30;
 
-// Endpoint de diagnóstico temporário — sem auth, org fixo para testes
-const ORG_ID = '3f118023-c8e3-4e62-8ec4-a3e40bfde164';
-
-export async function GET(request: NextRequest) {
-  const supabase = createClient(
+function adminClient() {
+  return createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY!
   );
+}
 
-  const aiConfig = await getOrgAIConfig(supabase, ORG_ID);
+export async function GET(request: NextRequest) {
+  // Validar sessão do usuário
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('organization_id')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile?.organization_id) {
+    return NextResponse.json({ error: 'Organização não encontrada' }, { status: 404 });
+  }
+
+  const orgId = profile.organization_id;
+  const admin = adminClient();
+  const aiConfig = await getOrgAIConfig(admin, orgId);
 
   if (!aiConfig) {
     return NextResponse.json({

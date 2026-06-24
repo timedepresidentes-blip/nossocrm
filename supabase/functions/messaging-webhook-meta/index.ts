@@ -759,25 +759,28 @@ async function handleInboundMessage(
 
   let conversationId: string;
   let contactId: string | null = null;
+  let isNewConversation = false;
 
   if (existingConv) {
     conversationId = existingConv.id;
     contactId = existingConv.contact_id;
 
-    // Backfill: if we have a BSUID now but the contact was found by phone, store bsuid
+    // Backfill: se chegou BSUID mas o contato ainda não tem, grava para lookups futuros
     if (bsuid && contactId) {
       await supabase
         .from("contacts")
         .update({ whatsapp_bsuid: bsuid })
         .eq("id", contactId)
-        .is("whatsapp_bsuid", null); // Only update if not already set (avoid overwrite)
+        .is("whatsapp_bsuid", null);
     }
   } else {
-    // Try to find existing contact
+    // Conversa não encontrada por external_contact_id — tenta localizar contato e, depois,
+    // conversa via contact_id (fallback para migração BSUID do Meta, junho/2026).
+
     let existingContact: { id: string } | null = null;
 
     if (bsuid) {
-      // 1. Try by BSUID first
+      // 1. Tenta por whatsapp_bsuid
       const res = await supabase
         .from("contacts")
         .select("id")
@@ -791,7 +794,7 @@ async function handleInboundMessage(
     }
 
     if (!existingContact && phone) {
-      // 2. Fallback: look up by phone (handles transition period + phone-based wa_ids)
+      // 2. Fallback por telefone (wa_id ainda era número na criação original)
       const res = await supabase
         .from("contacts")
         .select("id, whatsapp_bsuid")
@@ -803,7 +806,7 @@ async function handleInboundMessage(
         .maybeSingle();
       existingContact = res.data;
 
-      // Backfill BSUID on existing phone-based contact if BSUID now available
+      // Grava BSUID no contato existente (encontrado por telefone) para lookups futuros
       if (res.data && bsuid && !res.data.whatsapp_bsuid) {
         await supabase
           .from("contacts")
@@ -815,16 +818,13 @@ async function handleInboundMessage(
     if (existingContact) {
       contactId = existingContact.id;
     } else {
-      // AUTO-CREATE CONTACT (default behavior)
+      // AUTO-CREATE CONTACT
       const contactName = senderName || externalContactId;
-
-      // Nota: contacts não tem coluna metadata — não incluir
       const insertData: Record<string, unknown> = {
         organization_id: channel.organization_id,
         name: contactName,
         source: leadSource,
       };
-
       if (phone) insertData.phone = phone;
       if (bsuid) insertData.whatsapp_bsuid = bsuid;
 
@@ -842,29 +842,61 @@ async function handleInboundMessage(
       }
     }
 
-    // Create new conversation (always linked to contact now)
-    const { data: newConv, error: convCreateErr } = await supabase
-      .from("messaging_conversations")
-      .insert({
-        organization_id: channel.organization_id,
-        channel_id: channel.id,
-        business_unit_id: channel.business_unit_id,
-        external_contact_id: externalContactId,
-        external_contact_name: senderName || externalContactId,
-        contact_id: contactId,
-        status: "open",
-        priority: "normal",
-        // WhatsApp 24h window starts when customer sends message
-        window_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      })
-      .select("id")
-      .single();
-
-    if (convCreateErr) throw convCreateErr;
-    conversationId = newConv.id;
-
-    // AUTO-CREATE DEAL if lead routing rule exists for this channel
+    // Fallback por contact_id: se o contato foi encontrado mas a conversa tinha
+    // external_contact_id diferente (ex.: telefone → BSUID), reaproveita a conversa
+    // existente em vez de criar duplicata.
+    let convIdFromContact: string | undefined;
     if (contactId) {
+      const { data: convByContact } = await supabase
+        .from("messaging_conversations")
+        .select("id, contact_id, unread_count, message_count")
+        .eq("channel_id", channel.id)
+        .eq("contact_id", contactId)
+        .order("last_message_at", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (convByContact) {
+        convIdFromContact = convByContact.id;
+        // Atualiza external_contact_id para o novo BSUID — garante lookup direto daqui em diante
+        if (bsuid) {
+          await supabase
+            .from("messaging_conversations")
+            .update({ external_contact_id: bsuid })
+            .eq("id", convIdFromContact)
+            .neq("external_contact_id", bsuid);
+          console.log(`[Webhook] BSUID migration: reusing conv ${convIdFromContact.slice(0, 8)}, updated external_contact_id`);
+        }
+      }
+    }
+
+    if (convIdFromContact) {
+      conversationId = convIdFromContact;
+    } else {
+      // Cria nova conversa — nenhuma encontrada por external_contact_id nem por contact_id
+      isNewConversation = true;
+      const { data: newConv, error: convCreateErr } = await supabase
+        .from("messaging_conversations")
+        .insert({
+          organization_id: channel.organization_id,
+          channel_id: channel.id,
+          business_unit_id: channel.business_unit_id,
+          external_contact_id: externalContactId,
+          external_contact_name: senderName || externalContactId,
+          contact_id: contactId,
+          status: "open",
+          priority: "normal",
+          window_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        })
+        .select("id")
+        .single();
+
+      if (convCreateErr) throw convCreateErr;
+      conversationId = newConv.id;
+    }
+
+    // AUTO-CREATE DEAL somente para conversas realmente novas
+    if (isNewConversation && contactId) {
       const routingRule = await getLeadRoutingRule(supabase, channel.id);
       if (routingRule) {
         await autoCreateDeal(supabase, {

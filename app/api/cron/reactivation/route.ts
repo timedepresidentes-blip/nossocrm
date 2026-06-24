@@ -66,7 +66,7 @@ export async function GET(req: Request) {
         .eq('direction', 'inbound')
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (!lastInbound) continue; // Nunca houve mensagem inbound
       if (lastInbound.created_at >= cutoff) continue; // Respondeu nas últimas 24h
@@ -79,7 +79,7 @@ export async function GET(req: Request) {
         .eq('direction', 'outbound')
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       // Não reativa se já enviamos mensagem de reativação após o último inbound
       if (lastOutbound && lastOutbound.created_at > lastInbound.created_at) continue;
