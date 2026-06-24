@@ -218,7 +218,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Detecta variáveis: {{N}}, {{N-nome}} (Meta named), {{nome}} (legacy named)
-    const bodyText = bodyComponent?.text ?? '';
+    // Normaliza {{}} → {{1}}, {{2}}... para compatibilidade com templates legados (ex: decisao_proposta_solar)
+    let legacyEmptyVarCounter = 0;
+    const bodyText = (bodyComponent?.text ?? '').replace(/\{\{\}\}/g, () => `{{${++legacyEmptyVarCounter}}}`);
     // {{N}} e {{N-nome}} — extrai índice e nome opcional
     const positionalVarMatches = [...bodyText.matchAll(/\{\{(\d+)(?:-([a-zA-Z_][a-zA-Z0-9_]*))?\}\}/g)];
     // {{nome}} puro (sem índice) — fallback legado
