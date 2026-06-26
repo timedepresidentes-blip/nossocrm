@@ -450,6 +450,7 @@ export interface ConversationFilters {
   hasUnread?: boolean;
   search?: string;
   labelId?: string;
+  source?: string; // campo source do contato (origem do lead)
   dateFrom?: string; // ISO — filtra por last_message_at >= dateFrom
   sortBy?: 'lastMessageAt' | 'createdAt' | 'unreadCount';
   sortOrder?: 'asc' | 'desc';

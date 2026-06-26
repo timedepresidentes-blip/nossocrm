@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, memo, useEffect, useRef } from 'react';
-import { Search, Filter, Inbox, CheckCircle, X, Plus, MessageSquare, Volume2, Tag, UserCheck, Calendar } from 'lucide-react';
+import { Search, Filter, Inbox, CheckCircle, X, Plus, MessageSquare, Volume2, Tag, UserCheck, Calendar, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConversationItem } from './ConversationItem';
 import { ChannelIndicator } from './ChannelIndicator';
@@ -10,6 +10,7 @@ import { useLabels } from '@/lib/query/hooks/useLabelsQuery';
 import { useOrgMembersQuery } from '@/lib/query/hooks/useOrgMembersQuery';
 import { useScheduledMessagesQuery } from '@/lib/query/hooks/useScheduledMessagesQuery';
 import { useDueReminders } from '@/lib/query/hooks/useRemindersQuery';
+import { useMessageSearch, useSourceOptions } from '@/lib/query/hooks/useMessageSearchQuery';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
@@ -93,9 +94,12 @@ export const ConversationList = memo(function ConversationList({
   const [labelFilter, setLabelFilter] = useState<string>('all');
   const [agentFilter, setAgentFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
 
   const { data: labels = [] } = useLabels();
   const { data: members = [] } = useOrgMembersQuery();
+  const { data: sourceOptions = [] } = useSourceOptions();
+  const { data: messageResults = [] } = useMessageSearch(searchQuery);
 
   // Busca de contatos paralela à busca de conversas
   const [contactResults, setContactResults] = useState<ContactResult[]>([]);
@@ -157,8 +161,9 @@ export const ConversationList = memo(function ConversationList({
     hasUnread: showUnreadOnly || undefined,
     labelId: labelFilter !== 'all' ? labelFilter : undefined,
     assignedUserId: agentFilter !== 'all' ? agentFilter : undefined,
+    source: sourceFilter !== 'all' ? sourceFilter : undefined,
     dateFrom,
-  }), [statusFilter, businessUnitId, searchQuery, channelFilter, showUnreadOnly, labelFilter, agentFilter, dateFrom]);
+  }), [statusFilter, businessUnitId, searchQuery, channelFilter, showUnreadOnly, labelFilter, agentFilter, sourceFilter, dateFrom]);
 
   const { data: conversations, isLoading, error } = useConversations(filters);
 
@@ -183,8 +188,9 @@ export const ConversationList = memo(function ConversationList({
     if (labelFilter !== 'all') count++;
     if (agentFilter !== 'all') count++;
     if (dateFilter !== 'all') count++;
+    if (sourceFilter !== 'all') count++;
     return count;
-  }, [channelFilter, showUnreadOnly, labelFilter, agentFilter, dateFilter]);
+  }, [channelFilter, showUnreadOnly, labelFilter, agentFilter, dateFilter, sourceFilter]);
 
   const clearFilters = () => {
     setChannelFilter('all');
@@ -192,6 +198,7 @@ export const ConversationList = memo(function ConversationList({
     setLabelFilter('all');
     setAgentFilter('all');
     setDateFilter('all');
+    setSourceFilter('all');
   };
 
   const statusTabs = [
@@ -200,6 +207,24 @@ export const ConversationList = memo(function ConversationList({
   ];
 
   const showContactResults = searchQuery.length >= 2 && contactResults.length > 0 && !!onStartConversationWithContact;
+
+  // Destaca o termo buscado no trecho da mensagem
+  const highlightTerm = useCallback((text: string, term: string): React.ReactNode => {
+    if (!term || !text) return text;
+    const idx = text.toLowerCase().indexOf(term.toLowerCase());
+    if (idx === -1) return <span>{text.slice(0, 80)}</span>;
+    const start = Math.max(0, idx - 30);
+    const excerpt = (start > 0 ? '...' : '') + text.slice(start, start + 100);
+    const relIdx = excerpt.toLowerCase().indexOf(term.toLowerCase());
+    if (relIdx === -1) return <span>{excerpt}</span>;
+    return (
+      <span>
+        {excerpt.slice(0, relIdx)}
+        <mark className="bg-yellow-200 dark:bg-yellow-500/40 text-inherit rounded-sm px-0.5">{excerpt.slice(relIdx, relIdx + term.length)}</mark>
+        {excerpt.slice(relIdx + term.length)}
+      </span>
+    );
+  }, []);
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-white/10">
@@ -449,6 +474,25 @@ export const ConversationList = memo(function ConversationList({
               </div>
             </div>
 
+            {/* Origem Filter */}
+            {sourceOptions.length > 0 && (
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                  <MapPin className="w-3 h-3" /> Origem
+                </label>
+                <select
+                  value={sourceFilter}
+                  onChange={e => setSourceFilter(e.target.value)}
+                  className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                >
+                  <option value="all">Todas as origens</option>
+                  {sourceOptions.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Clear Filters */}
             {activeFiltersCount > 0 && (
               <button
@@ -504,6 +548,40 @@ export const ConversationList = memo(function ConversationList({
                   />
                 ))}
               </>
+            )}
+
+            {/* Mensagens encontradas na busca */}
+            {searchQuery.length >= 2 && messageResults.length > 0 && (
+              <div className={conversations && conversations.length > 0 ? 'border-t border-slate-100 dark:border-white/5 mt-1' : ''}>
+                <p className="px-4 pt-3 pb-1 text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  Mensagens
+                </p>
+                {messageResults
+                  .filter(r => !conversations?.some(c => c.id === r.conversationId))
+                  .slice(0, 10)
+                  .map(result => (
+                    <button
+                      key={result.messageId}
+                      type="button"
+                      onClick={() => onSelect(result.conversationId)}
+                      className="w-full px-4 py-3 flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
+                          {(result.contactName || '?').charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                          {result.contactName || 'Contato'}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mt-0.5">
+                          {highlightTerm(result.snippet, searchQuery)}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+              </div>
             )}
 
             {/* Contatos encontrados pela busca */}

@@ -158,6 +158,18 @@ export function useConversations(filters?: ConversationFilters) {
         }
       }
 
+      // Filtro por origem do lead (contacts.source)
+      if (filters?.source) {
+        const { data: sourceContacts } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('organization_id', profile.organization_id!)
+          .eq('source', filters.source);
+        const sourceContactIds = (sourceContacts ?? []).map((r: { id: string }) => r.id);
+        if (sourceContactIds.length === 0) return [];
+        query = query.in('contact_id', sourceContactIds);
+      }
+
       // Filtro por etiqueta: busca contact_ids que têm essa label e filtra
       if (filters?.labelId) {
         const { data: labelContacts } = await supabase
