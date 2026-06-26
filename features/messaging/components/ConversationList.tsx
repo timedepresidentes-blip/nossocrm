@@ -157,7 +157,7 @@ export const ConversationList = memo(function ConversationList({
     status: statusFilter,
     businessUnitId,
     search: searchQuery || undefined,
-    channelId: channelFilter !== 'all' ? channelFilter : undefined,
+    channelType: channelFilter !== 'all' ? channelFilter : undefined,
     hasUnread: showUnreadOnly || undefined,
     labelId: labelFilter !== 'all' ? labelFilter : undefined,
     assignedUserId: agentFilter !== 'all' ? agentFilter : undefined,

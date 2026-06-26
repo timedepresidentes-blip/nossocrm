@@ -445,6 +445,7 @@ export interface UpdateConversationInput {
 export interface ConversationFilters {
   status?: ConversationStatus | 'all';
   channelId?: string;
+  channelType?: string; // filtra por tipo do canal (whatsapp, instagram, email, sms...)
   businessUnitId?: string;
   assignedUserId?: string | 'unassigned';
   hasUnread?: boolean;

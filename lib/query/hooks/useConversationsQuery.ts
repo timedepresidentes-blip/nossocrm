@@ -135,6 +135,16 @@ export function useConversations(filters?: ConversationFilters) {
       if (filters?.channelId) {
         query = query.eq('channel_id', filters.channelId);
       }
+      if (filters?.channelType) {
+        const { data: chans } = await supabase
+          .from('messaging_channels')
+          .select('id')
+          .eq('organization_id', profile!.organization_id!)
+          .eq('channel_type', filters.channelType);
+        const chanIds = (chans ?? []).map((c: any) => c.id as string);
+        if (chanIds.length === 0) return [];
+        query = query.in('channel_id', chanIds);
+      }
       if (filters?.businessUnitId) {
         query = query.eq('business_unit_id', filters.businessUnitId);
       }
