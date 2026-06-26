@@ -51,6 +51,7 @@ export const ContactFormModalV2: React.FC<ContactFormModalProps> = ({
       phone: editingContact?.phone || '',
       role: editingContact?.role || '',
       companyName: defaultCompanyName,
+      source: (editingContact as any)?.source || '',
     },
   });
 
@@ -70,6 +71,7 @@ export const ContactFormModalV2: React.FC<ContactFormModalProps> = ({
         phone: editingContact?.phone || '',
         role: editingContact?.role || '',
         companyName: defaultCompanyName,
+        source: (editingContact as any)?.source || '',
       });
     }
   }, [isOpen, editingContact, defaultCompanyName, reset]);
@@ -131,6 +133,13 @@ export const ContactFormModalV2: React.FC<ContactFormModalProps> = ({
           }
           error={errors.companyName}
           registration={register('companyName')}
+        />
+
+        <InputField
+          label="Origem"
+          placeholder="Ex: Instagram, Site, Indicação, Google..."
+          error={errors.source}
+          registration={register('source')}
         />
 
         <SubmitButton isLoading={isSubmitting}>

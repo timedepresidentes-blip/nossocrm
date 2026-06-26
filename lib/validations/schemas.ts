@@ -131,6 +131,7 @@ export const contactFormSchema = z.object({
   phone: requiredPhoneSchema,
   role: optionalString.pipe(z.string().max(MAX_LENGTHS.SHORT_TEXT)),
   companyName: optionalString.pipe(z.string().max(MAX_LENGTHS.COMPANY_NAME)),
+  source: optionalString.pipe(z.string().max(MAX_LENGTHS.SHORT_TEXT)),
 });
 
 export type ContactFormData = z.infer<typeof contactFormSchema>;
