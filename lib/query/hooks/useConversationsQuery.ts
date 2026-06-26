@@ -160,12 +160,23 @@ export function useConversations(filters?: ConversationFilters) {
 
       // Filtro por origem do lead (contacts.source)
       if (filters?.source) {
-        const { data: sourceContacts } = await supabase
-          .from('contacts')
-          .select('id')
-          .eq('organization_id', profile.organization_id!)
-          .eq('source', filters.source);
-        const sourceContactIds = (sourceContacts ?? []).map((r: { id: string }) => r.id);
+        let sourceContactIds: string[] = [];
+        if (filters.source === 'Não identificado') {
+          // Contatos sem origem definida
+          const { data: unidentified } = await supabase
+            .from('contacts')
+            .select('id')
+            .eq('organization_id', profile.organization_id!)
+            .or('source.is.null,source.eq.');
+          sourceContactIds = (unidentified ?? []).map((r: { id: string }) => r.id);
+        } else {
+          const { data: sourceContacts } = await supabase
+            .from('contacts')
+            .select('id')
+            .eq('organization_id', profile.organization_id!)
+            .eq('source', filters.source);
+          sourceContactIds = (sourceContacts ?? []).map((r: { id: string }) => r.id);
+        }
         if (sourceContactIds.length === 0) return [];
         query = query.in('contact_id', sourceContactIds);
       }

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, memo, useEffect, useRef } from 'react';
-import { Search, Filter, Inbox, CheckCircle, X, Plus, MessageSquare, Volume2, Tag, UserCheck, Calendar, MapPin } from 'lucide-react';
+import { Search, Filter, Inbox, CheckCircle, X, Plus, MessageSquare, Volume2, Tag, UserCheck, Calendar, MapPin, Globe, Instagram, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConversationItem } from './ConversationItem';
 import { ChannelIndicator } from './ChannelIndicator';
@@ -479,20 +479,35 @@ export const ConversationList = memo(function ConversationList({
               <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
                 <MapPin className="w-3 h-3" /> Origem do lead
               </label>
-              {sourceOptions.length > 0 ? (
-                <select
-                  value={sourceFilter}
-                  onChange={e => setSourceFilter(e.target.value)}
-                  className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
-                >
-                  <option value="all">Todas as origens</option>
-                  {sourceOptions.map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              ) : (
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
-                  Nenhuma origem cadastrada. Preencha o campo <strong>Origem</strong> no perfil do contato para filtrar aqui (ex: Instagram, Indicação, Site).
+              <div className="flex flex-wrap gap-1.5">
+                {(['all', ...sourceOptions] as string[]).map(s => {
+                  const icon = s === 'all' ? null
+                    : s.toLowerCase().includes('instagram') ? <Instagram className="w-3 h-3" />
+                    : s.toLowerCase().includes('site') || s.toLowerCase().includes('web') ? <Globe className="w-3 h-3" />
+                    : s === 'Não identificado' ? <HelpCircle className="w-3 h-3" />
+                    : <MapPin className="w-3 h-3" />;
+                  const label = s === 'all' ? 'Todas' : s;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setSourceFilter(s)}
+                      className={cn(
+                        'flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full transition-colors',
+                        sourceFilter === s
+                          ? 'bg-primary-500 text-white'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 hover:border-primary-300'
+                      )}
+                    >
+                      {icon}
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              {sourceOptions.length <= 1 && (
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 leading-relaxed">
+                  A Júlia registra a origem automaticamente. Contatos antigos: preencha manualmente no perfil.
                 </p>
               )}
             </div>
