@@ -66,7 +66,7 @@ export function useSourceOptions() {
         .neq('source', '');
 
       const unique = [...new Set((data || []).map((r: any) => r.source as string).filter(Boolean))];
-      return [...unique.sort(), 'Não identificado'];
+      return unique.sort();
     },
     enabled: !authLoading && !!user && !!profile?.organization_id,
     staleTime: 60_000,

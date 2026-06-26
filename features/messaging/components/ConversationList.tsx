@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, memo, useEffect, useRef } from 'react';
-import { Search, Filter, Inbox, CheckCircle, X, Plus, MessageSquare, Volume2, Tag, UserCheck, Calendar, MapPin, Globe, Instagram, HelpCircle } from 'lucide-react';
+import { Search, Filter, Inbox, CheckCircle, X, Plus, MessageSquare, Volume2, Tag, UserCheck, Calendar, MapPin, Globe, Instagram } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConversationItem } from './ConversationItem';
 import { ChannelIndicator } from './ChannelIndicator';
@@ -475,44 +475,40 @@ export const ConversationList = memo(function ConversationList({
               </div>
             </div>
 
-            {/* Origem Filter */}
-            <div>
-              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-                <MapPin className="w-3 h-3" /> Origem do lead
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {(['all', ...sourceOptions] as string[]).map(s => {
-                  const icon = s === 'all' ? null
-                    : s.toLowerCase().includes('instagram') ? <Instagram className="w-3 h-3" />
-                    : s.toLowerCase().includes('site') || s.toLowerCase().includes('web') ? <Globe className="w-3 h-3" />
-                    : s === 'Não identificado' ? <HelpCircle className="w-3 h-3" />
-                    : <MapPin className="w-3 h-3" />;
-                  const label = s === 'all' ? 'Todas' : s;
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      title={label}
-                      onClick={() => setSourceFilter(s)}
-                      className={cn(
-                        'flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full transition-colors',
-                        sourceFilter === s
-                          ? 'bg-primary-500 text-white'
-                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 hover:border-primary-300'
-                      )}
-                    >
-                      {icon}
-                      {label}
-                    </button>
-                  );
-                })}
+            {/* Origem Filter — só mostra se houver origens cadastradas */}
+            {sourceOptions.length > 0 && (
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                  <MapPin className="w-3 h-3" /> Origem do lead
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {(['all', ...sourceOptions] as string[]).map(s => {
+                    const icon = s === 'all' ? null
+                      : s.toLowerCase().includes('instagram') ? <Instagram className="w-3 h-3" />
+                      : s.toLowerCase().includes('site') || s.toLowerCase().includes('web') ? <Globe className="w-3 h-3" />
+                      : <MapPin className="w-3 h-3" />;
+                    const label = s === 'all' ? 'Todas' : s;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        title={label}
+                        onClick={() => setSourceFilter(s)}
+                        className={cn(
+                          'flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full transition-colors',
+                          sourceFilter === s
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 hover:border-primary-300'
+                        )}
+                      >
+                        {icon}
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              {sourceOptions.length <= 1 && (
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 leading-relaxed">
-                  A Júlia registra a origem automaticamente. Contatos antigos: preencha manualmente no perfil.
-                </p>
-              )}
-            </div>
+            )}
 
             {/* Clear Filters */}
             {activeFiltersCount > 0 && (
