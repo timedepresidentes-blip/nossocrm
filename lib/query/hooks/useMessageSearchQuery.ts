@@ -33,7 +33,6 @@ export function useMessageSearch(query: string) {
             contact:contacts!contact_id ( name )
           )
         `)
-        .eq('organization_id', profile!.organization_id)
         .filter('content->>text', 'ilike', `%${safe}%`)
         .order('created_at', { ascending: false })
         .limit(25);
