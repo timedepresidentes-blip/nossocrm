@@ -7,8 +7,10 @@
     "app/api/[transport]/route.ts": { "maxDuration": 120 }
   },
   "crons": [
-    { "path": "/api/cron/daily-briefing",  "schedule": "0 8 * * 1-5" },
-    { "path": "/api/cron/template-sync",   "schedule": "0 6 * * *" },
-    { "path": "/api/cron/reactivation",    "schedule": "0 8 * * *" }
+    { "path": "/api/cron/daily-briefing",     "schedule": "0 8 * * 1-5" },
+    { "path": "/api/cron/template-sync",      "schedule": "0 6 * * *" },
+    { "path": "/api/cron/reactivation",       "schedule": "0 8 * * *" },
+    { "path": "/api/cron/sla-resume",         "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/scheduled-messages", "schedule": "* * * * *" }
   ]
 }

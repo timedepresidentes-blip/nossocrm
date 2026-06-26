@@ -89,10 +89,39 @@ export function useCreateScheduledMessage() {
         created_by: user?.id,
       }).select().single();
       if (error) throw error;
+
+      // Aplica etiqueta "Standby" ao contato da conversa após agendar
+      if (input.conversationId) {
+        const { data: conv } = await supabase
+          .from('messaging_conversations')
+          .select('contact_id')
+          .eq('id', input.conversationId)
+          .maybeSingle();
+
+        if (conv?.contact_id) {
+          const { data: standbyLabel } = await supabase
+            .from('labels')
+            .select('id')
+            .eq('organization_id', profile!.organization_id!)
+            .eq('name', 'Standby')
+            .maybeSingle();
+
+          if (standbyLabel?.id) {
+            await supabase
+              .from('contact_labels')
+              .upsert(
+                { contact_id: conv.contact_id, label_id: standbyLabel.id },
+                { onConflict: 'contact_id,label_id', ignoreDuplicates: true }
+              );
+          }
+        }
+      }
+
       return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [QUERY_KEY, profile?.organization_id] });
+      qc.invalidateQueries({ queryKey: ['messagingConversations'], exact: false });
     },
   });
 }

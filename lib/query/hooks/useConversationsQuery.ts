@@ -202,6 +202,25 @@ export function useConversations(filters?: ConversationFilters) {
           return []; // nenhum contato com essa etiqueta → lista vazia
         }
         query = query.in('contact_id', contactIds);
+      } else {
+        // Oculta da lista principal contatos com etiqueta "Lixeira"
+        const { data: lixeiraLabel } = await supabase
+          .from('labels')
+          .select('id')
+          .eq('organization_id', profile!.organization_id!)
+          .eq('name', 'Lixeira')
+          .maybeSingle();
+
+        if (lixeiraLabel?.id) {
+          const { data: lixeiraContacts } = await supabase
+            .from('contact_labels')
+            .select('contact_id')
+            .eq('label_id', lixeiraLabel.id);
+          const lixeiraIds = (lixeiraContacts ?? []).map((r: { contact_id: string }) => r.contact_id);
+          if (lixeiraIds.length > 0) {
+            query = query.not('contact_id', 'in', `(${lixeiraIds.join(',')})`);
+          }
+        }
       }
 
       const { data, error } = await query;
