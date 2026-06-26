@@ -327,7 +327,7 @@ export const ConversationList = memo(function ConversationList({
 
         {/* Additional Filters Panel */}
         {showFilters && (
-          <div className="mt-3 p-3 bg-slate-50 dark:bg-white/5 rounded-lg space-y-3">
+          <div className="mt-3 p-3 bg-slate-50 dark:bg-white/5 rounded-lg space-y-3 max-h-72 overflow-y-auto">
             {/* Channel Filter */}
             <div>
               <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
@@ -475,11 +475,11 @@ export const ConversationList = memo(function ConversationList({
             </div>
 
             {/* Origem Filter */}
-            {sourceOptions.length > 0 && (
-              <div>
-                <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-                  <MapPin className="w-3 h-3" /> Origem
-                </label>
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                <MapPin className="w-3 h-3" /> Origem do lead
+              </label>
+              {sourceOptions.length > 0 ? (
                 <select
                   value={sourceFilter}
                   onChange={e => setSourceFilter(e.target.value)}
@@ -490,8 +490,12 @@ export const ConversationList = memo(function ConversationList({
                     <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
-              </div>
-            )}
+              ) : (
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
+                  Nenhuma origem cadastrada. Preencha o campo <strong>Origem</strong> no perfil do contato para filtrar aqui (ex: Instagram, Indicação, Site).
+                </p>
+              )}
+            </div>
 
             {/* Clear Filters */}
             {activeFiltersCount > 0 && (
