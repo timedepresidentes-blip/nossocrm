@@ -52,6 +52,35 @@ export function useMessageSearch(query: string) {
   });
 }
 
+export function useChannelTypeOptions() {
+  const { profile, user, loading: authLoading } = useAuth();
+
+  return useQuery({
+    queryKey: ['channelTypeOptions', profile?.organization_id],
+    queryFn: async (): Promise<{ type: string; label: string }[]> => {
+      const { data } = await supabase
+        .from('messaging_channels')
+        .select('channel_type, name')
+        .eq('organization_id', profile!.organization_id!)
+        .is('deleted_at', null);
+
+      const LABELS: Record<string, string> = {
+        whatsapp: 'WhatsApp',
+        instagram: 'Instagram',
+        email: 'Email',
+        sms: 'SMS',
+        telegram: 'Telegram',
+        voice: 'Voz',
+      };
+
+      const unique = [...new Set((data || []).map((r: any) => r.channel_type as string))];
+      return unique.sort().map(t => ({ type: t, label: LABELS[t] ?? t }));
+    },
+    enabled: !authLoading && !!user && !!profile?.organization_id,
+    staleTime: 60_000,
+  });
+}
+
 export function useSourceOptions() {
   const { profile, user, loading: authLoading } = useAuth();
 

@@ -10,7 +10,7 @@ import { useLabels } from '@/lib/query/hooks/useLabelsQuery';
 import { useOrgMembersQuery } from '@/lib/query/hooks/useOrgMembersQuery';
 import { useScheduledMessagesQuery } from '@/lib/query/hooks/useScheduledMessagesQuery';
 import { useDueReminders } from '@/lib/query/hooks/useRemindersQuery';
-import { useMessageSearch, useSourceOptions } from '@/lib/query/hooks/useMessageSearchQuery';
+import { useMessageSearch, useSourceOptions, useChannelTypeOptions } from '@/lib/query/hooks/useMessageSearchQuery';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
@@ -99,6 +99,7 @@ export const ConversationList = memo(function ConversationList({
   const { data: labels = [] } = useLabels();
   const { data: members = [] } = useOrgMembersQuery();
   const { data: sourceOptions = [] } = useSourceOptions();
+  const { data: channelTypeOptions = [] } = useChannelTypeOptions();
   const { data: messageResults = [] } = useMessageSearch(searchQuery);
 
   // Busca de contatos paralela à busca de conversas
@@ -334,21 +335,21 @@ export const ConversationList = memo(function ConversationList({
                 Canal
               </label>
               <div className="flex flex-wrap gap-1.5">
-                {CHANNEL_OPTIONS.map((channel) => (
+                {[{ type: 'all', label: 'Todos os canais' }, ...channelTypeOptions].map((channel) => (
                   <button
-                    key={channel.id}
+                    key={channel.type}
                     type="button"
                     title={channel.label}
-                    onClick={() => setChannelFilter(channel.id)}
+                    onClick={() => setChannelFilter(channel.type as ChannelType | 'all')}
                     className={cn(
                       'flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full transition-colors',
-                      channelFilter === channel.id
+                      channelFilter === channel.type
                         ? 'bg-primary-500 text-white'
                         : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 hover:border-primary-300'
                     )}
                   >
-                    {channel.id !== 'all' && (
-                      <ChannelIndicator type={channel.id as ChannelType} size="sm" />
+                    {channel.type !== 'all' && (
+                      <ChannelIndicator type={channel.type as ChannelType} size="sm" />
                     )}
                     {channel.label}
                   </button>
