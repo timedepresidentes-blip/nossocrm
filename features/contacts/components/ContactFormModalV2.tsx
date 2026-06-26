@@ -78,6 +78,10 @@ export const ContactFormModalV2: React.FC<ContactFormModalProps> = ({
 
   const handleFormSubmit = (data: ContactFormInput) => {
     const parsed = contactFormSchema.parse(data);
+    // Contato novo sem origem informada → marca como Manual automaticamente
+    if (!editingContact && !parsed.source?.trim()) {
+      parsed.source = 'Manual';
+    }
     onSubmit(parsed);
     onClose();
     reset();
