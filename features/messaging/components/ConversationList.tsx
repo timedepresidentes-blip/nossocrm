@@ -338,6 +338,7 @@ export const ConversationList = memo(function ConversationList({
                   <button
                     key={channel.id}
                     type="button"
+                    title={channel.label}
                     onClick={() => setChannelFilter(channel.id)}
                     className={cn(
                       'flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full transition-colors',
@@ -349,7 +350,7 @@ export const ConversationList = memo(function ConversationList({
                     {channel.id !== 'all' && (
                       <ChannelIndicator type={channel.id as ChannelType} size="sm" />
                     )}
-                    {channel.id === 'all' ? channel.label : ''}
+                    {channel.label}
                   </button>
                 ))}
               </div>
@@ -491,6 +492,7 @@ export const ConversationList = memo(function ConversationList({
                     <button
                       key={s}
                       type="button"
+                      title={label}
                       onClick={() => setSourceFilter(s)}
                       className={cn(
                         'flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full transition-colors',
