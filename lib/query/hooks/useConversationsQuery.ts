@@ -166,14 +166,14 @@ export function useConversations(filters?: ConversationFilters) {
           const { data: unidentified } = await supabase
             .from('contacts')
             .select('id')
-            .eq('organization_id', profile.organization_id!)
+            .eq('organization_id', profile!.organization_id!)
             .or('source.is.null,source.eq.');
           sourceContactIds = (unidentified ?? []).map((r: { id: string }) => r.id);
         } else {
           const { data: sourceContacts } = await supabase
             .from('contacts')
             .select('id')
-            .eq('organization_id', profile.organization_id!)
+            .eq('organization_id', profile!.organization_id!)
             .eq('source', filters.source);
           sourceContactIds = (sourceContacts ?? []).map((r: { id: string }) => r.id);
         }
