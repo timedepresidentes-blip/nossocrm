@@ -11,7 +11,7 @@ interface ContactFormData {
   phone: string;
   role: string;
   companyName: string;
-  source?: string;
+  source: string;
 }
 
 interface ContactFormModalProps {
