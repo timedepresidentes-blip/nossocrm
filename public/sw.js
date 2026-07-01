@@ -1,8 +1,8 @@
 /* eslint-disable no-restricted-globals */
-// Minimal Service Worker (MVP): cache app shell assets for faster launch.
-// Note: This does NOT provide offline data sync.
+// Minimal Service Worker: cache app shell para launch mais rápido.
+// v3: network-first para assets do Next.js (hashes mudam a cada build)
 
-const CACHE_NAME = 'nossocrm-shell-v2';
+const CACHE_NAME = 'nossocrm-shell-v3';
 const SHELL_URLS = [
   '/',
   '/login',
@@ -33,7 +33,16 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
 
-  // Network-first for navigations, fallback to cache if offline.
+  const url = new URL(req.url);
+
+  // Network-first para tudo do Next.js (_next/): assets têm hash no nome,
+  // então nunca reutilizamos cache de build anterior.
+  if (url.pathname.startsWith('/_next/')) {
+    event.respondWith(fetch(req).catch(() => caches.match(req)));
+    return;
+  }
+
+  // Network-first para navegações, fallback para cache se offline.
   if (req.mode === 'navigate') {
     event.respondWith(
       fetch(req)
@@ -47,7 +56,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Stale-while-revalidate for static assets.
+  // Stale-while-revalidate apenas para assets estáticos do shell (ícones, etc).
   event.respondWith(
     caches.match(req).then((cached) => {
       const fetchPromise = fetch(req)
@@ -61,4 +70,3 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
-
