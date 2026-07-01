@@ -93,8 +93,8 @@ export const ConversationItem = memo(function ConversationItem({
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
-        {/* Name and time */}
+      <div className="flex-1 min-w-0" data-testid="conv-v3">
+        {/* Linha 1: Nome (esquerda) + horário (direita) */}
         <div className="flex items-center justify-between gap-2">
           <span
             className={cn(
@@ -111,31 +111,35 @@ export const ConversationItem = memo(function ConversationItem({
           </span>
         </div>
 
-        {/* Preview */}
-        <div className="flex items-center gap-1.5 mt-0.5">
-          {lastMessageDirection === 'outbound' && (
-            <span className="text-xs text-slate-400">Você:</span>
-          )}
-          <p
-            className={cn(
-              'text-sm truncate',
-              unreadCount > 0
-                ? 'text-slate-700 dark:text-slate-200 font-medium'
-                : 'text-slate-500 dark:text-slate-400'
+        {/* Linha 2: Preview (esquerda) + badge de não lidas verde (direita) — layout WhatsApp */}
+        <div className="flex items-center justify-between gap-1.5 mt-0.5">
+          <div className="flex items-center gap-1 flex-1 min-w-0">
+            {lastMessageDirection === 'outbound' && (
+              <span className="text-xs text-slate-400 flex-shrink-0">Você:</span>
             )}
-          >
-            {lastMessagePreview || 'Sem mensagens'}
-          </p>
-        </div>
-
-        {/* Badges */}
-        <div className="flex items-center gap-2 mt-1.5">
-          {/* Unread badge */}
+            <p
+              className={cn(
+                'text-sm truncate',
+                unreadCount > 0
+                  ? 'text-slate-700 dark:text-slate-200 font-medium'
+                  : 'text-slate-500 dark:text-slate-400'
+              )}
+            >
+              {lastMessagePreview || 'Sem mensagens'}
+            </p>
+          </div>
           {unreadCount > 0 && (
-            <span className="px-1.5 py-0.5 text-xs font-semibold rounded-full bg-primary-500 text-white">
+            <span
+              style={{ backgroundColor: '#22c55e' }}
+              className="flex-shrink-0 min-w-[20px] h-5 px-1.5 flex items-center justify-center text-[11px] font-bold rounded-full text-white leading-none"
+            >
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
+        </div>
+
+        {/* Linha 3: Badges de status */}
+        <div className="flex items-center gap-2 mt-1.5">
 
           {/* Mensagem agendada */}
           {hasScheduled && (

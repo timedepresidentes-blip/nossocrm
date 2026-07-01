@@ -87,6 +87,7 @@ export const ContactsPage: React.FC = () => {
         } else {
             router.push('/messaging');
         }
+        return data.conversation?.id as string | undefined;
     }, [router]);
 
     const { data: duplicateGroups = [] } = useDuplicateContactsQuery();

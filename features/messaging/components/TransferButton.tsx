@@ -44,27 +44,41 @@ export function TransferButton({
 
   const otherMembers = members.filter((m) => m.id !== profile?.id);
 
-  // Insere notificação no banco para o atendente que recebeu a transferência
+  // Notifica o atendente que recebeu: persiste no banco + broadcast realtime instantâneo
   const notifyReceiver = async (targetUserId: string, targetName: string) => {
+    const sb = getClient();
+    const senderName = profile?.nickname
+      || (profile?.first_name ? `${profile.first_name}${profile.last_name ? ' ' + profile.last_name : ''}` : null)
+      || profile?.email?.split('@')[0]
+      || 'Atendente';
+    const contact = contactName || 'um cliente';
+
+    // Persiste no banco (aparece no sininho mesmo se receptor estiver offline)
     try {
-      const sb = getClient();
-      const senderName = profile?.nickname
-        || (profile?.first_name ? `${profile.first_name}${profile.last_name ? ' ' + profile.last_name : ''}` : null)
-        || profile?.email?.split('@')[0]
-        || 'Atendente';
-      const contact = contactName || 'um cliente';
       await sb.from('system_notifications').insert({
         organization_id: organizationId,
         user_id: targetUserId,
-        type: 'SYSTEM_INFO',
+        type: 'CONVERSATION_TRANSFER',
         title: 'Conversa transferida para você',
         message: `${senderName} transferiu a conversa com ${contact} para ${targetName}.`,
-        link: '/messaging',
+        link: `/messaging?id=${conversationId}`,
         severity: 'medium',
       });
-    } catch {
-      // Notificação é best-effort — falha silenciosa
-    }
+    } catch { /* best-effort */ }
+
+    // Broadcast instantâneo para exibir toast ao receptor
+    try {
+      const ch = sb.channel(`org:${organizationId}:notifications`);
+      await new Promise<void>((resolve) => {
+        ch.subscribe((status) => { if (status === 'SUBSCRIBED') resolve(); });
+      });
+      ch.send({
+        type: 'broadcast',
+        event: 'conversation_transfer',
+        payload: { conversationId, toUserId: targetUserId, fromName: senderName, contactName: contact },
+      });
+      setTimeout(() => sb.removeChannel(ch), 1500);
+    } catch { /* best-effort */ }
   };
 
   const handleTransferToMember = (userId: string, memberName: string) => {

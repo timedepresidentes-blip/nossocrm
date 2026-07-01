@@ -22,7 +22,7 @@ export function useContactNotes(contactId: string | undefined) {
       const sb = getClient();
       const { data, error } = await sb
         .from('contact_notes')
-        .select('id, contact_id, content, created_by, created_at, profiles:created_by(full_name)')
+        .select('id, contact_id, content, created_by, created_at, profiles:created_by(name)')
         .eq('contact_id', contactId!)
         .order('created_at', { ascending: false });
 
@@ -32,7 +32,7 @@ export function useContactNotes(contactId: string | undefined) {
         contactId: r.contact_id as string,
         content: r.content as string,
         createdBy: r.created_by as string | null,
-        createdByName: ((r.profiles as Record<string, unknown> | null)?.full_name as string) ?? null,
+        createdByName: ((r.profiles as Record<string, unknown> | null)?.name as string) ?? null,
         createdAt: r.created_at as string,
       }));
     },

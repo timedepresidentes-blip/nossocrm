@@ -229,16 +229,13 @@ export async function POST(request: NextRequest) {
 
     if (parameters?.body && parameters.body.length > 0) {
       if (positionalVarMatches.length > 0) {
-        // {{N}} ou {{N-nome}}: inclui parameter_name quando o nome está presente
+        // {{N}} ou {{N-nome}}: Meta usa parâmetros posicionais, sem parameter_name
         components.push({
           type: 'body',
-          parameters: parameters.body.slice(0, positionalVarMatches.length).map((p, i) => {
-            const varName = positionalVarMatches[i]?.[2];
-            return varName ? { ...p, parameter_name: varName } : p;
-          }),
+          parameters: parameters.body.slice(0, positionalVarMatches.length),
         });
       } else if (legacyNamedNames.length > 0) {
-        // {{nome}} puro — requer parameter_name no payload
+        // {{nome}} puro (templates com named variables no Meta)
         components.push({
           type: 'body',
           parameters: parameters.body.slice(0, legacyNamedNames.length).map((p, i) => ({
@@ -255,6 +252,22 @@ export async function POST(request: NextRequest) {
           type: 'button',
           parameters: btn.parameters,
         });
+      }
+    } else {
+      // Auto-inclui componentes QUICK_REPLY obrigatórios que o Meta exige
+      const buttonsComp = (dbTemplate.components as { type: string; buttons?: { type: string; text: string }[] }[])
+        .find((c) => c.type === 'BUTTONS');
+      if (buttonsComp?.buttons) {
+        buttonsComp.buttons
+          .filter((b) => b.type === 'QUICK_REPLY')
+          .forEach((btn, i) => {
+            components.push({
+              type: 'button',
+              sub_type: 'quick_reply',
+              index: i,
+              parameters: [{ type: 'payload', payload: btn.text }],
+            });
+          });
       }
     }
 

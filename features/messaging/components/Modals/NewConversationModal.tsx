@@ -10,14 +10,18 @@ import {
   ChevronRight,
   Loader2,
   Search,
+  FileText,
+  Send,
+  CheckCircle2,
 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/utils';
 import { useConnectedChannelsQuery } from '@/lib/query/hooks/useChannelsQuery';
 import { ChannelIndicator } from '../ChannelIndicator';
-import type { MessagingChannel, ChannelType } from '@/lib/messaging/types';
+import type { MessagingChannel, ChannelType, MessagingTemplate } from '@/lib/messaging/types';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { useApprovedTemplatesQuery, useSendTemplateMutation } from '@/lib/query/hooks/useTemplatesQuery';
 
 interface ContactSuggestion {
   id: string;
@@ -34,13 +38,38 @@ interface NewConversationModalProps {
     phoneNumber: string;
     contactName?: string;
     contactId?: string;
-  }) => Promise<void>;
+  }) => Promise<string | undefined>;
   defaultContactId?: string;
   defaultContactName?: string;
   defaultContactPhone?: string;
 }
 
-type Step = 'channel' | 'recipient' | 'confirm';
+type Step = 'channel' | 'recipient' | 'template' | 'confirm';
+
+// Extrai variáveis {{N}}, {{N-nome}} ou {{}} (legado) do texto do template
+function extractTemplateVars(text: string): string[] {
+  // Normaliza {{}} → {{1}}, {{2}}... para templates com formato legado
+  let counter = 0;
+  const normalized = text.replace(/\{\{\}\}/g, () => `{{${++counter}}}`);
+  const regex = /\{\{(\d+)(?:-[a-zA-Z_][a-zA-Z0-9_]*)?\}\}/g;
+  const matches: string[] = [];
+  let m;
+  while ((m = regex.exec(normalized)) !== null) {
+    if (!matches.includes(m[1])) matches.push(m[1]);
+  }
+  return matches;
+}
+
+// Label legível para variável (ex: {{1-nome}} → "nome", {{1}} → "variável 1")
+function varLabel(text: string, index: string): string {
+  const m = new RegExp(`\\{\\{${index}-([a-zA-Z_][a-zA-Z0-9_]*)\\}\\}`).exec(text);
+  return m ? m[1] : `variável ${index}`;
+}
+
+// Texto de prévia do template (corpo)
+function templatePreview(t: MessagingTemplate): string {
+  return t.components.find((c) => c.type === 'BODY')?.text || t.name;
+}
 
 export function NewConversationModal({
   isOpen,
@@ -69,6 +98,27 @@ export function NewConversationModal({
   const [isSearching, setIsSearching] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Estado da etapa de template
+  const [selectedTemplate, setSelectedTemplate] = useState<MessagingTemplate | null>(null);
+  const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
+
+  const { data: templates = [], isLoading: isLoadingTemplates } = useApprovedTemplatesQuery(
+    selectedChannel?.id ?? null
+  );
+  const { mutateAsync: sendTemplateMutateAsync } = useSendTemplateMutation();
+
+  // Variáveis do template selecionado
+  const templateVars = useMemo(() => {
+    if (!selectedTemplate) return [];
+    const all: string[] = [];
+    selectedTemplate.components.forEach((c) => {
+      if (c.text) all.push(...extractTemplateVars(c.text));
+    });
+    return [...new Set(all)].sort((a, b) => parseInt(a) - parseInt(b));
+  }, [selectedTemplate]);
+
+  const bodyText = selectedTemplate?.components.find((c) => c.type === 'BODY')?.text ?? '';
+
   useEffect(() => {
     if (isOpen) {
       setStep('channel');
@@ -84,6 +134,8 @@ export function NewConversationModal({
       setError(null);
       setContactSearch('');
       setContactSuggestions([]);
+      setSelectedTemplate(null);
+      setTemplateVariables({});
     }
   }, [isOpen, defaultContactPhone, defaultContactName, defaultContactId]);
 
@@ -123,6 +175,8 @@ export function NewConversationModal({
     setError(null);
     setContactSearch('');
     setContactSuggestions([]);
+    setSelectedTemplate(null);
+    setTemplateVariables({});
     onClose();
   }, [onClose, defaultContactPhone, defaultContactName]);
 
@@ -162,7 +216,8 @@ export function NewConversationModal({
 
   const handleBack = () => {
     if (step === 'recipient') setStep('channel');
-    else if (step === 'confirm') setStep('recipient');
+    else if (step === 'template') setStep('recipient');
+    else if (step === 'confirm') setStep('template');
     setError(null);
   };
 
@@ -172,6 +227,25 @@ export function NewConversationModal({
       setError('Número de telefone inválido (mínimo 10 dígitos)');
       return;
     }
+    setStep('template');
+    setError(null);
+  };
+
+  const handleTemplateStepContinue = () => {
+    if (selectedTemplate && templateVars.length > 0) {
+      const missing = templateVars.filter((v) => !templateVariables[v]?.trim());
+      if (missing.length > 0) {
+        setError('Preencha todas as variáveis do template antes de continuar.');
+        return;
+      }
+    }
+    setStep('confirm');
+    setError(null);
+  };
+
+  const handleSkipTemplate = () => {
+    setSelectedTemplate(null);
+    setTemplateVariables({});
     setStep('confirm');
     setError(null);
   };
@@ -182,12 +256,30 @@ export function NewConversationModal({
     setError(null);
     try {
       const cleanPhone = phoneNumber.replace(/\D/g, '');
-      await onCreateConversation({
+      const conversationId = await onCreateConversation({
         channelId: selectedChannel.id,
         phoneNumber: cleanPhone,
         contactName: contactName || undefined,
         contactId: selectedContact?.id,
       });
+
+      // Envia o template após criar a conversa (falha silenciosa — conversa já foi criada)
+      if (conversationId && selectedTemplate) {
+        const bodyParams = templateVars.map((v) => ({
+          type: 'text' as const,
+          text: templateVariables[v] || '',
+        }));
+        try {
+          await sendTemplateMutateAsync({
+            conversationId,
+            templateId: selectedTemplate.id,
+            parameters: bodyParams.length > 0 ? { body: bodyParams } : undefined,
+          });
+        } catch {
+          // Usuário pode reenviar o template manualmente na tela de conversa
+        }
+      }
+
       handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar conversa');
@@ -207,13 +299,15 @@ export function NewConversationModal({
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Nova Conversa" size="md">
       <div className="space-y-4">
-        {/* Step indicator */}
+        {/* Indicador de etapas */}
         <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
           <span className={cn(step === 'channel' && 'text-primary-600 font-medium')}>1. Canal</span>
           <ChevronRight className="w-3 h-3" />
           <span className={cn(step === 'recipient' && 'text-primary-600 font-medium')}>2. Destinatário</span>
           <ChevronRight className="w-3 h-3" />
-          <span className={cn(step === 'confirm' && 'text-primary-600 font-medium')}>3. Confirmar</span>
+          <span className={cn(step === 'template' && 'text-primary-600 font-medium')}>3. Template</span>
+          <ChevronRight className="w-3 h-3" />
+          <span className={cn(step === 'confirm' && 'text-primary-600 font-medium')}>4. Confirmar</span>
         </div>
 
         {error && (
@@ -222,7 +316,7 @@ export function NewConversationModal({
           </div>
         )}
 
-        {/* Step 1: Select channel */}
+        {/* Etapa 1: Selecionar canal */}
         {step === 'channel' && (
           <div className="space-y-3">
             <p className="text-sm text-slate-600 dark:text-slate-300">
@@ -267,7 +361,7 @@ export function NewConversationModal({
           </div>
         )}
 
-        {/* Step 2: Enter recipient */}
+        {/* Etapa 2: Destinatário */}
         {step === 'recipient' && selectedChannel && (
           <div className="space-y-4">
             <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-black/20">
@@ -276,7 +370,6 @@ export function NewConversationModal({
             </div>
 
             {selectedContact ? (
-              /* Contato selecionado */
               <div className="flex items-center gap-3 p-3 rounded-lg bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/20">
                 <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-500/20 flex items-center justify-center flex-shrink-0">
                   <User className="w-4 h-4 text-primary-600 dark:text-primary-400" />
@@ -297,7 +390,6 @@ export function NewConversationModal({
               </div>
             ) : (
               <div className="space-y-3">
-                {/* Busca de contatos existentes */}
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                     Buscar contato
@@ -323,7 +415,6 @@ export function NewConversationModal({
                     )}
                   </div>
 
-                  {/* Sugestões de contatos */}
                   {contactSuggestions.length > 0 && (
                     <div className="border border-slate-200 dark:border-white/10 rounded-lg overflow-hidden divide-y divide-slate-100 dark:divide-white/5">
                       {contactSuggestions.map((contact) => (
@@ -360,7 +451,6 @@ export function NewConversationModal({
                   <div className="flex-1 h-px bg-slate-200 dark:bg-white/10" />
                 </div>
 
-                {/* Número manual */}
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                     Número de telefone <span className="text-red-500">*</span>
@@ -383,7 +473,6 @@ export function NewConversationModal({
                   </div>
                 </div>
 
-                {/* Nome (opcional, só para número manual) */}
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                     Nome <span className="text-slate-400">(opcional)</span>
@@ -408,7 +497,6 @@ export function NewConversationModal({
               </div>
             )}
 
-            {/* Se contato selecionado mas sem telefone */}
             {selectedContact && !selectedContact.phone && (
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -436,7 +524,96 @@ export function NewConversationModal({
           </div>
         )}
 
-        {/* Step 3: Confirm */}
+        {/* Etapa 3: Template (opcional) */}
+        {step === 'template' && selectedChannel && (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Selecione um template para enviar ao contato (opcional):
+            </p>
+
+            {isLoadingTemplates ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+              </div>
+            ) : templates.length === 0 ? (
+              <div className="text-center py-6">
+                <FileText className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                <p className="text-sm text-slate-500 dark:text-slate-400">Nenhum template aprovado.</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                  A conversa será criada sem envio de template.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                {templates.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTemplate(selectedTemplate?.id === t.id ? null : t);
+                      setTemplateVariables({});
+                      setError(null);
+                    }}
+                    className={cn(
+                      'w-full text-left p-3 rounded-lg border transition-colors',
+                      selectedTemplate?.id === t.id
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                        : 'border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5'
+                    )}
+                  >
+                    <div className="flex items-start gap-2">
+                      <FileText className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                          {t.displayName ?? t.name}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1">
+                          {templatePreview(t)}
+                        </p>
+                      </div>
+                      {selectedTemplate?.id === t.id && (
+                        <CheckCircle2 className="w-4 h-4 text-primary-500 flex-shrink-0 mt-0.5" />
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Variáveis do template selecionado */}
+            {selectedTemplate && templateVars.length > 0 && (
+              <div className="space-y-2 pt-3 border-t border-slate-200 dark:border-white/10">
+                <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                  Preencha as variáveis:
+                </p>
+                {templateVars.map((varNum) => (
+                  <div key={varNum} className="space-y-1">
+                    <label className="text-xs text-slate-500 dark:text-slate-400 block capitalize">
+                      {varLabel(bodyText, varNum)}
+                    </label>
+                    <input
+                      type="text"
+                      value={templateVariables[varNum] || ''}
+                      onChange={(e) =>
+                        setTemplateVariables((prev) => ({ ...prev, [varNum]: e.target.value }))
+                      }
+                      placeholder={`Valor para "${varLabel(bodyText, varNum)}"`}
+                      className={cn(
+                        'w-full px-3 py-2 text-sm rounded-lg border',
+                        'bg-white dark:bg-black/20',
+                        'border-slate-200 dark:border-white/10',
+                        'text-slate-900 dark:text-white',
+                        'focus:outline-none focus:ring-2 focus:ring-primary-500'
+                      )}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Etapa 4: Confirmar */}
         {step === 'confirm' && selectedChannel && (
           <div className="space-y-4">
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10">
@@ -467,12 +644,25 @@ export function NewConversationModal({
                     <dd className="text-primary-600 dark:text-primary-400 font-medium">Sim</dd>
                   </div>
                 )}
+                {selectedTemplate ? (
+                  <div className="flex justify-between">
+                    <dt className="text-slate-500 dark:text-slate-400">Template:</dt>
+                    <dd className="text-slate-900 dark:text-white font-medium truncate max-w-[160px]">
+                      {selectedTemplate.displayName ?? selectedTemplate.name}
+                    </dd>
+                  </div>
+                ) : (
+                  <div className="flex justify-between">
+                    <dt className="text-slate-500 dark:text-slate-400">Template:</dt>
+                    <dd className="text-slate-400 dark:text-slate-500">Nenhum</dd>
+                  </div>
+                )}
               </dl>
             </div>
           </div>
         )}
 
-        {/* Actions */}
+        {/* Ações */}
         <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-white/10">
           <button
             type="button"
@@ -498,6 +688,30 @@ export function NewConversationModal({
             </button>
           )}
 
+          {step === 'template' && (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleSkipTemplate}
+                className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 underline transition-colors"
+              >
+                Pular etapa
+              </button>
+              <button
+                type="button"
+                onClick={handleTemplateStepContinue}
+                className={cn(
+                  'inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold',
+                  'bg-primary-600 text-white hover:bg-primary-700',
+                  'transition-colors'
+                )}
+              >
+                Continuar
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {step === 'confirm' && (
             <button
               type="button"
@@ -513,6 +727,11 @@ export function NewConversationModal({
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Criando...
+                </>
+              ) : selectedTemplate ? (
+                <>
+                  <Send className="w-4 h-4" />
+                  Criar e Enviar Template
                 </>
               ) : (
                 <>

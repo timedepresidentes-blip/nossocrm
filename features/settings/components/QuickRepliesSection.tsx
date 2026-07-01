@@ -57,8 +57,9 @@ export function QuickRepliesSection() {
       }
       setEditing(null);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : '';
-      setError(msg.includes('unique') ? 'Esse atalho já existe' : 'Erro ao salvar');
+      const code = (e as { code?: string })?.code;
+      const msg = (e as { message?: string })?.message ?? '';
+      setError(code === '23505' || msg.includes('unique') ? 'Esse atalho já existe' : 'Erro ao salvar');
     }
   };
 

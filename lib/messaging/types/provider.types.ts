@@ -244,9 +244,12 @@ export interface SendTemplateParams {
  */
 export interface TemplateComponentParam {
   type: 'header' | 'body' | 'button';
+  sub_type?: 'quick_reply' | 'url';
+  index?: number;
   parameters?: {
-    type: 'text' | 'currency' | 'date_time' | 'image' | 'document' | 'video';
+    type: 'text' | 'currency' | 'date_time' | 'image' | 'document' | 'video' | 'payload';
     text?: string;
+    payload?: string;
     currency?: { code: string; amount: number };
     dateTime?: { fallbackValue: string };
     image?: { link: string };

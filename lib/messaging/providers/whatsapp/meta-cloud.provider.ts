@@ -419,10 +419,16 @@ export class MetaCloudWhatsAppProvider extends BaseChannelProvider {
         template: {
           name: templateName,
           language: { code: templateLanguage },
-          components: components?.map((c) => ({
-            type: c.type.toLowerCase(),
-            parameters: c.parameters,
-          })),
+          components: components?.map((c) => {
+            const mapped: Record<string, unknown> = {
+              type: c.type.toLowerCase(),
+              parameters: c.parameters,
+            };
+            // Campos obrigatórios para botões QUICK_REPLY e URL
+            if (c.sub_type) mapped.sub_type = c.sub_type;
+            if (c.index !== undefined) mapped.index = String(c.index);
+            return mapped;
+          }),
         },
       };
 

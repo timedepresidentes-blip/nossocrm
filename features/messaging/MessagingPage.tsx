@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, CalendarClock } from 'lucide-react';
+import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, CalendarClock, ArrowLeftRight, X } from 'lucide-react';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
@@ -76,6 +76,11 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
   const [showSearch, setShowSearch] = useState(false);
   const [showScheduledPanel, setShowScheduledPanel] = useState(false);
   const [replyToMessage, setReplyToMessage] = useState<import('@/lib/messaging/types').MessagingMessage | null>(null);
+  const [transferNotification, setTransferNotification] = useState<{
+    conversationId: string;
+    fromName: string;
+    contactName: string;
+  } | null>(null);
 
   // Larguras e estados de colapso das colunas (persistidos no localStorage)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -130,9 +135,10 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
   useRealtimeSyncMessaging();
   const { play: playTestSound } = useNotificationSound();
 
-  // Listener para handoff da IA — servidor faz broadcast quando julia passa para humano
+  // Listener para eventos de notificação da org (handoff da IA e transferência de atendimento)
   useEffect(() => {
     const orgId = profile?.organization_id;
+    const myId = profile?.id;
     if (!orgId) return;
 
     const channel = supabase
@@ -140,10 +146,23 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
       .on('broadcast', { event: 'ai_handoff' }, () => {
         playTestSound('ai_handoff');
       })
+      .on('broadcast', { event: 'conversation_transfer' }, ({ payload }) => {
+        // Exibe toast apenas para o atendente que recebeu
+        if (payload?.toUserId === myId) {
+          setTransferNotification({
+            conversationId: payload.conversationId,
+            fromName: payload.fromName,
+            contactName: payload.contactName,
+          });
+          playTestSound('ai_handoff');
+          // Auto-dismiss após 10 segundos
+          setTimeout(() => setTransferNotification(null), 10_000);
+        }
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [profile?.organization_id, playTestSound]);
+  }, [profile?.organization_id, profile?.id, playTestSound]);
 
   // Fetch selected conversation details
   const { data: selectedConversation, isLoading: isConversationLoading } = useConversation(selectedConversationId);
@@ -309,6 +328,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
     if (data.conversation?.id) {
       handleSelectConversation(data.conversation.id);
     }
+    return data.conversation?.id as string | undefined;
   }, [queryClient, handleSelectConversation]);
 
   return (
@@ -603,6 +623,43 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
         suggestedPhone={selectedConversation?.contactPhone || undefined}
         suggestedName={selectedConversation?.externalContactName || undefined}
       />
+
+      {/* Toast de transferência de atendimento */}
+      {transferNotification && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg border bg-white dark:bg-slate-800 border-primary-200 dark:border-primary-700 min-w-[320px] max-w-[420px] animate-in slide-in-from-bottom-4 duration-300">
+          <div className="flex-shrink-0 w-9 h-9 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center">
+            <ArrowLeftRight className="w-4 h-4 text-primary-600 dark:text-primary-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">
+              Atendimento transferido para você
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <span className="font-medium text-slate-700 dark:text-slate-300">{transferNotification.fromName}</span>
+              {' '}transferiu{' '}
+              <span className="font-medium text-slate-700 dark:text-slate-300">{transferNotification.contactName}</span>
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedConversationId(transferNotification.conversationId);
+                router.push(`/messaging?id=${transferNotification.conversationId}`, { scroll: false });
+                setTransferNotification(null);
+              }}
+              className="mt-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline"
+            >
+              Abrir conversa →
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setTransferNotification(null)}
+            className="flex-shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       <Modal
