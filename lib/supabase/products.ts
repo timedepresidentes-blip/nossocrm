@@ -7,7 +7,7 @@
  */
 
 import { supabase } from './client';
-import { Product } from '@/types';
+import { Product, ProductCharacteristic } from '@/types';
 import { sanitizeUUID } from './utils';
 
 // =============================================================================
@@ -44,12 +44,17 @@ type DbProduct = {
   name: string;
   description: string | null;
   price: number;
+  cost_price: number | null;
   sku: string | null;
+  observations: string | null;
+  characteristics: ProductCharacteristic[] | null;
   active: boolean | null;
   created_at: string;
   updated_at: string;
   owner_id: string | null;
 };
+
+const PRODUCT_SELECT = 'id, organization_id, name, description, price, cost_price, sku, observations, characteristics, active, created_at, updated_at, owner_id';
 
 function transformProduct(db: DbProduct): Product {
   return {
@@ -58,7 +63,10 @@ function transformProduct(db: DbProduct): Product {
     name: db.name,
     description: db.description || undefined,
     price: Number(db.price ?? 0),
+    costPrice: Number(db.cost_price ?? 0),
     sku: db.sku || undefined,
+    observations: db.observations || undefined,
+    characteristics: db.characteristics || [],
     active: db.active ?? true,
   };
 }
@@ -70,7 +78,7 @@ export const productsService = {
 
       const { data, error } = await supabase
         .from('products')
-        .select('id, organization_id, name, description, price, sku, active, created_at, updated_at, owner_id')
+        .select(PRODUCT_SELECT)
         .order('created_at', { ascending: false });
 
       if (error) return { data: [], error };
@@ -89,7 +97,7 @@ export const productsService = {
 
       const { data, error } = await supabase
         .from('products')
-        .select('id, organization_id, name, description, price, sku, active, created_at, updated_at, owner_id')
+        .select(PRODUCT_SELECT)
         .eq('active', true)
         .order('created_at', { ascending: false });
 
@@ -102,7 +110,7 @@ export const productsService = {
     }
   },
 
-  async create(input: { name: string; price: number; sku?: string; description?: string }): Promise<{ data: Product | null; error: Error | null }> {
+  async create(input: { name: string; price: number; costPrice?: number; sku?: string; description?: string; observations?: string; characteristics?: ProductCharacteristic[] }): Promise<{ data: Product | null; error: Error | null }> {
     try {
       if (!supabase) return { data: null, error: new Error('Supabase não configurado') };
 
@@ -114,13 +122,16 @@ export const productsService = {
         .insert({
           name: input.name,
           price: input.price,
+          cost_price: input.costPrice ?? 0,
           sku: input.sku || null,
           description: input.description || null,
+          observations: input.observations || null,
+          characteristics: input.characteristics ?? [],
           active: true,
           owner_id: sanitizeUUID(user?.id),
           organization_id: organizationId,
         })
-        .select('id, organization_id, name, description, price, sku, active, created_at, updated_at, owner_id')
+        .select(PRODUCT_SELECT)
         .single();
 
       if (error) return { data: null, error };
@@ -130,15 +141,18 @@ export const productsService = {
     }
   },
 
-  async update(id: string, updates: Partial<{ name: string; price: number; sku?: string; description?: string; active: boolean }>): Promise<{ error: Error | null }> {
+  async update(id: string, updates: Partial<{ name: string; price: number; costPrice: number; sku?: string; description?: string; observations?: string; characteristics?: ProductCharacteristic[]; active: boolean }>): Promise<{ error: Error | null }> {
     try {
       if (!supabase) return { error: new Error('Supabase não configurado') };
 
       const payload: Record<string, unknown> = {};
       if (updates.name !== undefined) payload.name = updates.name;
       if (updates.price !== undefined) payload.price = updates.price;
+      if (updates.costPrice !== undefined) payload.cost_price = updates.costPrice;
       if (updates.sku !== undefined) payload.sku = updates.sku || null;
       if (updates.description !== undefined) payload.description = updates.description || null;
+      if (updates.observations !== undefined) payload.observations = updates.observations || null;
+      if (updates.characteristics !== undefined) payload.characteristics = updates.characteristics;
       if (updates.active !== undefined) payload.active = updates.active;
       payload.updated_at = new Date().toISOString();
 

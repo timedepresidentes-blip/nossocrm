@@ -12,6 +12,7 @@ import { ChannelsSection } from './components/ChannelsSection';
 import { BusinessUnitsSection } from './components/BusinessUnitsSection';
 import { DataStorageSettings } from './components/DataStorageSettings';
 import { ProductsCatalogManager } from './components/ProductsCatalogManager';
+import { QuoteSettingsSection } from './components/QuoteSettingsSection';
 import { AICenterSettings } from './AICenterSettings';
 import { QuickRepliesSection } from './components/QuickRepliesSection';
 
@@ -216,6 +217,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ hash, isAdmin }) => {
 const ProductsSettings: React.FC = () => {
   return (
     <div className="pb-10">
+      <QuoteSettingsSection />
       <ProductsCatalogManager />
     </div>
   );

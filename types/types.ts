@@ -177,13 +177,21 @@ export interface Contact {
 }
 
 // ITEM 3: Produtos e Serviços
+export interface ProductCharacteristic {
+  key: string;
+  value: string;
+}
+
 export interface Product {
   id: string;
-  organizationId?: OrganizationId; // Tenant FK (for RLS) - optional during migration
+  organizationId?: OrganizationId;
   name: string;
   description?: string;
   price: number;
+  costPrice?: number;
   sku?: string;
+  observations?: string;
+  characteristics?: ProductCharacteristic[];
   /** Se está ativo no catálogo (itens inativos não devem aparecer no dropdown do deal). */
   active?: boolean;
 }

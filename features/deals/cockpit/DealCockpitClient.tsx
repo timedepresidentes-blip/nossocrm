@@ -1736,6 +1736,16 @@ export default function DealCockpitClient({ dealId }: { dealId?: string }) {
                     Template E-mail
                   </button>
                 </div>
+
+                <button
+                  type="button"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/3 px-3 py-2 text-[11px] font-semibold text-slate-200 hover:bg-white/8"
+                  title="Gerar orçamento imprimível com produtos do deal"
+                  onClick={() => window.open(`/deals/${deal.id}/quote`, '_blank')}
+                >
+                  <FileText className="h-4 w-4 text-slate-300" />
+                  Gerar Orçamento
+                </button>
               </div>
             </Panel>
 
