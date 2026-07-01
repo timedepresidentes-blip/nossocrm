@@ -7,7 +7,7 @@
  */
 
 import { supabase } from './client';
-import { Product, ProductCharacteristic } from '@/types';
+import { Product, ProductCharacteristic, ProductCostItem } from '@/types';
 import { sanitizeUUID } from './utils';
 
 // =============================================================================
@@ -45,6 +45,7 @@ type DbProduct = {
   description: string | null;
   price: number;
   cost_price: number | null;
+  cost_items: ProductCostItem[] | null;
   sku: string | null;
   observations: string | null;
   characteristics: ProductCharacteristic[] | null;
@@ -54,16 +55,25 @@ type DbProduct = {
   owner_id: string | null;
 };
 
-const PRODUCT_SELECT = 'id, organization_id, name, description, price, cost_price, sku, observations, characteristics, active, created_at, updated_at, owner_id';
+const PRODUCT_SELECT = 'id, organization_id, name, description, price, cost_price, cost_items, sku, observations, characteristics, active, created_at, updated_at, owner_id';
 
 function transformProduct(db: DbProduct): Product {
+  const costItems: ProductCostItem[] = db.cost_items?.length
+    ? db.cost_items
+    : db.cost_price && db.cost_price > 0
+      ? [{ label: 'Custo', value: Number(db.cost_price) }]
+      : [];
+
+  const totalCost = costItems.reduce((s, i) => s + i.value, 0);
+
   return {
     id: db.id,
     organizationId: db.organization_id || undefined,
     name: db.name,
     description: db.description || undefined,
     price: Number(db.price ?? 0),
-    costPrice: Number(db.cost_price ?? 0),
+    costPrice: totalCost,
+    costItems,
     sku: db.sku || undefined,
     observations: db.observations || undefined,
     characteristics: db.characteristics || [],
@@ -110,19 +120,22 @@ export const productsService = {
     }
   },
 
-  async create(input: { name: string; price: number; costPrice?: number; sku?: string; description?: string; observations?: string; characteristics?: ProductCharacteristic[] }): Promise<{ data: Product | null; error: Error | null }> {
+  async create(input: { name: string; price: number; costPrice?: number; costItems?: ProductCostItem[]; sku?: string; description?: string; observations?: string; characteristics?: ProductCharacteristic[] }): Promise<{ data: Product | null; error: Error | null }> {
     try {
       if (!supabase) return { data: null, error: new Error('Supabase não configurado') };
 
       const { data: { user } } = await supabase.auth.getUser();
       const organizationId = await getCurrentOrganizationId();
+      const costItems = input.costItems ?? [];
+      const totalCost = costItems.reduce((s, i) => s + i.value, 0);
 
       const { data, error } = await supabase
         .from('products')
         .insert({
           name: input.name,
           price: input.price,
-          cost_price: input.costPrice ?? 0,
+          cost_price: totalCost,
+          cost_items: costItems,
           sku: input.sku || null,
           description: input.description || null,
           observations: input.observations || null,
@@ -141,14 +154,19 @@ export const productsService = {
     }
   },
 
-  async update(id: string, updates: Partial<{ name: string; price: number; costPrice: number; sku?: string; description?: string; observations?: string; characteristics?: ProductCharacteristic[]; active: boolean }>): Promise<{ error: Error | null }> {
+  async update(id: string, updates: Partial<{ name: string; price: number; costPrice: number; costItems: ProductCostItem[]; sku?: string; description?: string; observations?: string; characteristics?: ProductCharacteristic[]; active: boolean }>): Promise<{ error: Error | null }> {
     try {
       if (!supabase) return { error: new Error('Supabase não configurado') };
 
       const payload: Record<string, unknown> = {};
       if (updates.name !== undefined) payload.name = updates.name;
       if (updates.price !== undefined) payload.price = updates.price;
-      if (updates.costPrice !== undefined) payload.cost_price = updates.costPrice;
+      if (updates.costItems !== undefined) {
+        payload.cost_items = updates.costItems;
+        payload.cost_price = updates.costItems.reduce((s, i) => s + i.value, 0);
+      } else if (updates.costPrice !== undefined) {
+        payload.cost_price = updates.costPrice;
+      }
       if (updates.sku !== undefined) payload.sku = updates.sku || null;
       if (updates.description !== undefined) payload.description = updates.description || null;
       if (updates.observations !== undefined) payload.observations = updates.observations || null;

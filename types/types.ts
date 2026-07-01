@@ -182,6 +182,11 @@ export interface ProductCharacteristic {
   value: string;
 }
 
+export interface ProductCostItem {
+  label: string;
+  value: number;
+}
+
 export interface Product {
   id: string;
   organizationId?: OrganizationId;
@@ -189,6 +194,7 @@ export interface Product {
   description?: string;
   price: number;
   costPrice?: number;
+  costItems?: ProductCostItem[];
   sku?: string;
   observations?: string;
   characteristics?: ProductCharacteristic[];

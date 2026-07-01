@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Package, Pencil, Plus, Save, Trash2, ToggleLeft, ToggleRight, X } from 'lucide-react';
 import { productsService } from '@/lib/supabase';
-import type { Product, ProductCharacteristic } from '@/types';
+import type { Product, ProductCharacteristic, ProductCostItem } from '@/types';
 
 function formatBRL(v: number) {
   try {
@@ -14,9 +14,13 @@ function formatBRL(v: number) {
 }
 
 function calcMargin(price: number, cost: number): string {
-  if (!cost || cost <= 0) return '—';
+  if (!cost || cost <= 0 || price <= 0) return '—';
   const margin = ((price - cost) / price) * 100;
   return `${margin.toFixed(1)}%`;
+}
+
+function totalCost(items: { label: string; value: string }[]): number {
+  return items.reduce((s, i) => s + (Number(i.value) || 0), 0);
 }
 
 // Formulário inline para criar/editar produto
@@ -33,7 +37,6 @@ function ProductForm({
 }) {
   const [name, setName] = useState(initial?.name ?? '');
   const [price, setPrice] = useState(String(initial?.price ?? '0'));
-  const [costPrice, setCostPrice] = useState(String(initial?.costPrice ?? '0'));
   const [sku, setSku] = useState(initial?.sku ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [observations, setObservations] = useState(initial?.observations ?? '');
@@ -42,7 +45,30 @@ function ProductForm({
   const [newValue, setNewValue] = useState('');
   const [expanded, setExpanded] = useState(false);
 
+  // Custo como lista dinâmica de componentes
+  const seedCostItems = (): { label: string; value: string }[] => {
+    if (initial?.costItems?.length) {
+      return initial.costItems.map((i) => ({ label: i.label, value: String(i.value) }));
+    }
+    if (initial?.costPrice && initial.costPrice > 0) {
+      return [{ label: 'Custo', value: String(initial.costPrice) }];
+    }
+    return [{ label: '', value: '' }];
+  };
+  const [costItems, setCostItems] = useState<{ label: string; value: string }[]>(seedCostItems);
+
+  const cost = totalCost(costItems);
   const canSave = name.trim().length > 1 && Number.isFinite(Number(price)) && Number(price) >= 0;
+
+  const addCostItem = () => setCostItems((prev) => [...prev, { label: '', value: '' }]);
+
+  const updateCostItem = (i: number, field: 'label' | 'value', val: string) => {
+    setCostItems((prev) => prev.map((item, idx) => idx === i ? { ...item, [field]: val } : item));
+  };
+
+  const removeCostItem = (i: number) => {
+    setCostItems((prev) => prev.length > 1 ? prev.filter((_, idx) => idx !== i) : [{ label: '', value: '' }]);
+  };
 
   const addCharacteristic = () => {
     if (!newKey.trim()) return;
@@ -57,10 +83,14 @@ function ProductForm({
 
   const handleSave = () => {
     if (!canSave) return;
+    const items: ProductCostItem[] = costItems
+      .filter((i) => i.label.trim() || Number(i.value) > 0)
+      .map((i) => ({ label: i.label.trim() || 'Custo', value: Number(i.value) || 0 }));
     onSave({
       name: name.trim(),
       price: Number(price),
-      costPrice: Number(costPrice),
+      costPrice: items.reduce((s, i) => s + i.value, 0),
+      costItems: items,
       sku: sku.trim() || undefined,
       description: description.trim() || undefined,
       observations: observations.trim() || undefined,
@@ -72,9 +102,9 @@ function ProductForm({
 
   return (
     <div className="border border-primary-200 dark:border-primary-800 rounded-2xl p-4 bg-primary-50/40 dark:bg-primary-900/10 space-y-3">
-      {/* Linha 1: Nome + preços */}
+      {/* Linha 1: Nome + preço + margem + SKU */}
       <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-        <div className="sm:col-span-5">
+        <div className="sm:col-span-6">
           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Nome *</label>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Painel Solar 555W, Inversor..." className={inputCls} />
         </div>
@@ -82,19 +112,58 @@ function ProductForm({
           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Preço de venda *</label>
           <input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="decimal" className={inputCls} />
         </div>
-        <div className="sm:col-span-2">
-          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Custo</label>
-          <input value={costPrice} onChange={(e) => setCostPrice(e.target.value)} inputMode="decimal" className={inputCls} />
-        </div>
-        <div className="sm:col-span-1 flex items-end">
+        <div className="sm:col-span-2 flex items-end">
           <div className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/5 text-xs text-slate-500 dark:text-slate-400 text-center">
-            <div className="font-bold text-slate-700 dark:text-slate-200">{calcMargin(Number(price), Number(costPrice))}</div>
+            <div className="font-bold text-slate-700 dark:text-slate-200">{calcMargin(Number(price), cost)}</div>
             <div>margem</div>
           </div>
         </div>
         <div className="sm:col-span-2">
           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">SKU</label>
           <input value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Opcional" className={inputCls} />
+        </div>
+      </div>
+
+      {/* Linha 2: Componentes de custo */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+            Custo {cost > 0 && <span className="font-normal text-slate-400">— total {formatBRL(cost)}</span>}
+          </label>
+          <button
+            type="button"
+            onClick={addCostItem}
+            className="inline-flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 font-medium hover:underline"
+          >
+            <Plus className="w-3 h-3" /> Adicionar componente
+          </button>
+        </div>
+        <div className="space-y-2">
+          {costItems.map((item, i) => (
+            <div key={i} className="flex gap-2 items-center">
+              <input
+                value={item.label}
+                onChange={(e) => updateCostItem(i, 'label', e.target.value)}
+                placeholder={i === 0 ? 'Ex.: Painel solar' : 'Ex.: Mão de obra'}
+                className={inputCls + ' flex-1 text-xs'}
+              />
+              <input
+                value={item.value}
+                onChange={(e) => updateCostItem(i, 'value', e.target.value)}
+                inputMode="decimal"
+                placeholder="0,00"
+                className={inputCls + ' w-28 text-xs'}
+              />
+              <button
+                type="button"
+                onClick={() => removeCostItem(i)}
+                className="text-slate-400 hover:text-red-500 shrink-0"
+                title="Remover"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
         </div>
       </div>
 
