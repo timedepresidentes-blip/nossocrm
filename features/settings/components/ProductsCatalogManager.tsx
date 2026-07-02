@@ -124,40 +124,48 @@ function ProductForm({
         </div>
       </div>
 
-      {/* Linha 2: Componentes de custo */}
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-            Custo {cost > 0 && <span className="font-normal text-slate-400">— total {formatBRL(cost)}</span>}
-          </label>
+      {/* Linha 2: Composição de custo (interno) */}
+      <div className="rounded-xl border border-amber-200/60 dark:border-amber-700/30 bg-amber-50/40 dark:bg-amber-900/10 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Composição de custo</span>
+            <span className="ml-1.5 text-[10px] text-amber-600/70 dark:text-amber-500/60 font-normal">— uso interno, não aparece no orçamento do cliente</span>
+          </div>
           <button
             type="button"
             onClick={addCostItem}
-            className="inline-flex items-center gap-1 text-xs text-primary-600 dark:text-primary-400 font-medium hover:underline"
+            className="inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400 font-semibold hover:underline"
           >
-            <Plus className="w-3 h-3" /> Adicionar componente
+            <Plus className="w-3 h-3" /> Adicionar item
           </button>
         </div>
-        <div className="space-y-2">
+
+        {/* Cabeçalho das colunas */}
+        <div className="grid gap-2 pr-6" style={{ gridTemplateColumns: '1fr 120px' }}>
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide pl-1">Descrição do componente</span>
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide pl-1">Custo (R$)</span>
+        </div>
+
+        <div className="space-y-1.5">
           {costItems.map((item, i) => (
-            <div key={i} className="flex gap-2 items-center">
+            <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 120px auto' }}>
               <input
                 value={item.label}
                 onChange={(e) => updateCostItem(i, 'label', e.target.value)}
-                placeholder={i === 0 ? 'Ex.: Painel solar' : 'Ex.: Mão de obra'}
-                className={inputCls + ' flex-1 text-xs'}
+                placeholder={['Painel solar', 'Inversor', 'Engenharia', 'Frete', 'NF'][i] ?? 'Ex.: Instalação'}
+                className={inputCls + ' text-xs'}
               />
               <input
                 value={item.value}
                 onChange={(e) => updateCostItem(i, 'value', e.target.value)}
                 inputMode="decimal"
                 placeholder="0,00"
-                className={inputCls + ' w-28 text-xs'}
+                className={inputCls + ' text-xs text-right'}
               />
               <button
                 type="button"
                 onClick={() => removeCostItem(i)}
-                className="text-slate-400 hover:text-red-500 shrink-0"
+                className="text-slate-400 hover:text-red-500 shrink-0 w-5"
                 title="Remover"
               >
                 <X className="w-4 h-4" />
@@ -165,6 +173,13 @@ function ProductForm({
             </div>
           ))}
         </div>
+
+        {cost > 0 && (
+          <div className="flex justify-between items-center pt-1 border-t border-amber-200/50 dark:border-amber-700/20 text-xs">
+            <span className="text-slate-500 dark:text-slate-400">Custo total</span>
+            <span className="font-bold text-amber-700 dark:text-amber-400">{formatBRL(cost)}</span>
+          </div>
+        )}
       </div>
 
       {/* Linha 2: Descrição */}
