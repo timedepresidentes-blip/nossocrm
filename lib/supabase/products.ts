@@ -46,6 +46,8 @@ type DbProduct = {
   price: number;
   cost_price: number | null;
   cost_items: ProductCostItem[] | null;
+  kit_description: string | null;
+  kit_cost: number | null;
   sku: string | null;
   observations: string | null;
   characteristics: ProductCharacteristic[] | null;
@@ -55,7 +57,7 @@ type DbProduct = {
   owner_id: string | null;
 };
 
-const PRODUCT_SELECT = 'id, organization_id, name, description, price, cost_price, cost_items, sku, observations, characteristics, active, created_at, updated_at, owner_id';
+const PRODUCT_SELECT = 'id, organization_id, name, description, price, cost_price, cost_items, kit_description, kit_cost, sku, observations, characteristics, active, created_at, updated_at, owner_id';
 
 function transformProduct(db: DbProduct): Product {
   const costItems: ProductCostItem[] = db.cost_items?.length
@@ -64,7 +66,8 @@ function transformProduct(db: DbProduct): Product {
       ? [{ label: 'Custo', value: Number(db.cost_price) }]
       : [];
 
-  const totalCost = costItems.reduce((s, i) => s + i.value, 0);
+  const kitCost = Number(db.kit_cost ?? 0);
+  const totalCost = kitCost + costItems.reduce((s, i) => s + i.value, 0);
 
   return {
     id: db.id,
@@ -74,6 +77,8 @@ function transformProduct(db: DbProduct): Product {
     price: Number(db.price ?? 0),
     costPrice: totalCost,
     costItems,
+    kitDescription: db.kit_description || undefined,
+    kitCost,
     sku: db.sku || undefined,
     observations: db.observations || undefined,
     characteristics: db.characteristics || [],
@@ -120,14 +125,15 @@ export const productsService = {
     }
   },
 
-  async create(input: { name: string; price: number; costPrice?: number; costItems?: ProductCostItem[]; sku?: string; description?: string; observations?: string; characteristics?: ProductCharacteristic[] }): Promise<{ data: Product | null; error: Error | null }> {
+  async create(input: { name: string; price: number; costPrice?: number; costItems?: ProductCostItem[]; kitDescription?: string; kitCost?: number; sku?: string; description?: string; observations?: string; characteristics?: ProductCharacteristic[] }): Promise<{ data: Product | null; error: Error | null }> {
     try {
       if (!supabase) return { data: null, error: new Error('Supabase não configurado') };
 
       const { data: { user } } = await supabase.auth.getUser();
       const organizationId = await getCurrentOrganizationId();
       const costItems = input.costItems ?? [];
-      const totalCost = costItems.reduce((s, i) => s + i.value, 0);
+      const kitCost = input.kitCost ?? 0;
+      const totalCost = kitCost + costItems.reduce((s, i) => s + i.value, 0);
 
       const { data, error } = await supabase
         .from('products')
@@ -136,6 +142,8 @@ export const productsService = {
           price: input.price,
           cost_price: totalCost,
           cost_items: costItems,
+          kit_description: input.kitDescription || null,
+          kit_cost: kitCost,
           sku: input.sku || null,
           description: input.description || null,
           observations: input.observations || null,
@@ -154,16 +162,19 @@ export const productsService = {
     }
   },
 
-  async update(id: string, updates: Partial<{ name: string; price: number; costPrice: number; costItems: ProductCostItem[]; sku?: string; description?: string; observations?: string; characteristics?: ProductCharacteristic[]; active: boolean }>): Promise<{ error: Error | null }> {
+  async update(id: string, updates: Partial<{ name: string; price: number; costPrice: number; costItems: ProductCostItem[]; kitDescription: string; kitCost: number; sku?: string; description?: string; observations?: string; characteristics?: ProductCharacteristic[]; active: boolean }>): Promise<{ error: Error | null }> {
     try {
       if (!supabase) return { error: new Error('Supabase não configurado') };
 
       const payload: Record<string, unknown> = {};
       if (updates.name !== undefined) payload.name = updates.name;
       if (updates.price !== undefined) payload.price = updates.price;
+      if (updates.kitDescription !== undefined) payload.kit_description = updates.kitDescription || null;
+      if (updates.kitCost !== undefined) payload.kit_cost = updates.kitCost;
       if (updates.costItems !== undefined) {
         payload.cost_items = updates.costItems;
-        payload.cost_price = updates.costItems.reduce((s, i) => s + i.value, 0);
+        const kitCost = Number(updates.kitCost ?? payload.kit_cost ?? 0);
+        payload.cost_price = kitCost + updates.costItems.reduce((s, i) => s + i.value, 0);
       } else if (updates.costPrice !== undefined) {
         payload.cost_price = updates.costPrice;
       }

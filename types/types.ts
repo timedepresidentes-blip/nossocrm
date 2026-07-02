@@ -195,6 +195,10 @@ export interface Product {
   price: number;
   costPrice?: number;
   costItems?: ProductCostItem[];
+  /** Descrição dos componentes do kit (visível ao cliente no orçamento, sem valores). */
+  kitDescription?: string;
+  /** Custo total do kit de equipamentos (interno, não aparece no orçamento). */
+  kitCost?: number;
   sku?: string;
   observations?: string;
   characteristics?: ProductCharacteristic[];

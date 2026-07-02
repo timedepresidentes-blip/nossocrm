@@ -45,19 +45,23 @@ function ProductForm({
   const [newValue, setNewValue] = useState('');
   const [expanded, setExpanded] = useState(false);
 
-  // Custo como lista dinâmica de componentes
+  // Kit de equipamentos
+  const [hasKit, setHasKit] = useState(!!(initial?.kitDescription || (initial?.kitCost ?? 0) > 0));
+  const [kitDescription, setKitDescription] = useState(initial?.kitDescription ?? '');
+  const [kitCost, setKitCost] = useState(String(initial?.kitCost ?? ''));
+
+  // Serviços e outros custos adicionais
   const seedCostItems = (): { label: string; value: string }[] => {
     if (initial?.costItems?.length) {
       return initial.costItems.map((i) => ({ label: i.label, value: String(i.value) }));
     }
-    if (initial?.costPrice && initial.costPrice > 0) {
-      return [{ label: 'Custo', value: String(initial.costPrice) }];
-    }
-    return [{ label: '', value: '' }];
+    return [];
   };
   const [costItems, setCostItems] = useState<{ label: string; value: string }[]>(seedCostItems);
 
-  const cost = totalCost(costItems);
+  const kitCostNum = Number(kitCost) || 0;
+  const servicesCost = totalCost(costItems);
+  const cost = kitCostNum + servicesCost;
   const canSave = name.trim().length > 1 && Number.isFinite(Number(price)) && Number(price) >= 0;
 
   const addCostItem = () => setCostItems((prev) => [...prev, { label: '', value: '' }]);
@@ -85,12 +89,15 @@ function ProductForm({
     if (!canSave) return;
     const items: ProductCostItem[] = costItems
       .filter((i) => i.label.trim() || Number(i.value) > 0)
-      .map((i) => ({ label: i.label.trim() || 'Custo', value: Number(i.value) || 0 }));
+      .map((i) => ({ label: i.label.trim() || 'Serviço', value: Number(i.value) || 0 }));
+    const kc = hasKit ? (Number(kitCost) || 0) : 0;
     onSave({
       name: name.trim(),
       price: Number(price),
-      costPrice: items.reduce((s, i) => s + i.value, 0),
+      costPrice: kc + items.reduce((s, i) => s + i.value, 0),
       costItems: items,
+      kitDescription: hasKit ? kitDescription.trim() : '',
+      kitCost: kc,
       sku: sku.trim() || undefined,
       description: description.trim() || undefined,
       observations: observations.trim() || undefined,
@@ -124,60 +131,119 @@ function ProductForm({
         </div>
       </div>
 
-      {/* Linha 2: Composição de custo (interno) */}
-      <div className="rounded-xl border border-amber-200/60 dark:border-amber-700/30 bg-amber-50/40 dark:bg-amber-900/10 p-3 space-y-2">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Composição de custo</span>
-            <span className="ml-1.5 text-[10px] text-amber-600/70 dark:text-amber-500/60 font-normal">— uso interno, não aparece no orçamento do cliente</span>
-          </div>
+      {/* Composição de custo interno */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Custo interno</span>
+          <span className="text-[10px] text-slate-400">— não aparece no orçamento do cliente</span>
+        </div>
+
+        {/* Bloco KIT */}
+        {!hasKit ? (
           <button
             type="button"
-            onClick={addCostItem}
-            className="inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400 font-semibold hover:underline"
+            onClick={() => setHasKit(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-dashed border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 text-xs font-semibold hover:bg-blue-50 dark:hover:bg-blue-900/20 w-full justify-center"
           >
-            <Plus className="w-3 h-3" /> Adicionar item
+            <Plus className="w-3.5 h-3.5" /> Adicionar Kit de equipamentos
           </button>
-        </div>
-
-        {/* Cabeçalho das colunas */}
-        <div className="grid gap-2 pr-6" style={{ gridTemplateColumns: '1fr 120px' }}>
-          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide pl-1">Descrição do componente</span>
-          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide pl-1">Custo (R$)</span>
-        </div>
-
-        <div className="space-y-1.5">
-          {costItems.map((item, i) => (
-            <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 120px auto' }}>
-              <input
-                value={item.label}
-                onChange={(e) => updateCostItem(i, 'label', e.target.value)}
-                placeholder={['Painel solar', 'Inversor', 'Engenharia', 'Frete', 'NF'][i] ?? 'Ex.: Instalação'}
-                className={inputCls + ' text-xs'}
-              />
-              <input
-                value={item.value}
-                onChange={(e) => updateCostItem(i, 'value', e.target.value)}
-                inputMode="decimal"
-                placeholder="0,00"
-                className={inputCls + ' text-xs text-right'}
-              />
-              <button
-                type="button"
-                onClick={() => removeCostItem(i)}
-                className="text-slate-400 hover:text-red-500 shrink-0 w-5"
-                title="Remover"
-              >
-                <X className="w-4 h-4" />
+        ) : (
+          <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/15 p-3 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-blue-700 dark:text-blue-400">📦 Kit de equipamentos</span>
+                <span className="text-[10px] text-blue-500/70 dark:text-blue-400/50">descrição aparece no orçamento do cliente</span>
+              </div>
+              <button type="button" onClick={() => { setHasKit(false); setKitDescription(''); setKitCost(''); }} className="text-slate-400 hover:text-red-500">
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
-          ))}
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">Componentes (descrição para o cliente)</label>
+              <textarea
+                value={kitDescription}
+                onChange={(e) => setKitDescription(e.target.value)}
+                rows={4}
+                placeholder={'8x Módulo Bifacial 620W RONMA SOLAR\n2x Microinversor 1.875kW HOYMILES\nCabos e conectores fotovoltaicos'}
+                className={inputCls + ' resize-none text-xs leading-relaxed'}
+              />
+              <p className="text-[10px] text-blue-500 dark:text-blue-400/70 mt-0.5">Esta descrição aparece no orçamento. Não coloque valores.</p>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">Custo total do kit (interno)</label>
+              <input
+                value={kitCost}
+                onChange={(e) => setKitCost(e.target.value)}
+                inputMode="decimal"
+                placeholder="0,00"
+                className={inputCls + ' text-xs'}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Serviços e outros custos */}
+        <div className="rounded-xl border border-amber-200/60 dark:border-amber-700/30 bg-amber-50/40 dark:bg-amber-900/10 p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Serviços e outros custos</span>
+            <button
+              type="button"
+              onClick={addCostItem}
+              className="inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400 font-semibold hover:underline"
+            >
+              <Plus className="w-3 h-3" /> Adicionar
+            </button>
+          </div>
+
+          {costItems.length === 0 ? (
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center py-1">Nenhum serviço adicionado — clique em Adicionar</p>
+          ) : (
+            <>
+              <div className="grid gap-2 pr-6" style={{ gridTemplateColumns: '1fr 120px' }}>
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide pl-1">Serviço / item</span>
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide pl-1">Custo (R$)</span>
+              </div>
+              <div className="space-y-1.5">
+                {costItems.map((item, i) => (
+                  <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 120px auto' }}>
+                    <input
+                      value={item.label}
+                      onChange={(e) => updateCostItem(i, 'label', e.target.value)}
+                      placeholder={['Instalação', 'Engenharia', 'Frete extra', 'NF / Imposto'][i] ?? 'Ex.: Outros'}
+                      className={inputCls + ' text-xs'}
+                    />
+                    <input
+                      value={item.value}
+                      onChange={(e) => updateCostItem(i, 'value', e.target.value)}
+                      inputMode="decimal"
+                      placeholder="0,00"
+                      className={inputCls + ' text-xs text-right'}
+                    />
+                    <button type="button" onClick={() => removeCostItem(i)} className="text-slate-400 hover:text-red-500 shrink-0 w-5">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
+        {/* Totalizador */}
         {cost > 0 && (
-          <div className="flex justify-between items-center pt-1 border-t border-amber-200/50 dark:border-amber-700/20 text-xs">
-            <span className="text-slate-500 dark:text-slate-400">Custo total</span>
-            <span className="font-bold text-amber-700 dark:text-amber-400">{formatBRL(cost)}</span>
+          <div className="flex justify-between items-center px-1 text-xs">
+            <span className="text-slate-500 dark:text-slate-400">
+              Custo total interno
+              {hasKit && servicesCost > 0 && <span className="text-slate-400"> (kit + serviços)</span>}
+            </span>
+            <div className="flex items-center gap-3">
+              <span className="font-bold text-slate-700 dark:text-slate-200">{formatBRL(cost)}</span>
+              {Number(price) > 0 && cost > 0 && (
+                <span className="text-green-600 dark:text-green-400 font-semibold">{calcMargin(Number(price), cost)} margem</span>
+              )}
+            </div>
           </div>
         )}
       </div>

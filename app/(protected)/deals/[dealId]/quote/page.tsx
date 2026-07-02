@@ -11,6 +11,7 @@ interface QuoteItem {
   name: string;
   quantity: number;
   price: number;
+  kitDescription?: string;
 }
 
 interface QuoteData {
@@ -55,7 +56,7 @@ export default function QuotePage() {
             .from('deals')
             .select(`
               id, title, value, created_at, contact_id, quote_overrides,
-              deal_items(id, name, quantity, price, product_id),
+              deal_items(id, name, quantity, price, product_id, products(kit_description)),
               contacts(name, phone, email, client_company_id),
               crm_companies(name)
             `)
@@ -76,6 +77,7 @@ export default function QuotePage() {
           name: i.name,
           quantity: Number(i.quantity ?? 1),
           price: Number(i.price ?? 0),
+          kitDescription: i.products?.kit_description || undefined,
         }));
 
         const effectiveItems = items.length > 0 ? items : [
@@ -317,10 +319,17 @@ export default function QuotePage() {
           <tbody>
             {quote.items.map((item, i) => (
               <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                <td className="px-4 py-3 text-slate-800 font-medium">{item.name}</td>
-                <td className="px-4 py-3 text-center text-slate-600">{item.quantity}</td>
-                <td className="px-4 py-3 text-right text-slate-600">{formatBRL(item.price)}</td>
-                <td className="px-4 py-3 text-right font-semibold text-slate-800">{formatBRL(item.quantity * item.price)}</td>
+                <td className="px-4 py-3">
+                  <div className="text-slate-800 font-medium">{item.name}</div>
+                  {item.kitDescription && (
+                    <div className="mt-1 text-xs text-slate-500 whitespace-pre-line leading-relaxed">
+                      {item.kitDescription}
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-center text-slate-600 align-top">{item.quantity}</td>
+                <td className="px-4 py-3 text-right text-slate-600 align-top">{formatBRL(item.price)}</td>
+                <td className="px-4 py-3 text-right font-semibold text-slate-800 align-top">{formatBRL(item.quantity * item.price)}</td>
               </tr>
             ))}
           </tbody>
