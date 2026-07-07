@@ -250,7 +250,8 @@ export async function processIncomingMessage(
   }
 
   // 0c. Check if AI is paused at the contact level (cross-channel)
-  if (conversation?.contact_id) {
+  // triggerContext bypassa esta verificação — operador clicou "Devolver para Júlia" explicitamente
+  if (!triggerContext && conversation?.contact_id) {
     const { data: contact } = await supabase
       .from('contacts')
       .select('ai_paused')
@@ -495,25 +496,16 @@ export async function processIncomingMessage(
     recordRateCall(conversationId);
   }
 
-  // 9b. Falha de geração: todos os providers AI falharam — notifica cliente via template
+  // 9b. Falha de geração: todos os providers AI falharam — notifica cliente
+  // A janela de 24h já foi verificada acima (passo 5b) e retornou se expirada,
+  // portanto aqui a janela está ABERTA → usar mensagem de texto, nunca template.
   if (decision.action === 'generation_failed') {
-    console.warn('[AIAgent] Geração falhou — enviando template inicio_atendimento_humano');
-    const channelId = (conversation as Record<string, unknown>)?.channel_id as string;
-    const externalContactId = (conversation as Record<string, unknown>)?.external_contact_id as string;
-    if (channelId && externalContactId) {
-      await sendTemplateAsAI({
-        supabase,
-        conversationId,
-        channelId,
-        externalContactId,
-        templateName: 'inicio_atendimento_humano',
-        parameters: [
-          { type: 'text', text: context.contact?.name || 'cliente' },
-          { type: 'text', text: 'nossa equipe' },
-        ],
-        senderLabel: 'Julia',
-      });
-    }
+    console.warn('[AIAgent] Geração falhou — janela aberta, enviando fallback de texto');
+    await sendAIResponse({
+      supabase,
+      conversationId,
+      response: 'Um momento, vou transferir você para nossa equipe. 😊',
+    });
     return {
       success: false,
       decision: {

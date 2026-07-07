@@ -181,16 +181,23 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
     (conversation.channelProvider === 'meta-cloud' && !conversation.windowExpiresAt);
 
   // Reseta estados de template quando muda de conversa
+  // Se já há mensagens e a janela não expirou, o template já foi enviado (ex: via modal)
   useEffect(() => {
-    setTemplateSentOk(false);
+    setTemplateSentOk(!conversation.isWindowExpired && conversation.messageCount > 0);
     setTemplateError(null);
     setShowTemplates(false);
   }, [conversation.id]);
 
-  // Limpa templateSentOk quando a janela de 24h abre (contato respondeu)
+  // Sincroniza templateSentOk em tempo real:
+  // - janela expirou → força false (exige novo template)
+  // - já há mensagens e janela ativa → true (template já enviado, libera o input)
   useEffect(() => {
-    if (!needsTemplate) setTemplateSentOk(false);
-  }, [needsTemplate]);
+    if (conversation.isWindowExpired) {
+      setTemplateSentOk(false);
+    } else if (conversation.messageCount > 0) {
+      setTemplateSentOk(true);
+    }
+  }, [conversation.isWindowExpired, conversation.messageCount]);
 
   // templateSentOk=true suspende o banner enquanto aguardamos resposta do contato
   const blockingNeedsTemplate = needsTemplate && !templateSentOk;

@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
   // Verificar que o usuário pertence à mesma org da conversa
   const [{ data: profile }, { data: conversation }] = await Promise.all([
     supabase.from('profiles').select('organization_id').eq('id', user.id).single(),
-    supabase.from('messaging_conversations').select('organization_id, metadata').eq('id', conversationId).single(),
+    supabase.from('messaging_conversations').select('organization_id, metadata, contact_id').eq('id', conversationId).single(),
   ]);
 
   if (!profile?.organization_id) {
@@ -59,17 +59,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Conversa não encontrada' }, { status: 404 });
   }
 
-  // Despausa a IA e remove o assignee (tudo num só update)
+  // Despausa a IA, remove o assignee e reseta ai_paused do contato
   const currentMetadata = (conversation.metadata || {}) as Record<string, unknown>;
-  await supabase
-    .from('messaging_conversations')
-    .update({
-      metadata: { ...currentMetadata, ai_paused: false },
-      assigned_user_id: null,
-      assigned_at: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', conversationId);
+  const contactId = (conversation as Record<string, unknown>).contact_id as string | null;
+
+  await Promise.all([
+    supabase
+      .from('messaging_conversations')
+      .update({
+        metadata: { ...currentMetadata, ai_paused: false },
+        assigned_user_id: null,
+        assigned_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversationId),
+    contactId
+      ? supabase.from('contacts').update({ ai_paused: false }).eq('id', contactId)
+      : Promise.resolve(),
+  ]);
 
   // Verificar se já há histórico de mensagens para adaptar o contexto de trigger
   const { count: messageCount } = await supabase
