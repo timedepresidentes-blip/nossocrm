@@ -364,30 +364,44 @@ export async function processIncomingMessage(
     };
   }
 
-  // 4b. Verificar inatividade do operador (AI Takeover).
-  // triggerContext: atendente explicitamente devolveu para Julia — bypassa o check de takeover.
-  if (aiConfig.takeoverEnabled && !triggerContext) {
-    const operatorActive = await isOperatorActive(
-      supabase,
-      conversationId,
-      conversation?.assigned_at,
-      aiConfig.takeoverMinutes
-    );
-
-    if (operatorActive) {
-      console.log('[AIAgent] Operator is active, skipping AI response');
+  // 4b. Verificar se atendente humano está ativo na conversa.
+  // Sempre verifica, independente de takeoverEnabled — Julia nunca interrompe
+  // uma conversa humana em andamento. triggerContext bypassa (atendente devolveu explicitamente).
+  if (!triggerContext) {
+    const humanActive = await isHumanActive(supabase, conversationId);
+    if (humanActive) {
+      console.log('[AIAgent] Atendente humano ativo — Julia silenciosa');
       return {
         success: true,
         decision: {
           action: 'skipped',
-          reason: `Operador ativo (última mensagem há menos de ${aiConfig.takeoverMinutes} min)`,
+          reason: 'Atendente humano enviou mensagem recentemente — Julia não interrompe',
         },
       };
     }
 
-    console.log(`[AIAgent] Operator inactive for >${aiConfig.takeoverMinutes}min, AI taking over`);
-  } else if (triggerContext) {
-    console.log('[AIAgent] Takeover check bypassed — manual handoff trigger');
+    // Verificação adicional de takeover (para IA retomar de operador inativo)
+    if (aiConfig.takeoverEnabled) {
+      const operatorActive = await isOperatorActive(
+        supabase,
+        conversationId,
+        conversation?.assigned_at,
+        aiConfig.takeoverMinutes
+      );
+      if (operatorActive) {
+        console.log('[AIAgent] Operator is active, skipping AI response');
+        return {
+          success: true,
+          decision: {
+            action: 'skipped',
+            reason: `Operador ativo (última mensagem há menos de ${aiConfig.takeoverMinutes} min)`,
+          },
+        };
+      }
+      console.log(`[AIAgent] Operator inactive for >${aiConfig.takeoverMinutes}min, AI taking over`);
+    }
+  } else {
+    console.log('[AIAgent] Human/takeover check bypassed — manual handoff trigger');
   }
 
   // 5. Montar contexto do lead
@@ -1066,6 +1080,28 @@ async function logAIInteraction(params: {
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/**
+ * Verifica se um atendente humano enviou mensagem nos últimos 30 minutos.
+ * Usado para impedir que a Julia interrompa uma conversa humana em andamento.
+ */
+async function isHumanActive(
+  supabase: SupabaseClient,
+  conversationId: string,
+  windowMinutes = 30
+): Promise<boolean> {
+  const cutoff = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
+  const { data } = await supabase
+    .from('messaging_messages')
+    .select('id')
+    .eq('conversation_id', conversationId)
+    .eq('direction', 'outbound')
+    .eq('sender_type', 'user')
+    .gte('created_at', cutoff)
+    .limit(1)
+    .maybeSingle();
+  return !!data;
+}
 
 /**
  * Verifica se o operador atribuído enviou mensagem recentemente.
