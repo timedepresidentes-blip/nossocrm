@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, CalendarClock, ArrowLeftRight, X } from 'lucide-react';
+import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, CalendarClock, ArrowLeftRight, X, BotMessageSquare } from 'lucide-react';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
@@ -81,6 +81,11 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
     fromName: string;
     contactName: string;
   } | null>(null);
+  const [handoffNotification, setHandoffNotification] = useState<{
+    conversationId: string;
+    contactName: string;
+    reason?: string;
+  } | null>(null);
 
   // Larguras e estados de colapso das colunas (persistidos no localStorage)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -143,8 +148,16 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
 
     const channel = supabase
       .channel(`org:${orgId}:notifications`)
-      .on('broadcast', { event: 'ai_handoff' }, () => {
+      .on('broadcast', { event: 'ai_handoff' }, ({ payload }) => {
         playTestSound('ai_handoff');
+        if (payload?.conversationId) {
+          setHandoffNotification({
+            conversationId: payload.conversationId,
+            contactName: payload.contactName || 'cliente',
+            reason: payload.reason,
+          });
+          setTimeout(() => setHandoffNotification(null), 12_000);
+        }
       })
       .on('broadcast', { event: 'conversation_transfer' }, ({ payload }) => {
         // Exibe toast apenas para o atendente que recebeu
@@ -654,6 +667,47 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
           <button
             type="button"
             onClick={() => setTransferNotification(null)}
+            className="flex-shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Toast de handoff da Julia */}
+      {handoffNotification && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg border bg-white dark:bg-slate-800 border-violet-200 dark:border-violet-700 min-w-[300px] max-w-[420px] animate-in slide-in-from-bottom-4 duration-300">
+          <div className="flex-shrink-0 w-9 h-9 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center">
+            <BotMessageSquare className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">
+              Julia transferiu um cliente
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <span className="font-medium text-slate-700 dark:text-slate-300">{handoffNotification.contactName}</span>
+              {' '}foi qualificado e aguarda atendimento.
+            </p>
+            {handoffNotification.reason && (
+              <p className="text-xs text-violet-600 dark:text-violet-400 mt-0.5 truncate" title={handoffNotification.reason}>
+                {handoffNotification.reason}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedConversationId(handoffNotification.conversationId);
+                router.push(`/messaging?id=${handoffNotification.conversationId}`, { scroll: false });
+                setHandoffNotification(null);
+              }}
+              className="mt-1.5 text-xs font-medium text-violet-600 dark:text-violet-400 hover:underline"
+            >
+              Abrir conversa →
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setHandoffNotification(null)}
             className="flex-shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
           >
             <X className="w-4 h-4" />
