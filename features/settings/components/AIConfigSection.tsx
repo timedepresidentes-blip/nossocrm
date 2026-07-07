@@ -47,35 +47,37 @@ async function validateApiKey(provider: string, apiKey: string, model: string): 
 
     try {
         if (provider === 'google') {
-            // Gemini API validation - usa endpoint generateContent com texto mínimo
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: 'Hi' }] }],
-                        generationConfig: { maxOutputTokens: 1 }
-                    })
-                }
+            const body = JSON.stringify({
+                contents: [{ parts: [{ text: 'Hi' }] }],
+                generationConfig: { maxOutputTokens: 1 }
+            });
+
+            const tryFetch = async (url: string, headers: Record<string, string>) => {
+                return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body });
+            };
+
+            const isOk = (r: Response) => r.ok || r.status === 429;
+
+            // Tenta formato antigo (?key=) e novo (Bearer) em paralelo
+            const [resQuery, resBearer] = await Promise.all([
+                tryFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {}),
+                tryFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { 'Authorization': `Bearer ${apiKey}`, 'x-goog-api-key': apiKey }),
+            ]);
+
+            if (isOk(resQuery) || isOk(resBearer)) return { valid: true };
+
+            // Tenta também endpoint v1 (sem beta)
+            const resV1 = await tryFetch(
+                `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`,
+                { 'x-goog-api-key': apiKey }
             );
+            if (isOk(resV1)) return { valid: true };
 
-            if (response.ok) {
-                return { valid: true };
-            }
-
-            const error = await response.json();
-            if (response.status === 400 && error?.error?.message?.includes('API key not valid')) {
-                return { valid: false, error: 'Chave de API inválida' };
-            }
-            if (response.status === 403) {
+            const error = await (resQuery.ok ? resQuery : resBearer).json().catch(() => ({}));
+            if (resQuery.status === 403 && resBearer.status === 403) {
                 return { valid: false, error: 'Chave sem permissão para este modelo' };
             }
-            if (response.status === 429) {
-                // Rate limit = key é válida, só está no limite
-                return { valid: true };
-            }
-            return { valid: false, error: error?.error?.message || 'Erro desconhecido' };
+            return { valid: false, error: error?.error?.message || 'Chave de API inválida' };
 
         } else if (provider === 'openai') {
             // OpenAI validation
@@ -649,7 +651,7 @@ export const AIConfigSection: React.FC = () => {
                                 type="password"
                                 value={localApiKey}
                                 onChange={(e) => handleKeyChange(e.target.value)}
-                                placeholder={`Cole sua chave ${aiProvider === 'google' ? 'AIza...' : 'sk-...'}`}
+                                placeholder={`Cole sua chave ${aiProvider === 'google' ? 'Google Gemini...' : 'sk-...'}`}
                                 className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition-all font-mono ${validationStatus === 'invalid'
                                         ? 'border-red-300 dark:border-red-500/50'
                                         : validationStatus === 'valid'
