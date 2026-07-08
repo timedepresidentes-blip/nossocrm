@@ -1,6 +1,6 @@
 'use client';
 
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Bell, CalendarClock, Clock, User, UserCheck } from 'lucide-react';
@@ -10,6 +10,14 @@ import { ChannelIndicator } from './ChannelIndicator';
 import { PresenceIndicator } from './PresenceIndicator';
 import type { ConversationView } from '@/lib/messaging/types';
 import type { PresenceStatus } from '@/lib/messaging/hooks/useContactPresence';
+
+function hexToRgba(hex: string, alpha: number): string {
+  if (!hex || !hex.startsWith('#') || hex.length < 7) return 'transparent';
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 interface ConversationItemProps {
   conversation: ConversationView;
@@ -51,9 +59,14 @@ export const ConversationItem = memo(function ConversationItem({
     status,
   } = conversation;
 
+  const [isHovered, setIsHovered] = useState(false);
+
   const isAssignedToOther = !!assignedUserId && !!currentUserId && assignedUserId !== currentUserId;
 
   const displayName = externalContactName || 'Contato desconhecido';
+
+  const bgAlpha = isSelected ? 0.20 : isHovered ? 0.13 : 0.08;
+  const labelBgStyle = labelColor ? { backgroundColor: hexToRgba(labelColor, bgAlpha) } : undefined;
   const timeAgo = lastMessageAt
     ? formatDistanceToNow(new Date(lastMessageAt), { addSuffix: true, locale: ptBR })
     : '';
@@ -62,15 +75,18 @@ export const ConversationItem = memo(function ConversationItem({
     <button
       type="button"
       onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={labelBgStyle}
       className={cn(
         'w-full px-4 py-3 flex items-start gap-3 transition-colors text-left relative',
-        'hover:bg-slate-50 dark:hover:bg-white/5',
+        !labelColor && 'hover:bg-slate-50 dark:hover:bg-white/5',
         'border-b border-slate-100 dark:border-white/5',
-        isSelected && 'bg-primary-50 dark:bg-primary-500/10',
+        !labelColor && isSelected && 'bg-primary-50 dark:bg-primary-500/10',
         status === 'resolved' && 'opacity-60'
       )}
     >
-      {/* Tarja colorida da etiqueta (esquerda) */}
+      {/* Indicador lateral — cor da etiqueta ou cor primária se selecionado sem etiqueta */}
       <span
         className="absolute left-0 top-0 bottom-0 w-[3px] rounded-r-sm transition-colors"
         style={{ backgroundColor: labelColor ?? (isSelected ? 'var(--color-primary-500)' : 'transparent') }}

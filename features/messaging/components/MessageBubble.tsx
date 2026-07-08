@@ -35,6 +35,14 @@ function describeFailure(errorCode?: string, errorMessage?: string): string {
   return errorMessage || 'Não foi possível entregar.';
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  if (!hex || !hex.startsWith('#') || hex.length < 7) return '';
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 // ---------------------------------------------------------------------------
 // Media URL helpers
 // ---------------------------------------------------------------------------
@@ -258,6 +266,8 @@ interface MessageBubbleProps {
   conversationId: string;
   allMessages?: MessagingMessage[];
   onReply?: (message: MessagingMessage) => void;
+  /** Cor hex da primeira etiqueta do contato — tinta as bolhas inbound */
+  labelColor?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -566,6 +576,7 @@ export const MessageBubble = memo(function MessageBubble({
   conversationId,
   allMessages,
   onReply,
+  labelColor,
 }: MessageBubbleProps) {
   const isOutbound = message.direction === 'outbound';
   const time = format(new Date(message.createdAt), 'HH:mm');
@@ -685,8 +696,17 @@ export const MessageBubble = memo(function MessageBubble({
             'rounded-2xl px-4 py-2 shadow-sm',
             isOutbound
               ? 'bg-primary-500 text-white rounded-br-md'
-              : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-bl-md border border-slate-200 dark:border-slate-700',
+              : cn(
+                  'text-slate-900 dark:text-white rounded-bl-md border',
+                  labelColor
+                    ? 'border-transparent'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700',
+                ),
           )}
+          style={!isOutbound && labelColor ? {
+            backgroundColor: hexToRgba(labelColor, 0.14),
+            borderColor: hexToRgba(labelColor, 0.35),
+          } : undefined}
         >
           {/* Reply quote */}
           {repliedToMessage && (

@@ -41,6 +41,7 @@ import { Modal } from '@/components/ui/Modal';
 import { useRealtimeSyncMessaging } from '@/lib/realtime/useRealtimeSync';
 import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
 import { queryKeys } from '@/lib/query';
+import { useContactLabels } from '@/lib/query/hooks/useLabelsQuery';
 import { useContactPresence } from '@/lib/messaging/hooks/useContactPresence';
 import type { ConversationView } from '@/lib/messaging/types';
 import { useScheduledMessagesQuery } from '@/lib/query/hooks/useScheduledMessagesQuery';
@@ -179,6 +180,10 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
 
   // Fetch selected conversation details
   const { data: selectedConversation, isLoading: isConversationLoading } = useConversation(selectedConversationId);
+
+  // Etiquetas do contato da conversa selecionada — para colorir bolhas de mensagem
+  const { data: selectedContactLabels } = useContactLabels(selectedConversation?.contactId ?? undefined);
+  const selectedLabelColor = selectedContactLabels?.[0]?.color;
 
   // Contagem de mensagens agendadas pendentes para badge
   const { data: scheduledMessages = [] } = useScheduledMessagesQuery(selectedConversationId);
@@ -556,6 +561,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
               conversationId={selectedConversation.id}
               presenceStatus={selectedConversation.contactId ? getPresence(selectedConversation.contactId) : undefined}
               onReply={setReplyToMessage}
+              labelColor={selectedLabelColor}
             />
 
             {/* Input */}

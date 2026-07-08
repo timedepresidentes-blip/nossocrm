@@ -14,6 +14,8 @@ interface MessageThreadProps {
   /** Contact presence status from useContactPresence */
   presenceStatus?: 'online' | 'typing' | 'recording' | 'offline';
   onReply?: (message: MessagingMessage) => void;
+  /** Cor hex da primeira etiqueta do contato */
+  labelColor?: string;
 }
 
 function DateDivider({ date }: { date: Date }) {
@@ -39,7 +41,7 @@ function DateDivider({ date }: { date: Date }) {
   );
 }
 
-export function MessageThread({ conversationId, presenceStatus, onReply }: MessageThreadProps) {
+export function MessageThread({ conversationId, presenceStatus, onReply, labelColor }: MessageThreadProps) {
   const { data, isLoading, error } = useMessages(conversationId);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -141,6 +143,7 @@ export function MessageThread({ conversationId, presenceStatus, onReply }: Messa
             conversationId={conversationId}
             allMessages={messages}
             onReply={onReply}
+            labelColor={labelColor}
           />
         );
       })}
