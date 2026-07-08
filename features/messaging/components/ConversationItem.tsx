@@ -22,6 +22,8 @@ interface ConversationItemProps {
   hasReminder?: boolean;
   /** ID do usuário logado — para destacar atribuição a outro atendente */
   currentUserId?: string;
+  /** Cor hex da primeira etiqueta do contato */
+  labelColor?: string;
 }
 
 export const ConversationItem = memo(function ConversationItem({
@@ -32,6 +34,7 @@ export const ConversationItem = memo(function ConversationItem({
   hasScheduled = false,
   hasReminder = false,
   currentUserId,
+  labelColor,
 }: ConversationItemProps) {
   const {
     externalContactName,
@@ -60,13 +63,18 @@ export const ConversationItem = memo(function ConversationItem({
       type="button"
       onClick={onClick}
       className={cn(
-        'w-full px-4 py-3 flex items-start gap-3 transition-colors text-left',
+        'w-full px-4 py-3 flex items-start gap-3 transition-colors text-left relative',
         'hover:bg-slate-50 dark:hover:bg-white/5',
         'border-b border-slate-100 dark:border-white/5',
-        isSelected && 'bg-primary-50 dark:bg-primary-500/10 border-l-2 border-l-primary-500',
+        isSelected && 'bg-primary-50 dark:bg-primary-500/10',
         status === 'resolved' && 'opacity-60'
       )}
     >
+      {/* Tarja colorida da etiqueta (esquerda) */}
+      <span
+        className="absolute left-0 top-0 bottom-0 w-[3px] rounded-r-sm transition-colors"
+        style={{ backgroundColor: labelColor ?? (isSelected ? 'var(--color-primary-500)' : 'transparent') }}
+      />
       {/* Avatar */}
       <div className="relative flex-shrink-0">
         {sanitizeUrl(externalContactAvatar) ? (

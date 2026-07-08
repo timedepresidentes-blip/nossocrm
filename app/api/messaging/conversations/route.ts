@@ -215,6 +215,24 @@ export async function POST(req: Request) {
     }
   }
 
+  // Se ainda não tem contato vinculado, cria um novo automaticamente
+  // (garante que notas, lembretes e etiquetas fiquem disponíveis imediatamente)
+  if (!contactId && body.externalContactName) {
+    const { data: newContact } = await supabase
+      .from('contacts')
+      .insert({
+        organization_id: profile.organization_id,
+        name: body.externalContactName,
+        phone: normalizedContactId,
+      })
+      .select('id')
+      .single();
+
+    if (newContact) {
+      contactId = newContact.id;
+    }
+  }
+
   // Criar conversa
   const { data: conversation, error: createError } = await supabase
     .from('messaging_conversations')

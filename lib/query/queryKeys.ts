@@ -224,6 +224,7 @@ export const queryKeys = {
      */
     labels: createExtendedQueryKeys('labels', base => ({
         byContact: (contactId: string) => [...base.all, 'byContact', contactId] as const,
+        bulk: (contactIds: string[]) => [...base.all, 'bulk', contactIds.join(',')] as const,
     })),
 
     /**

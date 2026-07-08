@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { ConversationItem } from './ConversationItem';
 import { ChannelIndicator } from './ChannelIndicator';
 import { useConversations } from '@/lib/query/hooks/useConversationsQuery';
-import { useLabels } from '@/lib/query/hooks/useLabelsQuery';
+import { useLabels, useContactLabelsBulk } from '@/lib/query/hooks/useLabelsQuery';
 import { useOrgMembersQuery } from '@/lib/query/hooks/useOrgMembersQuery';
 import { useScheduledMessagesQuery } from '@/lib/query/hooks/useScheduledMessagesQuery';
 import { useDueReminders } from '@/lib/query/hooks/useRemindersQuery';
@@ -31,6 +31,7 @@ interface ConversationItemWrapperProps {
   hasScheduled?: boolean;
   hasReminder?: boolean;
   currentUserId?: string;
+  labelColor?: string;
 }
 
 const ConversationItemWrapper = memo(function ConversationItemWrapper({
@@ -41,6 +42,7 @@ const ConversationItemWrapper = memo(function ConversationItemWrapper({
   hasScheduled,
   hasReminder,
   currentUserId,
+  labelColor,
 }: ConversationItemWrapperProps) {
   const handleClick = useCallback(() => {
     onSelect(conversation.id);
@@ -55,6 +57,7 @@ const ConversationItemWrapper = memo(function ConversationItemWrapper({
       hasScheduled={hasScheduled}
       hasReminder={hasReminder}
       currentUserId={currentUserId}
+      labelColor={labelColor}
     />
   );
 });
@@ -171,6 +174,13 @@ export const ConversationList = memo(function ConversationList({
   // Mensagens agendadas pendentes e lembretes para exibir sinalizadores na lista
   const { data: allScheduled = [] } = useScheduledMessagesQuery();
   const { data: dueReminders = [] } = useDueReminders();
+
+  // Etiquetas de todos os contatos visíveis — uma query bulk em vez de N individuais
+  const visibleContactIds = useMemo(
+    () => [...new Set((conversations ?? []).map(c => c.contactId).filter(Boolean) as string[])],
+    [conversations]
+  );
+  const { data: bulkLabels = {} } = useContactLabelsBulk(visibleContactIds);
 
   const scheduledConvIds = useMemo(
     () => new Set(allScheduled.filter((m) => m.status === 'pending' && m.conversationId).map((m) => m.conversationId!)),
@@ -563,6 +573,7 @@ export const ConversationList = memo(function ConversationList({
                     hasScheduled={scheduledConvIds.has(conversation.id)}
                     hasReminder={!!(conversation.contactId && reminderContactIds.has(conversation.contactId))}
                     currentUserId={profile?.id}
+                    labelColor={conversation.contactId ? bulkLabels[conversation.contactId]?.[0]?.color : undefined}
                   />
                 ))}
               </>

@@ -37,6 +37,35 @@ export function useLabels() {
   });
 }
 
+export function useContactLabelsBulk(contactIds: string[]) {
+  const { user } = useAuth();
+  const sortedIds = [...contactIds].sort();
+
+  return useQuery({
+    queryKey: queryKeys.labels.bulk(sortedIds),
+    enabled: !!user && sortedIds.length > 0,
+    queryFn: async (): Promise<Record<string, Label[]>> => {
+      const sb = getClient();
+      const { data } = await sb
+        .from('contact_labels')
+        .select('contact_id, label:label_id(id, name, color)')
+        .in('contact_id', sortedIds);
+      const map: Record<string, Label[]> = {};
+      for (const row of data ?? []) {
+        const r = row as { contact_id: string; label: Record<string, unknown> };
+        if (!map[r.contact_id]) map[r.contact_id] = [];
+        map[r.contact_id].push({
+          id: r.label.id as string,
+          name: r.label.name as string,
+          color: r.label.color as string,
+        });
+      }
+      return map;
+    },
+    staleTime: 10_000,
+  });
+}
+
 export function useContactLabels(contactId: string | undefined) {
   const { user } = useAuth();
 
