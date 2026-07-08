@@ -25,6 +25,7 @@ import {
   PanelRightClose,
   CalendarDays,
   Bell,
+  FileText,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -40,6 +41,8 @@ import { useContactNotes, useCreateContactNote, useDeleteContactNote } from '@/l
 import { useLabels, useContactLabels, useAssignLabel, useRemoveLabel, useCreateLabel } from '@/lib/query/hooks/useLabelsQuery';
 import { useRemindersByContact, useCreateReminder, useUpdateReminder, useDeleteReminder, type CalendarReminder, type ReminderType } from '@/lib/query/hooks/useRemindersQuery';
 import { ReminderModal } from '@/features/calendar/components/ReminderModal';
+import { QuoteFromConversationModal } from './Modals/QuoteFromConversationModal';
+import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
 
 interface ContactPanelProps {
   conversation: ConversationView | null | undefined;
@@ -121,6 +124,7 @@ export const ContactPanel = memo(function ContactPanel({
   const toggleClosingMode = useToggleClosingMode();
 
   const contactId = conversation?.contactId;
+  const { play: playSound } = useNotificationSound();
 
   // Notas
   const { data: notes = [] } = useContactNotes(contactId);
@@ -146,6 +150,7 @@ export const ContactPanel = memo(function ContactPanel({
   const deleteReminder = useDeleteReminder();
   const [reminderModalOpen, setReminderModalOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<CalendarReminder | undefined>();
+  const [quoteModalOpen, setQuoteModalOpen] = useState(false);
 
   function handleSaveReminder(data: {
     title: string;
@@ -160,7 +165,7 @@ export const ContactPanel = memo(function ContactPanel({
       });
     } else {
       createReminder.mutate({ ...data, contactId }, {
-        onSuccess: () => setReminderModalOpen(false),
+        onSuccess: () => { setReminderModalOpen(false); playSound('lembrete_criado'); },
       });
     }
   }
@@ -186,7 +191,7 @@ export const ContactPanel = memo(function ContactPanel({
   function handleSaveNote() {
     if (!contactId || !noteText.trim()) return;
     createNote.mutate({ contactId, content: noteText.trim() }, {
-      onSuccess: () => setNoteText(''),
+      onSuccess: () => { setNoteText(''); playSound('nota_interna'); },
     });
   }
 
@@ -442,6 +447,18 @@ export const ContactPanel = memo(function ContactPanel({
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto p-4">
+        {/* Gerar Orçamento */}
+        <div className="mb-3">
+          <button
+            type="button"
+            onClick={() => setQuoteModalOpen(true)}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-sm font-bold transition-colors"
+          >
+            <FileText className="w-4 h-4" />
+            Gerar Orçamento
+          </button>
+        </div>
+
         {/* Etiquetas */}
         {contactId && (
           <Section title="Etiquetas" defaultOpen>
@@ -649,6 +666,15 @@ export const ContactPanel = memo(function ContactPanel({
           reminder={editingReminder}
           isSaving={createReminder.isPending || updateReminder.isPending}
         />
+
+        {/* Modal de orçamento */}
+        {quoteModalOpen && (
+          <QuoteFromConversationModal
+            isOpen={quoteModalOpen}
+            onClose={() => setQuoteModalOpen(false)}
+            conversation={conversation}
+          />
+        )}
 
         {/* Contact Info */}
         <Section title="Informações">

@@ -4,7 +4,21 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Contact } from '@/types';
 import { Modal, ModalForm } from '@/components/ui/Modal';
-import { InputField, SubmitButton } from '@/components/ui/FormField';
+import { InputField, SelectField, SubmitButton } from '@/components/ui/FormField';
+
+const LEAD_SOURCE_OPTIONS = [
+  { value: '', label: 'Selecionar origem...' },
+  { value: 'WhatsApp', label: 'WhatsApp' },
+  { value: 'Página Google', label: 'Página Google' },
+  { value: 'Instagram', label: 'Instagram' },
+  { value: 'Facebook', label: 'Facebook' },
+  { value: 'Site', label: 'Site' },
+  { value: 'Indicação', label: 'Indicação' },
+  { value: 'Ligação', label: 'Ligação' },
+  { value: 'Evento', label: 'Evento' },
+  { value: 'Manual', label: 'Manual' },
+  { value: 'Outro', label: 'Outro' },
+];
 import { contactFormSchema } from '@/lib/validations/schemas';
 import type { ContactFormData } from '@/lib/validations/schemas';
 
@@ -139,11 +153,11 @@ export const ContactFormModalV2: React.FC<ContactFormModalProps> = ({
           registration={register('companyName')}
         />
 
-        <InputField
+        <SelectField
           label="Origem"
-          placeholder="Ex: Instagram, Site, Indicação, Google..."
           error={errors.source}
           registration={register('source')}
+          options={LEAD_SOURCE_OPTIONS}
         />
 
         <SubmitButton isLoading={isSubmitting}>

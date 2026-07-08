@@ -7,7 +7,9 @@ export type SoundType =
   | 'lead_ganho'
   | 'lead_perdido'
   | 'nova_conversa'
-  | 'ai_handoff';
+  | 'ai_handoff'
+  | 'nota_interna'
+  | 'lembrete_criado';
 
 // ─── AudioContext singleton ───────────────────────────────────────────────────
 // Regra crítica: AudioContext criado DENTRO de um gesto do usuário inicia em
@@ -84,6 +86,17 @@ function createSound(ctx: AudioContext, type: SoundType) {
         beep(ctx, 523, 0,    0.12, 0.28);
         beep(ctx, 784, 0.02, 0.12, 0.18);
         beep(ctx, 659, 0.16, 0.18, 0.32);
+        break;
+      case 'nota_interna':
+        // Dois bipes suaves ascendentes — confirmação discreta de anotação
+        beep(ctx, 660, 0,    0.09, 0.20);
+        beep(ctx, 880, 0.11, 0.12, 0.22);
+        break;
+      case 'lembrete_criado':
+        // Três notas curtas — como um alarme de agenda
+        beep(ctx, 784, 0,    0.08, 0.22);
+        beep(ctx, 784, 0.10, 0.08, 0.22);
+        beep(ctx, 988, 0.20, 0.14, 0.30);
         break;
     }
   } catch { /* silencia erros de áudio */ }
