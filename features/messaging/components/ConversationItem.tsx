@@ -19,6 +19,20 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+/** Retorna true se o texto sobre esse fundo colorido deve ser escuro (para manter legibilidade). */
+function needsDarkText(hex: string, alpha: number): boolean {
+  if (!hex || !hex.startsWith('#') || hex.length < 7) return true;
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  // Composição com branco (light mode)
+  const cr = r * alpha + (1 - alpha);
+  const cg = g * alpha + (1 - alpha);
+  const cb = b * alpha + (1 - alpha);
+  const lum = 0.299 * cr + 0.587 * cg + 0.114 * cb;
+  return lum > 0.45;
+}
+
 interface ConversationItemProps {
   conversation: ConversationView;
   isSelected: boolean;
@@ -65,8 +79,10 @@ export const ConversationItem = memo(function ConversationItem({
 
   const displayName = externalContactName || 'Contato desconhecido';
 
-  const bgAlpha = isSelected ? 0.20 : isHovered ? 0.13 : 0.08;
+  const bgAlpha = isSelected ? 0.55 : isHovered ? 0.42 : 0.28;
   const labelBgStyle = labelColor ? { backgroundColor: hexToRgba(labelColor, bgAlpha) } : undefined;
+  // Em light mode com fundo muito escuro, força texto escuro para manter legibilidade
+  const forceDarkText = !!labelColor && needsDarkText(labelColor, bgAlpha);
   const timeAgo = lastMessageAt
     ? formatDistanceToNow(new Date(lastMessageAt), { addSuffix: true, locale: ptBR })
     : '';
@@ -86,9 +102,9 @@ export const ConversationItem = memo(function ConversationItem({
         status === 'resolved' && 'opacity-60'
       )}
     >
-      {/* Indicador lateral — cor da etiqueta ou cor primária se selecionado sem etiqueta */}
+      {/* Indicador lateral — cor da etiqueta (sempre) ou cor primária se selecionado sem etiqueta */}
       <span
-        className="absolute left-0 top-0 bottom-0 w-[3px] rounded-r-sm transition-colors"
+        className="absolute left-0 top-0 bottom-0 w-[6px] rounded-r-sm transition-colors"
         style={{ backgroundColor: labelColor ?? (isSelected ? 'var(--color-primary-500)' : 'transparent') }}
       />
       {/* Avatar */}
@@ -123,9 +139,11 @@ export const ConversationItem = memo(function ConversationItem({
           <span
             className={cn(
               'font-medium truncate text-sm',
-              unreadCount > 0
+              forceDarkText
                 ? 'text-slate-900 dark:text-white'
-                : 'text-slate-700 dark:text-slate-300'
+                : unreadCount > 0
+                  ? 'text-slate-900 dark:text-white'
+                  : 'text-slate-700 dark:text-slate-300'
             )}
           >
             {displayName}

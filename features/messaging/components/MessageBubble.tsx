@@ -704,8 +704,8 @@ export const MessageBubble = memo(function MessageBubble({
                 ),
           )}
           style={!isOutbound && labelColor ? {
-            backgroundColor: hexToRgba(labelColor, 0.14),
-            borderColor: hexToRgba(labelColor, 0.35),
+            backgroundColor: hexToRgba(labelColor, 0.25),
+            borderColor: hexToRgba(labelColor, 0.55),
           } : undefined}
         >
           {/* Reply quote */}
