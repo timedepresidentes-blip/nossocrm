@@ -52,12 +52,12 @@ export function useContactLabelsBulk(contactIds: string[]) {
         .in('contact_id', sortedIds);
       const map: Record<string, Label[]> = {};
       for (const row of data ?? []) {
-        const r = row as { contact_id: string; label: Record<string, unknown> };
+        const r = row as unknown as { contact_id: string; label: { id: string; name: string; color: string } };
         if (!map[r.contact_id]) map[r.contact_id] = [];
         map[r.contact_id].push({
-          id: r.label.id as string,
-          name: r.label.name as string,
-          color: r.label.color as string,
+          id: r.label.id,
+          name: r.label.name,
+          color: r.label.color,
         });
       }
       return map;
