@@ -7,6 +7,7 @@ import { ConversationItem } from './ConversationItem';
 import { ChannelIndicator } from './ChannelIndicator';
 import { useConversations } from '@/lib/query/hooks/useConversationsQuery';
 import { useLabels, useContactLabelsBulk } from '@/lib/query/hooks/useLabelsQuery';
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useOrgMembersQuery } from '@/lib/query/hooks/useOrgMembersQuery';
 import { useScheduledMessagesQuery } from '@/lib/query/hooks/useScheduledMessagesQuery';
 import { useDueReminders } from '@/lib/query/hooks/useRemindersQuery';
@@ -96,8 +97,9 @@ export const ConversationList = memo(function ConversationList({
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [labelFilter, setLabelFilter] = useState<string>('all');
-  // Todos iniciam vendo apenas as próprias conversas; toggle permite ver todas
-  const [myOnly, setMyOnly] = useState(true);
+  // Lê a preferência salva nas configurações do usuário
+  const [inboxDefaultView] = usePersistedState<'mine' | 'all'>('crm_inbox_default_view', 'mine');
+  const [myOnly, setMyOnly] = useState(() => inboxDefaultView !== 'all');
   const [agentFilter, setAgentFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');

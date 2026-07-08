@@ -14,6 +14,7 @@ export const useSettingsController = () => {
 
   // General Settings
   const [defaultRoute, setDefaultRoute] = usePersistedState<string>('crm_default_route', '/boards');
+  const [inboxDefaultView, setInboxDefaultView] = usePersistedState<'mine' | 'all'>('crm_inbox_default_view', 'mine');
 
   // Custom Fields State (local - TODO: migrate to Supabase)
   const [customFieldDefinitions, setCustomFieldDefinitions] = usePersistedState<
@@ -112,6 +113,8 @@ export const useSettingsController = () => {
     // General Settings
     defaultRoute,
     setDefaultRoute,
+    inboxDefaultView,
+    setInboxDefaultView,
 
     // Custom Fields
     customFieldDefinitions,

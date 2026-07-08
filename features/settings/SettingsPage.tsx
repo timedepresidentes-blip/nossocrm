@@ -158,22 +158,36 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ hash, isAdmin }) => {
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
             Escolha qual tela deve abrir quando você iniciar o CRM.
           </p>
-          <SelectField
-            label="Página Inicial"
-            containerClassName="max-w-xs"
-            options={[
-              { value: '/dashboard', label: 'Dashboard' },
-              { value: '/inbox-list', label: 'Inbox (Lista)' },
-              { value: '/inbox-focus', label: 'Inbox (Foco)' },
-              { value: '/boards', label: 'Boards (Kanban)' },
-              { value: '/contacts', label: 'Contatos' },
-              { value: '/activities', label: 'Atividades' },
-              { value: '/reports', label: 'Relatórios' },
-            ]}
-            value={controller.defaultRoute}
-            onChange={(e) => controller.setDefaultRoute(e.target.value)}
-            aria-label="Selecionar página inicial"
-          />
+          <div className="flex flex-col gap-4">
+            <SelectField
+              label="Página Inicial"
+              containerClassName="max-w-xs"
+              options={[
+                { value: '/dashboard', label: 'Dashboard' },
+                { value: '/inbox-list', label: 'Inbox (Lista)' },
+                { value: '/inbox-focus', label: 'Inbox (Foco)' },
+                { value: '/boards', label: 'Boards (Kanban)' },
+                { value: '/contacts', label: 'Contatos' },
+                { value: '/activities', label: 'Atividades' },
+                { value: '/reports', label: 'Relatórios' },
+              ]}
+              value={controller.defaultRoute}
+              onChange={(e) => controller.setDefaultRoute(e.target.value)}
+              aria-label="Selecionar página inicial"
+            />
+            <SelectField
+              label="Visualização padrão da caixa de entrada"
+              containerClassName="max-w-xs"
+              hint="Define se você verá todas as conversas ou apenas as atribuídas a você ao abrir o inbox."
+              options={[
+                { value: 'mine', label: 'Minhas conversas' },
+                { value: 'all', label: 'Todas as conversas' },
+              ]}
+              value={controller.inboxDefaultView}
+              onChange={(e) => controller.setInboxDefaultView(e.target.value as 'mine' | 'all')}
+              aria-label="Selecionar visualização padrão do inbox"
+            />
+          </div>
         </div>
       </div>
 
