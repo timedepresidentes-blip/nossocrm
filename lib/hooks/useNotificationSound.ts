@@ -9,7 +9,8 @@ export type SoundType =
   | 'nova_conversa'
   | 'ai_handoff'
   | 'nota_interna'
-  | 'lembrete_criado';
+  | 'lembrete_criado'
+  | 'transferencia';
 
 // ─── AudioContext singleton ───────────────────────────────────────────────────
 // Regra crítica: AudioContext criado DENTRO de um gesto do usuário inicia em
@@ -97,6 +98,13 @@ function createSound(ctx: AudioContext, type: SoundType) {
         beep(ctx, 784, 0,    0.08, 0.22);
         beep(ctx, 784, 0.10, 0.08, 0.22);
         beep(ctx, 988, 0.20, 0.14, 0.30);
+        break;
+      case 'transferencia':
+        // Arpejo descendente + nota grave — sinaliza passagem de bastão
+        beep(ctx, 880, 0,    0.10, 0.30);
+        beep(ctx, 698, 0.13, 0.10, 0.28);
+        beep(ctx, 523, 0.26, 0.18, 0.38);
+        beep(ctx, 392, 0.46, 0.22, 0.30);
         break;
     }
   } catch { /* silencia erros de áudio */ }

@@ -17,6 +17,7 @@ import { useAssignConversation } from '@/lib/query/hooks/useConversationsQuery';
 import { useToggleConversationAiPause } from '@/lib/query/hooks/useMessagingConversationsQuery';
 import { useAuth } from '@/context/AuthContext';
 import { getClient } from '@/lib/supabase/client';
+import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
 
 interface TransferButtonProps {
   conversationId: string;
@@ -37,6 +38,7 @@ export function TransferButton({
   const { data: members = [] } = useOrgMembersQuery();
   const assignMutation = useAssignConversation();
   const aiPauseMutation = useToggleConversationAiPause();
+  const { play: playSound } = useNotificationSound();
 
   const isAiPaused =
     conversationMetadata?.ai_paused === true ||
@@ -91,6 +93,7 @@ export function TransferButton({
       });
     }
     notifyReceiver(userId, memberName);
+    playSound('transferencia');
   };
 
   const handleReturnToJulia = async () => {

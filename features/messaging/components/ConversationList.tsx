@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, memo, useEffect, useRef } from 'react';
-import { Search, Filter, Inbox, CheckCircle, X, Plus, MessageSquare, Volume2, Tag, UserCheck, Calendar, MapPin, Globe, Instagram } from 'lucide-react';
+import { Search, Filter, Inbox, CheckCircle, X, Plus, MessageSquare, Volume2, Tag, UserCheck, Calendar, MapPin, Globe, Instagram, Users, User as UserIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConversationItem } from './ConversationItem';
 import { ChannelIndicator } from './ChannelIndicator';
@@ -88,6 +88,7 @@ export const ConversationList = memo(function ConversationList({
   getPresence,
 }: ConversationListProps) {
   const { profile } = useAuth();
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'owner';
   const { play: playSound } = useNotificationSound();
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all'>('open');
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,6 +96,8 @@ export const ConversationList = memo(function ConversationList({
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [labelFilter, setLabelFilter] = useState<string>('all');
+  // Admins/owners veem todas por padrão; demais agentes veem as próprias
+  const [myOnly, setMyOnly] = useState(!isAdmin);
   const [agentFilter, setAgentFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
@@ -164,10 +167,11 @@ export const ConversationList = memo(function ConversationList({
     channelType: channelFilter !== 'all' ? channelFilter : undefined,
     hasUnread: showUnreadOnly || undefined,
     labelId: labelFilter !== 'all' ? labelFilter : undefined,
-    assignedUserId: agentFilter !== 'all' ? agentFilter : undefined,
+    // myOnly sobrepõe o filtro manual de atendente (tem precedência)
+    assignedUserId: myOnly ? profile?.id : agentFilter !== 'all' ? agentFilter : undefined,
     source: sourceFilter !== 'all' ? sourceFilter : undefined,
     dateFrom,
-  }), [statusFilter, businessUnitId, searchQuery, channelFilter, showUnreadOnly, labelFilter, agentFilter, sourceFilter, dateFrom]);
+  }), [statusFilter, businessUnitId, searchQuery, channelFilter, showUnreadOnly, labelFilter, agentFilter, sourceFilter, dateFrom, myOnly, profile?.id]);
 
   const { data: conversations, isLoading, error } = useConversations(filters);
 
@@ -334,6 +338,36 @@ export const ConversationList = memo(function ConversationList({
               </button>
             );
           })}
+        </div>
+
+        {/* Toggle Todas / Minhas */}
+        <div className="flex mt-2 rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setMyOnly(false)}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium transition-colors',
+              !myOnly
+                ? 'bg-primary-500 text-white'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5'
+            )}
+          >
+            <Users className="w-3.5 h-3.5" />
+            Todas
+          </button>
+          <button
+            type="button"
+            onClick={() => setMyOnly(true)}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-white/10',
+              myOnly
+                ? 'bg-primary-500 text-white'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5'
+            )}
+          >
+            <UserIcon className="w-3.5 h-3.5" />
+            Minhas
+          </button>
         </div>
 
         {/* Additional Filters Panel */}
