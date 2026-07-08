@@ -96,8 +96,8 @@ export const ConversationList = memo(function ConversationList({
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [labelFilter, setLabelFilter] = useState<string>('all');
-  // Admins/owners veem todas por padrão; demais agentes veem as próprias
-  const [myOnly, setMyOnly] = useState(!isAdmin);
+  // Todos iniciam vendo apenas as próprias conversas; toggle permite ver todas
+  const [myOnly, setMyOnly] = useState(true);
   const [agentFilter, setAgentFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
