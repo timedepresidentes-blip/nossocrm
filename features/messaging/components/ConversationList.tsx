@@ -319,57 +319,61 @@ export const ConversationList = memo(function ConversationList({
           )}
         </div>
 
-        {/* Status tabs */}
-        <div className="flex gap-1 mt-3">
-          {statusTabs.map((tab) => {
-            const isActive = statusFilter === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setStatusFilter(tab.id)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors',
-                  isActive
-                    ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-700 dark:text-primary-300'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'
-                )}
-              >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+        {/* Status tabs + toggle Todas/Minhas na mesma linha */}
+        <div className="flex items-center justify-between mt-3">
+          <div className="flex gap-1">
+            {statusTabs.map((tab) => {
+              const isActive = statusFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setStatusFilter(tab.id)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors',
+                    isActive
+                      ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-700 dark:text-primary-300'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'
+                  )}
+                >
+                  <tab.icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
 
-        {/* Toggle Todas / Minhas */}
-        <div className="flex mt-2 rounded-lg border border-slate-200 dark:border-white/10 overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setMyOnly(false)}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium transition-colors',
-              !myOnly
-                ? 'bg-primary-500 text-white'
-                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5'
-            )}
-          >
-            <Users className="w-3.5 h-3.5" />
-            Todas
-          </button>
-          <button
-            type="button"
-            onClick={() => setMyOnly(true)}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium transition-colors border-l border-slate-200 dark:border-white/10',
-              myOnly
-                ? 'bg-primary-500 text-white'
-                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5'
-            )}
-          >
-            <UserIcon className="w-3.5 h-3.5" />
-            Minhas
-          </button>
+          {/* Toggle Todas / Minhas */}
+          <div className="flex rounded-md border border-slate-200 dark:border-white/10 overflow-hidden shrink-0">
+            <button
+              type="button"
+              onClick={() => setMyOnly(false)}
+              title="Ver todas as conversas"
+              className={cn(
+                'flex items-center gap-1 px-2 py-1 text-xs font-medium transition-colors',
+                !myOnly
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5'
+              )}
+            >
+              <Users className="w-3 h-3" />
+              Todas
+            </button>
+            <button
+              type="button"
+              onClick={() => setMyOnly(true)}
+              title="Ver apenas minhas conversas"
+              className={cn(
+                'flex items-center gap-1 px-2 py-1 text-xs font-medium transition-colors border-l border-slate-200 dark:border-white/10',
+                myOnly
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5'
+              )}
+            >
+              <UserIcon className="w-3 h-3" />
+              Minhas
+            </button>
+          </div>
         </div>
 
         {/* Additional Filters Panel */}
