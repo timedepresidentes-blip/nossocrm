@@ -89,7 +89,7 @@ export const ConversationList = memo(function ConversationList({
   getPresence,
 }: ConversationListProps) {
   const { profile } = useAuth();
-  const isAdmin = profile?.role === 'admin' || profile?.role === 'owner';
+  const isAdmin = profile?.role === 'admin';
   const { play: playSound } = useNotificationSound();
   const [statusFilter, setStatusFilter] = useState<ConversationStatus | 'all'>('open');
   const [searchQuery, setSearchQuery] = useState('');
