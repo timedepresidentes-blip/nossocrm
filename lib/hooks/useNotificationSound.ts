@@ -10,7 +10,8 @@ export type SoundType =
   | 'ai_handoff'
   | 'nota_interna'
   | 'lembrete_criado'
-  | 'transferencia';
+  | 'transferencia'
+  | 'chat_interno';
 
 // ─── AudioContext singleton ───────────────────────────────────────────────────
 // Regra crítica: AudioContext criado DENTRO de um gesto do usuário inicia em
@@ -103,6 +104,11 @@ function createSound(ctx: AudioContext, type: SoundType) {
         beep(ctx, 698, 0.13, 0.10, 0.28);
         beep(ctx, 523, 0.26, 0.18, 0.38);
         beep(ctx, 392, 0.46, 0.22, 0.30);
+        break;
+      case 'chat_interno':
+        // Pop duplo suave — mensagem de colega no chat da equipe
+        beep(ctx, 1047, 0,    0.06, 0.38);
+        beep(ctx, 1319, 0.08, 0.10, 0.45);
         break;
     }
   } catch { /* silencia erros de áudio */ }
