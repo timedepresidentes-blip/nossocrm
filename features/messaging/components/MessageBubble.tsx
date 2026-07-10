@@ -1,8 +1,9 @@
 'use client';
 
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
-import { Check, CheckCheck, Clock, AlertCircle, FileText, MapPin, Play, Pause, Image, Reply, Trash2, RotateCcw, Pencil, LayoutTemplate } from 'lucide-react';
+import { Check, CheckCheck, Clock, AlertCircle, FileText, MapPin, Play, Pause, Image, Reply, Trash2, RotateCcw, Pencil, LayoutTemplate, X, ZoomIn } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sanitizeUrl } from '@/lib/utils/sanitize';
 import { useSendMessage, useDeleteMessage, useRetryMessage, useEditMessage } from '@/lib/query/hooks/useMessagingMessagesQuery';
@@ -315,20 +316,7 @@ const MessageContent = memo(function MessageContent({
     case 'image': {
       const imageContent = content as ImageContent;
       const resolvedImageUrl = resolveMediaUrl(imageContent.mediaUrl, conversationId);
-      return (
-        <div className="space-y-1">
-          {resolvedImageUrl && (
-            <img
-              src={resolvedImageUrl}
-              alt={imageContent.caption || 'Imagem'}
-              className="max-w-[240px] rounded-lg"
-            />
-          )}
-          {imageContent.caption && (
-            <p className="whitespace-pre-wrap break-words">{imageContent.caption}</p>
-          )}
-        </div>
-      );
+      return <ImageBubble url={resolvedImageUrl} caption={imageContent.caption} />;
     }
 
     case 'document': {
@@ -569,6 +557,62 @@ function replyPreviewText(msg: MessagingMessage): string {
     case 'location': return '📍 Localização';
     default: return 'Mensagem';
   }
+}
+
+// Thumbnail clicável que abre o lightbox
+function ImageBubble({ url, caption }: { url: string | null | undefined; caption?: string | null }) {
+  const [open, setOpen] = useState(false);
+  if (!url) return null;
+  return (
+    <div className="space-y-1">
+      <div
+        className="relative group cursor-zoom-in inline-block"
+        onClick={() => setOpen(true)}
+      >
+        <img
+          src={url}
+          alt={caption || 'Imagem'}
+          className="max-w-[240px] rounded-lg block"
+        />
+        <div className="absolute inset-0 rounded-lg bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+          <ZoomIn className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+        </div>
+      </div>
+      {caption && <p className="whitespace-pre-wrap break-words">{caption}</p>}
+      {open && <ImageLightbox src={url} alt={caption || 'Imagem'} onClose={() => setOpen(false)} />}
+    </div>
+  );
+}
+
+// Lightbox para visualizar imagens em tela cheia
+function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+        aria-label="Fechar"
+      >
+        <X className="w-6 h-6" />
+      </button>
+      <img
+        src={src}
+        alt={alt}
+        className="max-w-[90vw] max-h-[90vh] rounded-xl object-contain shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      />
+    </div>,
+    document.body
+  );
 }
 
 export const MessageBubble = memo(function MessageBubble({
