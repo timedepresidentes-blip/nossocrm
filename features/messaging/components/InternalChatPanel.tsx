@@ -35,9 +35,14 @@ export function InternalChatPanel() {
 
   useInternalChatRealtime(organizationId);
 
-  // Notifica e conta não lidos quando painel fechado
-  const prevCountRef = useRef(messages.length);
+  // Inicializa com -1 para ignorar a carga inicial do histórico
+  const prevCountRef = useRef(-1);
   useEffect(() => {
+    if (prevCountRef.current === -1) {
+      // Primeira carga: apenas registra o tamanho atual, sem tocar som
+      prevCountRef.current = messages.length;
+      return;
+    }
     if (messages.length > prevCountRef.current) {
       const added = messages.length - prevCountRef.current;
       const newest = messages[messages.length - 1];
@@ -73,8 +78,9 @@ export function InternalChatPanel() {
     const text = input.trim();
     if (!text) return;
     setInput('');
+    play('mensagem_enviada');
     send.mutate(text);
-  }, [input, send]);
+  }, [input, send, play]);
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
