@@ -5,7 +5,7 @@ import { MessageSquareDot, X, Send, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { useInternalChat, useInternalChatRealtime, useSendInternalMessage } from '@/lib/query/hooks/useInternalChatQuery';
-import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
+import { useNotificationSound, unlockAudio } from '@/lib/hooks/useNotificationSound';
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -91,7 +91,7 @@ export function InternalChatPanel() {
       {/* Botão no header */}
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => { unlockAudio(); setOpen(o => !o); }}
         className={cn(
           'relative p-2 rounded-full transition-all active:scale-95',
           open

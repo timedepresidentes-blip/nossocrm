@@ -158,10 +158,20 @@ export function useNotificationSound() {
       return;
     }
 
-    // Contexto suspenso: resume e toca em seguida
-    _ctx.resume().then(() => {
-      if (_ctx && _ctx.state === 'running') createSound(_ctx, type);
-    }).catch(() => {});
+    // Contexto suspenso: tenta resume com até 3 tentativas
+    const tryPlay = (attempts: number) => {
+      if (!_ctx) return;
+      _ctx.resume().then(() => {
+        if (_ctx?.state === 'running') {
+          createSound(_ctx, type);
+        } else if (attempts > 1) {
+          setTimeout(() => tryPlay(attempts - 1), 200);
+        }
+      }).catch(() => {
+        if (attempts > 1) setTimeout(() => tryPlay(attempts - 1), 200);
+      });
+    };
+    tryPlay(3);
   }, []);
 
   return { play };
