@@ -89,15 +89,13 @@ function createSound(ctx: AudioContext, type: SoundType) {
         beep(ctx, 659, 0.16, 0.18, 0.32);
         break;
       case 'nota_interna':
-        // Dois bipes suaves ascendentes — confirmação discreta de anotação
-        beep(ctx, 660, 0,    0.09, 0.20);
-        beep(ctx, 880, 0.11, 0.12, 0.22);
+        beep(ctx, 660, 0,    0.10, 0.45);
+        beep(ctx, 880, 0.12, 0.14, 0.50);
         break;
       case 'lembrete_criado':
-        // Três notas curtas — como um alarme de agenda
-        beep(ctx, 784, 0,    0.08, 0.22);
-        beep(ctx, 784, 0.10, 0.08, 0.22);
-        beep(ctx, 988, 0.20, 0.14, 0.30);
+        beep(ctx, 784, 0,    0.10, 0.48);
+        beep(ctx, 784, 0.12, 0.10, 0.48);
+        beep(ctx, 988, 0.24, 0.16, 0.55);
         break;
       case 'transferencia':
         // Arpejo descendente + nota grave — sinaliza passagem de bastão
@@ -140,20 +138,24 @@ export function useNotificationSound() {
 
   const play = useCallback((type: SoundType) => {
     if (typeof window === 'undefined') return;
-    if (!_ctx || _ctx.state === 'closed') return;
+
+    // Garante que o contexto existe (pode não ter sido criado ainda se o
+    // usuário nunca clicou na página antes desta chamada)
+    if (!_ctx || _ctx.state === 'closed') {
+      try {
+        _ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      } catch { return; }
+    }
 
     if (_ctx.state === 'running') {
       createSound(_ctx, type);
       return;
     }
 
-    // Contexto suspenso (tab voltou do background ou ainda não interagiu):
-    // tenta resumir e tocar em seguida
-    if (_ctx.state === 'suspended') {
-      _ctx.resume().then(() => {
-        if (_ctx && _ctx.state === 'running') createSound(_ctx, type);
-      }).catch(() => {});
-    }
+    // Contexto suspenso: resume e toca em seguida
+    _ctx.resume().then(() => {
+      if (_ctx && _ctx.state === 'running') createSound(_ctx, type);
+    }).catch(() => {});
   }, []);
 
   return { play };
