@@ -55,14 +55,14 @@ export function useInternalChat(orgId: string | null) {
 }
 
 export function useSendInternalMessage() {
-  const { organizationId } = useAuth();
+  const { organizationId, profile } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (content: string) => {
       const sb = getClient();
       const { error } = await sb
         .from('internal_chat_messages')
-        .insert({ org_id: organizationId, content });
+        .insert({ org_id: organizationId, sender_id: profile?.id, content });
       if (error) throw error;
     },
     onSuccess: () => {
