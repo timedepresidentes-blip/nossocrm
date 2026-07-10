@@ -170,7 +170,23 @@ export const useMoveDeal = () => {
         })();
       }
 
-      // 3. Create activity "Moveu para X" (fire and forget - don't block UI)
+      // 3. Resolve conversas abertas quando lead é perdido (fire and forget)
+      if (isLost === true && deal.contactId) {
+        (async () => {
+          try {
+            const sb = getClient();
+            await sb
+              .from('messaging_conversations')
+              .update({ status: 'resolved', updated_at: new Date().toISOString() })
+              .eq('contact_id', deal.contactId)
+              .eq('status', 'open');
+          } catch (err) {
+            console.warn('[useMoveDeal] Erro ao resolver conversas do lead perdido:', err);
+          }
+        })();
+      }
+
+      // 4. Create activity "Moveu para X" (fire and forget - don't block UI)
       const stageLabel = targetStage?.label || targetStageId;
       activitiesService.create({
         dealId,
@@ -183,7 +199,7 @@ export const useMoveDeal = () => {
         user: { name: 'Sistema', avatar: '' },
       } as Omit<Activity, 'id' | 'createdAt'>).catch(console.error);
 
-      // 3. LinkedStage: Update contact stage when moving to linked column
+      // 5. LinkedStage: Update contact stage when moving to linked column
       if (targetStage?.linkedLifecycleStage && deal.contactId) {
         const lifecycleStageName =
           lifecycleStages?.find(ls => ls.id === targetStage.linkedLifecycleStage)?.name ||
@@ -205,7 +221,7 @@ export const useMoveDeal = () => {
         } as Omit<Activity, 'id' | 'createdAt'>).catch(console.error);
       }
 
-      // 4. NextBoard Automation (async, don't block)
+      // 6. NextBoard Automation (async, don't block)
       const isSuccessStage =
         isWon ||
         targetStage?.linkedLifecycleStage === 'MQL' ||
