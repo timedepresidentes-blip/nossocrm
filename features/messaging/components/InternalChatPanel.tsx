@@ -27,34 +27,47 @@ export function InternalChatPanel() {
   const [input, setInput] = useState('');
   const [unread, setUnread] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const { play } = useNotificationSound();
 
   const { data: messages = [], isLoading } = useInternalChat(organizationId);
   const send = useSendInternalMessage();
 
-  // Realtime — conta não lidos quando painel fechado
-  const prevCountRef = useRef(messages.length);
   useInternalChatRealtime(organizationId);
 
+  // Notifica e conta não lidos quando painel fechado
+  const prevCountRef = useRef(messages.length);
   useEffect(() => {
     if (messages.length > prevCountRef.current) {
+      const added = messages.length - prevCountRef.current;
       const newest = messages[messages.length - 1];
-      // Só notifica mensagens de outros atendentes
       if (newest?.senderId !== profile?.id) {
         play('chat_interno');
-        if (!open) setUnread(u => u + (messages.length - prevCountRef.current));
+        if (!open) setUnread(u => u + added);
       }
     }
     prevCountRef.current = messages.length;
   }, [messages.length, open, profile?.id, play]);
 
-  // Rola para o fim ao abrir ou receber mensagem
+  // Rola para o fim ao abrir ou nova mensagem
   useEffect(() => {
     if (open) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
       setUnread(0);
     }
   }, [open, messages.length]);
+
+  // Fecha ao clicar fora
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
 
   const handleSend = useCallback(() => {
     const text = input.trim();
@@ -68,18 +81,39 @@ export function InternalChatPanel() {
   };
 
   return (
-    <>
-      {/* Painel */}
+    <div className="relative" ref={panelRef}>
+      {/* Botão no header */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={cn(
+          'relative p-2 rounded-full transition-all active:scale-95',
+          open
+            ? 'text-primary-600 bg-primary-100 dark:text-primary-400 dark:bg-primary-900/30'
+            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10'
+        )}
+        title="Chat da equipe"
+        aria-label="Chat interno da equipe"
+      >
+        <MessageSquareDot size={20} aria-hidden="true" />
+        {unread > 0 && !open && (
+          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+            {unread > 9 ? '9+' : unread}
+          </span>
+        )}
+      </button>
+
+      {/* Painel dropdown */}
       {open && (
-        <div className="fixed bottom-20 right-4 z-50 w-80 flex flex-col rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 overflow-hidden"
-          style={{ height: 420 }}>
+        <div className="absolute right-0 top-12 z-50 w-80 flex flex-col rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 overflow-hidden"
+          style={{ height: 440 }}>
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-primary-600 text-white shrink-0">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4" />
               <span className="text-sm font-semibold">Chat da Equipe</span>
             </div>
-            <button onClick={() => setOpen(false)} className="p-1 rounded hover:bg-white/20 transition-colors">
+            <button onClick={() => setOpen(false)} className="p-1 rounded hover:bg-white/20 transition-colors" aria-label="Fechar chat">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -87,10 +121,10 @@ export function InternalChatPanel() {
           {/* Mensagens */}
           <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
             {isLoading && (
-              <p className="text-xs text-center text-slate-400">Carregando…</p>
+              <p className="text-xs text-center text-slate-400 mt-8">Carregando…</p>
             )}
             {!isLoading && messages.length === 0 && (
-              <p className="text-xs text-center text-slate-400 mt-8">Nenhuma mensagem ainda.<br />Seja o primeiro a escrever!</p>
+              <p className="text-xs text-center text-slate-400 mt-10">Nenhuma mensagem ainda.<br />Seja o primeiro a escrever!</p>
             )}
             {messages.map((msg) => {
               const isMe = msg.senderId === profile?.id;
@@ -125,7 +159,7 @@ export function InternalChatPanel() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
-              placeholder="Mensagem para a equipe…"
+              placeholder="Mensagem para a equipe… (Enter envia)"
               rows={1}
               className="flex-1 resize-none text-sm bg-slate-100 dark:bg-white/5 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-primary-500 text-slate-900 dark:text-white placeholder-slate-400 max-h-20"
               style={{ minHeight: 36 }}
@@ -134,32 +168,13 @@ export function InternalChatPanel() {
               onClick={handleSend}
               disabled={!input.trim() || send.isPending}
               className="p-2 rounded-xl bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-40 transition-colors shrink-0"
+              aria-label="Enviar mensagem"
             >
               <Send className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
-
-      {/* Botão flutuante */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        className={cn(
-          'fixed bottom-4 right-4 z-50 w-13 h-13 rounded-full shadow-lg flex items-center justify-center transition-all',
-          open
-            ? 'bg-slate-600 text-white'
-            : 'bg-primary-600 text-white hover:bg-primary-700'
-        )}
-        style={{ width: 52, height: 52 }}
-        title="Chat da equipe"
-      >
-        <MessageSquareDot className="w-6 h-6" />
-        {unread > 0 && !open && (
-          <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-            {unread > 9 ? '9+' : unread}
-          </span>
-        )}
-      </button>
-    </>
+    </div>
   );
 }

@@ -12,7 +12,6 @@ import Layout from '@/components/Layout'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useReminderAlarm } from '@/lib/hooks/useReminderAlarm'
 import { ReminderAlarmOverlay } from '@/components/calendar/ReminderAlarmOverlay'
-import { InternalChatPanel } from '@/features/messaging/components/InternalChatPanel'
 
 // Renderiza o overlay de alarme global quando há lembretes disparando
 function ReminderAlarmMount() {
@@ -77,7 +76,6 @@ export default function ProtectedShell({
                             <TooltipProvider delayDuration={200}>
                                 <ReminderAlarmMount />
                                 {shouldUseAppShell ? <Layout>{children}</Layout> : children}
-                                {shouldUseAppShell && <InternalChatPanel />}
                             </TooltipProvider>
                         </AIProvider>
                     </AuthProvider>

@@ -64,6 +64,7 @@ import { UIChat } from './ai/UIChat';
 
 import { NotificationPopover } from './notifications/NotificationPopover';
 import { CalendarQuickButton } from './calendar/CalendarQuickButton';
+import { InternalChatPanel } from '@/features/messaging/components/InternalChatPanel';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { StatusPicker, StatusDot } from './StatusPicker';
 import { useMyStatus, useOrgStatusRealtime } from '@/lib/hooks/useAgentStatus';
@@ -572,6 +573,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               )}
 
               <CalendarQuickButton />
+              <InternalChatPanel />
               <NotificationPopover />
               <button
                 type="button"
