@@ -242,18 +242,18 @@ export function InternalChatPanel() {
         onClick={() => { unlockAudio(); setOpen(o => !o); setShowEmoji(false); }}
         className={cn(
           'relative flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 active:scale-95 select-none tracking-wide',
-          open
-            ? 'text-yellow-900 bg-yellow-400 shadow-md shadow-yellow-400/40'
-            : unread > 0
-              ? 'text-yellow-900 bg-yellow-400 hover:bg-yellow-300 shadow-lg shadow-yellow-400/50'
-              : 'text-slate-600 bg-slate-100 hover:bg-slate-200 dark:text-slate-300 dark:bg-white/10 dark:hover:bg-white/15'
+          unread > 0
+            ? 'text-white bg-green-500 hover:bg-green-600 shadow-lg shadow-green-500/50'
+            : open
+              ? 'text-yellow-900 bg-yellow-500 shadow-md shadow-yellow-500/40'
+              : 'text-yellow-900 bg-yellow-400 hover:bg-yellow-500 shadow-md shadow-yellow-400/30'
         )}
         title="Chat da equipe"
         aria-label="Chat interno da equipe"
       >
         {/* Anel pulsante quando há mensagens novas */}
         {unread > 0 && !open && (
-          <span className="absolute inset-0 rounded-xl animate-ping bg-yellow-300 opacity-60 pointer-events-none" />
+          <span className="absolute inset-0 rounded-xl animate-ping bg-green-400 opacity-50 pointer-events-none" />
         )}
 
         <MessageSquareDot size={20} aria-hidden="true" />
