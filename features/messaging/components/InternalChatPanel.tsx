@@ -2,19 +2,45 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { MessageSquareDot, X, Send, Users, Paperclip, Smile, FileText } from 'lucide-react';
+import { MessageSquareDot, X, Send, Users, Paperclip, Smile, FileText, GripHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { useInternalChat, useInternalChatRealtime, useSendInternalMessage } from '@/lib/query/hooks/useInternalChatQuery';
 import { useNotificationSound, unlockAudio } from '@/lib/hooks/useNotificationSound';
 
-// Lazy load: emoji picker é pesado (~1MB)
-const EmojiPicker = dynamic(() => import('emoji-picker-react'), { ssr: false, loading: () => (
-  <div className="flex items-center justify-center h-[300px] text-sm text-slate-400">Carregando emojis…</div>
-)});
+const EmojiPicker = dynamic(() => import('emoji-picker-react'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-[300px] text-sm text-slate-400">Carregando emojis…</div>
+  ),
+});
 
-// Formato de anexo no campo content: "ATTACH|mime|nome|url\ntexto opcional"
 const ATTACH_SEP = 'ATTACH|';
+const SIZE_KEY = 'nossocrm-internal-chat-size';
+const MIN_W = 360;
+const MAX_W = 720;
+const MIN_H = 400;
+const MAX_H = 860;
+const DEFAULT_W = 480;
+const DEFAULT_H = 580;
+
+function loadSize() {
+  try {
+    const raw = localStorage.getItem(SIZE_KEY);
+    if (!raw) return { w: DEFAULT_W, h: DEFAULT_H };
+    const { w, h } = JSON.parse(raw);
+    return {
+      w: Math.min(MAX_W, Math.max(MIN_W, w)),
+      h: Math.min(MAX_H, Math.max(MIN_H, h)),
+    };
+  } catch {
+    return { w: DEFAULT_W, h: DEFAULT_H };
+  }
+}
+
+function saveSize(w: number, h: number) {
+  try { localStorage.setItem(SIZE_KEY, JSON.stringify({ w, h })); } catch { /* ignore */ }
+}
 
 function parseContent(content: string) {
   if (!content.startsWith(ATTACH_SEP)) return { text: content, attach: null };
@@ -56,11 +82,13 @@ function MessageContent({ content, isMe }: { content: string; isMe: boolean }) {
             rel="noreferrer"
             className={cn(
               'flex items-center gap-2 rounded-xl px-3 py-2 text-xs transition-colors',
-              isMe ? 'bg-white/20 hover:bg-white/30' : 'bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20'
+              isMe
+                ? 'bg-white/20 hover:bg-white/30'
+                : 'bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20'
             )}
           >
             <FileText className="w-4 h-4 shrink-0" />
-            <span className="truncate max-w-[200px]">{attach.name}</span>
+            <span className="truncate max-w-[220px]">{attach.name}</span>
           </a>
         )
       )}
@@ -77,16 +105,22 @@ export function InternalChatPanel() {
   const [showEmoji, setShowEmoji] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [panelSize, setPanelSize] = useState({ w: DEFAULT_W, h: DEFAULT_H });
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { play } = useNotificationSound();
+  const resizing = useRef(false);
+  const resizeOrigin = useRef({ x: 0, y: 0, w: DEFAULT_W, h: DEFAULT_H });
 
+  const { play } = useNotificationSound();
   const { data: messages = [], isLoading } = useInternalChat(organizationId);
   const send = useSendInternalMessage();
-
   useInternalChatRealtime(organizationId);
+
+  // Carrega tamanho salvo
+  useEffect(() => { setPanelSize(loadSize()); }, []);
 
   // Detecta mensagens novas
   const prevCountRef = useRef(-1);
@@ -106,7 +140,6 @@ export function InternalChatPanel() {
     prevCountRef.current = messages.length;
   }, [messages.length, open, profile?.id, play]);
 
-  // Rola para o fim ao abrir ou nova mensagem
   useEffect(() => {
     if (open) {
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
@@ -126,6 +159,35 @@ export function InternalChatPanel() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
+
+  // Resize com mouse
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!resizing.current) return;
+      const dw = resizeOrigin.current.x - e.clientX; // arrastar para esquerda = mais largo
+      const dh = e.clientY - resizeOrigin.current.y;  // arrastar para baixo = mais alto
+      const w = Math.min(MAX_W, Math.max(MIN_W, resizeOrigin.current.w + dw));
+      const h = Math.min(MAX_H, Math.max(MIN_H, resizeOrigin.current.h + dh));
+      setPanelSize({ w, h });
+    };
+    const onUp = () => {
+      if (!resizing.current) return;
+      resizing.current = false;
+      setPanelSize(prev => { saveSize(prev.w, prev.h); return prev; });
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, []);
+
+  const handleResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    resizing.current = true;
+    resizeOrigin.current = { x: e.clientX, y: e.clientY, w: panelSize.w, h: panelSize.h };
+  };
 
   const handleSend = useCallback(() => {
     const text = input.trim();
@@ -147,9 +209,7 @@ export function InternalChatPanel() {
     e.target.value = '';
     setUploading(true);
     setUploadError('');
-
     try {
-      // 1. Solicita URL assinada ao servidor
       const res = await fetch('/api/internal-chat/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -160,16 +220,8 @@ export function InternalChatPanel() {
         throw new Error(err.error || 'Erro ao preparar upload');
       }
       const { signedUrl, publicUrl } = await res.json();
-
-      // 2. Faz upload direto para o Supabase Storage
-      const uploadRes = await fetch(signedUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      });
+      const uploadRes = await fetch(signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
       if (!uploadRes.ok) throw new Error('Falha no upload do arquivo');
-
-      // 3. Envia mensagem com anexo
       const text = input.trim();
       const content = `${ATTACH_SEP}${file.type}|${file.name}|${publicUrl}${text ? `\n${text}` : ''}`;
       setInput('');
@@ -182,46 +234,43 @@ export function InternalChatPanel() {
     }
   }, [organizationId, input, send, play]);
 
-  const handleOpen = () => {
-    unlockAudio();
-    setOpen(o => !o);
-    setShowEmoji(false);
-  };
-
   return (
     <div className="relative" ref={panelRef}>
-      {/* Botão no header */}
+      {/* Botão */}
       <button
         type="button"
-        onClick={handleOpen}
+        onClick={() => { unlockAudio(); setOpen(o => !o); setShowEmoji(false); }}
         className={cn(
-          'relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-95 select-none',
+          'relative flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 active:scale-95 select-none tracking-wide',
           open
-            ? 'text-primary-600 bg-primary-100 dark:text-primary-400 dark:bg-primary-900/30'
+            ? 'text-yellow-900 bg-yellow-400 shadow-md shadow-yellow-400/40'
             : unread > 0
-              ? 'text-white bg-primary-500 hover:bg-primary-600 shadow-md shadow-primary-500/40 dark:shadow-primary-500/20'
+              ? 'text-yellow-900 bg-yellow-400 hover:bg-yellow-300 shadow-lg shadow-yellow-400/50'
               : 'text-slate-600 bg-slate-100 hover:bg-slate-200 dark:text-slate-300 dark:bg-white/10 dark:hover:bg-white/15'
         )}
         title="Chat da equipe"
         aria-label="Chat interno da equipe"
       >
+        {/* Anel pulsante quando há mensagens novas */}
         {unread > 0 && !open && (
-          <span className="absolute inset-0 rounded-xl animate-ping bg-primary-400 opacity-30 pointer-events-none" />
+          <span className="absolute inset-0 rounded-xl animate-ping bg-yellow-300 opacity-60 pointer-events-none" />
         )}
-        <MessageSquareDot size={18} aria-hidden="true" />
-        <span>Equipe</span>
+
+        <MessageSquareDot size={20} aria-hidden="true" />
+        <span>CHAT</span>
+
         {unread > 0 && !open && (
-          <span className="flex items-center justify-center min-w-[20px] h-[20px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none shadow">
+          <span className="flex items-center justify-center min-w-[22px] h-[22px] px-1 rounded-full bg-red-600 text-white text-[11px] font-black leading-none shadow-md">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
       </button>
 
-      {/* Painel dropdown */}
+      {/* Painel */}
       {open && (
         <div
           className="absolute right-0 top-14 z-50 flex flex-col rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 overflow-hidden"
-          style={{ width: 460, height: 580 }}
+          style={{ width: panelSize.w, height: panelSize.h }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-primary-600 text-white shrink-0">
@@ -287,7 +336,6 @@ export function InternalChatPanel() {
             </div>
           )}
 
-          {/* Erro de upload */}
           {uploadError && (
             <div className="shrink-0 px-3 py-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs text-center">
               {uploadError}
@@ -348,6 +396,15 @@ export function InternalChatPanel() {
             >
               <Send className="w-4 h-4" />
             </button>
+          </div>
+
+          {/* Alça de redimensionamento (canto inferior esquerdo) */}
+          <div
+            onMouseDown={handleResizeMouseDown}
+            className="absolute bottom-0 left-0 w-6 h-6 flex items-end justify-start p-1 cursor-sw-resize text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400 transition-colors select-none"
+            title="Arrastar para redimensionar"
+          >
+            <GripHorizontal className="w-3.5 h-3.5 rotate-45" />
           </div>
         </div>
       )}
