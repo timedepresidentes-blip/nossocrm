@@ -93,17 +93,27 @@ export function InternalChatPanel() {
         type="button"
         onClick={() => { unlockAudio(); setOpen(o => !o); }}
         className={cn(
-          'relative p-2 rounded-full transition-all active:scale-95',
+          'relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 active:scale-95 select-none',
           open
             ? 'text-primary-600 bg-primary-100 dark:text-primary-400 dark:bg-primary-900/30'
-            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10'
+            : unread > 0
+              ? 'text-white bg-primary-500 hover:bg-primary-600 shadow-md shadow-primary-500/40 dark:shadow-primary-500/20'
+              : 'text-slate-600 bg-slate-100 hover:bg-slate-200 dark:text-slate-300 dark:bg-white/10 dark:hover:bg-white/15'
         )}
         title="Chat da equipe"
         aria-label="Chat interno da equipe"
       >
-        <MessageSquareDot size={20} aria-hidden="true" />
+        {/* Anel pulsante quando há mensagens novas */}
         {unread > 0 && !open && (
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+          <span className="absolute inset-0 rounded-xl animate-ping bg-primary-400 opacity-30 pointer-events-none" />
+        )}
+
+        <MessageSquareDot size={16} aria-hidden="true" />
+        <span>Equipe</span>
+
+        {/* Badge de não lidas */}
+        {unread > 0 && !open && (
+          <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none shadow">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
