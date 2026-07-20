@@ -11,26 +11,38 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-// Schema de retorno da extração solar
 const SolarExtractSchema = z.object({
   kwhMonth: z.number().nullable().describe('Consumo médio mensal em kWh. null se não encontrado.'),
   city: z.string().nullable().describe('Cidade do cliente. null se não mencionada.'),
   state: z.string().nullable().describe('Estado (UF) do cliente. null se não mencionado.'),
   distributor: z.string().nullable().describe('Nome da distribuidora de energia. null se não mencionada.'),
   currentBillValue: z.number().nullable().describe('Valor atual da conta de energia em R$. null se não mencionado.'),
-  systemPowerKwp: z.number().nullable().describe('Potência estimada do sistema solar em kWp (se o cliente ou vendedor já mencionou). null se não mencionado.'),
-  observations: z.string().nullable().describe('Outras informações relevantes sobre o projeto solar (telhado, sombreamento, número de fases etc.). null se nada relevante.'),
-  confidence: z.number().min(0).max(1).describe('Confiança geral da extração de 0 a 1.'),
+  systemPowerKwp: z.number().nullable().describe('Potência estimada em kWp (se mencionada). null caso contrário.'),
+  observations: z.string().nullable().describe('Observações técnicas relevantes (telhado, sombreamento, fases etc). null se nada relevante.'),
+  confidence: z.number().min(0).max(1).describe('Confiança geral de 0 a 1.'),
 });
 
 export type SolarExtractResult = z.infer<typeof SolarExtractSchema>;
+
+const SYSTEM_PROMPT = `Você é especialista em energia solar fotovoltaica. Analise o conteúdo fornecido (conversa e/ou imagem de conta de energia) e extraia informações para dimensionamento de sistema solar.
+
+Extraia:
+- Consumo mensal em kWh (verifique campos "Consumo (kWh)", "Histórico de Consumo" ou texto da conversa)
+- Cidade e estado do cliente
+- Distribuidora de energia (CPFL, Cemig, Enel, Energisa etc.)
+- Valor total da conta em R$ (campo "Valor a Pagar" ou "Total")
+- Potência estimada do sistema em kWp se mencionada
+- Observações técnicas relevantes
+
+Se uma imagem de conta de energia for fornecida, priorize os dados da imagem sobre o texto da conversa.
+Extraia APENAS o que está explícito. Não invente dados.`;
 
 function extractTextContent(content: Record<string, unknown>): string {
   if (typeof content?.text === 'string') return content.text;
   if (typeof content?.body === 'string') return content.body;
   if (typeof content?.caption === 'string') return `[Imagem] ${content.caption}`;
   const type = content?.type as string | undefined;
-  if (type === 'image') return '[Foto da conta de energia ou imagem enviada]';
+  if (type === 'image') return '[Foto enviada pelo cliente]';
   if (type === 'audio') return '[Áudio enviado]';
   if (type === 'document') return '[Documento enviado]';
   return '[Mensagem sem texto]';
@@ -41,38 +53,35 @@ export async function POST(req: Request) {
     const { model, supabase, organizationId } = await requireAITaskContext(req);
 
     const body = await req.json().catch(() => null);
-    const { conversationId } = body || {};
+    const { conversationId, billImageBase64, billImageMimeType } = body || {};
 
-    if (!conversationId) {
-      return json({ error: { code: 'MISSING_PARAM', message: 'conversationId obrigatório.' } }, 400);
+    // Precisa de pelo menos conversationId ou imagem da conta
+    if (!conversationId && !billImageBase64) {
+      return json({ error: { code: 'MISSING_PARAM', message: 'Forneça conversationId ou a imagem da conta de energia.' } }, 400);
     }
 
-    // Buscar mensagens da conversa
-    const { data: messages, error: msgError } = await supabase
-      .from('messaging_messages')
-      .select('id, direction, content, created_at')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
-      .limit(60);
+    // Formatar texto da conversa (opcional)
+    let conversationText = '';
+    if (conversationId) {
+      const { data: messages } = await supabase
+        .from('messaging_messages')
+        .select('id, direction, content, created_at')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true })
+        .limit(60);
 
-    if (msgError) {
-      return json({ error: { code: 'DB_ERROR', message: 'Erro ao buscar mensagens.' } }, 500);
+      if (messages && messages.length > 0) {
+        conversationText = messages
+          .map((m) => {
+            const role = m.direction === 'inbound' ? 'CLIENTE' : 'VENDEDOR';
+            const text = extractTextContent(m.content as Record<string, unknown>);
+            return `[${role}]: ${text}`;
+          })
+          .join('\n');
+      }
     }
 
-    if (!messages || messages.length < 1) {
-      return json({ error: { code: 'NO_MESSAGES', message: 'Nenhuma mensagem encontrada nesta conversa.' } }, 404);
-    }
-
-    // Formatar conversa para o prompt
-    const conversationText = messages
-      .map((m) => {
-        const role = m.direction === 'inbound' ? 'CLIENTE' : 'VENDEDOR';
-        const text = extractTextContent(m.content as Record<string, unknown>);
-        return `[${role}]: ${text}`;
-      })
-      .join('\n');
-
-    // Buscar produtos ativos do catálogo para incluir no contexto
+    // Buscar produtos ativos para contexto de sugestão
     const { data: products } = await supabase
       .from('products')
       .select('id, name, price, kit_cost, cost_price, cost_items, characteristics, kit_description, active')
@@ -81,7 +90,7 @@ export async function POST(req: Request) {
       .order('price', { ascending: true });
 
     const productsContext = products && products.length > 0
-      ? `\n\nPRODUTOS DISPONÍVEIS NO CATÁLOGO:\n${products.map((p) => {
+      ? `\n\nCATÁLOGO DE KITS DISPONÍVEIS:\n${products.map((p) => {
           const chars = Array.isArray(p.characteristics)
             ? p.characteristics.map((c: { key: string; value: string }) => `${c.key}: ${c.value}`).join(', ')
             : '';
@@ -89,29 +98,54 @@ export async function POST(req: Request) {
         }).join('\n')}`
       : '';
 
-    // Chamada de IA para extração solar
-    const result = await generateText({
-      model,
-      maxRetries: 2,
-      output: Output.object({ schema: SolarExtractSchema }),
-      system: `Você é um especialista em energia solar fotovoltaica. Analise conversas de vendas de sistemas solares e extraia informações técnicas relevantes para gerar um orçamento.
+    // Monta o prompt base
+    const textPrompt = [
+      conversationText
+        ? `CONVERSA COM O CLIENTE:\n${conversationText}`
+        : '',
+      productsContext,
+      '\nExtraia os dados técnicos para dimensionamento solar.',
+    ].filter(Boolean).join('\n\n');
 
-Foque em:
-- Consumo mensal em kWh (pode vir como "minha conta é de X kWh" ou deduzido do valor da conta)
-- Localização do cliente (cidade e estado)
-- Distribuidora de energia (ex: CPFL, Cemig, Enel, Energisa etc.)
-- Valor atual da conta de energia em R$
-- Potência do sistema em kWp se mencionada
-- Observações técnicas relevantes (telhado, sombreamento, número de fases)
+    let result;
 
-Se o cliente enviou foto da conta de energia, provavelmente está no campo marcado como [Foto da conta de energia].
-Extraia APENAS o que está explícito ou fortemente implícito na conversa.`,
-      prompt: `Analise esta conversa e extraia os dados solares relevantes:
-
-${conversationText}${productsContext}
-
-Extraia as informações técnicas para dimensionamento do sistema solar.`,
-    });
+    if (billImageBase64) {
+      // Extração com visão (imagem da conta de energia)
+      const mimeType = (billImageMimeType || 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+      result = await generateText({
+        model,
+        maxRetries: 2,
+        output: Output.object({ schema: SolarExtractSchema }),
+        system: SYSTEM_PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                image: `data:${mimeType};base64,${billImageBase64}`,
+              },
+              ...(conversationText ? [{
+                type: 'text' as const,
+                text: `Além da imagem da conta de energia acima, veja também o contexto da conversa:\n\n${conversationText}${productsContext}`,
+              }] : [{
+                type: 'text' as const,
+                text: `Analise a conta de energia acima e extraia os dados solares.${productsContext}`,
+              }]),
+            ],
+          },
+        ],
+      });
+    } else {
+      // Extração apenas por texto da conversa
+      result = await generateText({
+        model,
+        maxRetries: 2,
+        output: Output.object({ schema: SolarExtractSchema }),
+        system: SYSTEM_PROMPT,
+        prompt: textPrompt,
+      });
+    }
 
     return json({
       extracted: result.output,
@@ -123,6 +157,6 @@ Extraia as informações técnicas para dimensionamento do sistema solar.`,
       return json({ error: { code: 'INVALID_INPUT', message: 'Payload inválido.' } }, 400);
     }
     console.error('[api/ai/tasks/quote/solar-extract] Error:', err);
-    return json({ error: { code: 'INTERNAL_ERROR', message: 'Erro ao extrair dados da conversa.' } }, 500);
+    return json({ error: { code: 'INTERNAL_ERROR', message: 'Erro ao extrair dados.' } }, 500);
   }
 }

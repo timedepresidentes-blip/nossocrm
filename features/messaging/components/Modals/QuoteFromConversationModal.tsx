@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, FileText, Plus, Trash2, Loader2, ExternalLink, Sparkles, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
+import { X, FileText, Plus, Trash2, Loader2, ExternalLink, Sparkles, ChevronDown, ChevronUp, TrendingUp, Paperclip, ImageIcon, Receipt } from 'lucide-react';
 import { useActiveProducts } from '@/lib/query/hooks/useProductsQuery';
 import { useBoards, useCreateDeal, useAddDealItem } from '@/lib/query/hooks';
 import { supabase } from '@/lib/supabase/client';
@@ -72,6 +72,10 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
   const [extracted, setExtracted] = useState<SolarExtracted | null>(null);
   const [showExtracted, setShowExtracted] = useState(true);
 
+  // Arquivos anexados
+  const [billFile, setBillFile] = useState<File | null>(null);          // Conta de energia
+  const [supplierFile, setSupplierFile] = useState<File | null>(null);  // Orçamento do fornecedor
+
   const contactName = conversation.contactName || conversation.externalContactName || 'Contato';
 
   useEffect(() => {
@@ -81,6 +85,8 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
       setError('');
       setExtracted(null);
       setAiError('');
+      setBillFile(null);
+      setSupplierFile(null);
     }
   }, [isOpen, contactName]);
 
@@ -89,19 +95,43 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
   const salesBoard = boards.find(b => b.template === 'SALES') ?? boards.find(b => b.isDefault) ?? boards[0];
   const firstStage = salesBoard?.stages?.[0];
 
-  // Extrair dados solares da conversa via IA
+  // Converter arquivo em base64
+  async function fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove o prefixo "data:...;base64," e retorna só os dados
+        resolve(result.split(',')[1]);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Extrair dados solares da conversa e/ou imagem da conta via IA
   async function handleAIExtract() {
     setAiLoading(true);
     setAiError('');
     try {
+      const payload: Record<string, string> = {
+        conversationId: conversation.id,
+      };
+
+      // Se tem imagem da conta, converte para base64 e envia para extração visual
+      if (billFile) {
+        payload.billImageBase64 = await fileToBase64(billFile);
+        payload.billImageMimeType = billFile.type || 'image/jpeg';
+      }
+
       const res = await fetch('/api/ai/tasks/quote/solar-extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId: conversation.id }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
-        setAiError(data.error?.message || 'Erro ao analisar conversa com IA.');
+        setAiError(data.error?.message || 'Erro ao analisar com IA.');
         return;
       }
       setExtracted(data.extracted);
@@ -343,6 +373,57 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
                 )}
               </div>
             )}
+
+            {/* Uploads de arquivo */}
+            <div className="px-3 pb-3 space-y-2 border-t border-primary-200 dark:border-primary-500/20 pt-2">
+              {/* Conta de energia */}
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                  <Receipt className="w-3 h-3" /> Conta de energia (opcional — melhora a extração)
+                </label>
+                <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-slate-300 dark:border-white/20 cursor-pointer hover:border-primary-400 transition-colors">
+                  <Paperclip className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                  <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                    {billFile ? billFile.name : 'Anexar foto ou PDF da conta'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="hidden"
+                    onChange={e => setBillFile(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {billFile && (
+                  <button type="button" onClick={() => setBillFile(null)} className="text-[10px] text-red-400 hover:text-red-600 mt-0.5">
+                    Remover
+                  </button>
+                )}
+              </div>
+
+              {/* Orçamento do fornecedor */}
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1 flex items-center gap-1">
+                  <FileText className="w-3 h-3" /> Orçamento do fornecedor (referência de custo)
+                </label>
+                <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-slate-300 dark:border-white/20 cursor-pointer hover:border-primary-400 transition-colors">
+                  <Paperclip className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                  <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                    {supplierFile ? supplierFile.name : 'Anexar PDF ou imagem do orçamento'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="hidden"
+                    onChange={e => setSupplierFile(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {supplierFile && (
+                  <button type="button" onClick={() => setSupplierFile(null)} className="text-[10px] text-red-400 hover:text-red-600 mt-0.5">
+                    Remover
+                  </button>
+                )}
+              </div>
+            </div>
 
             {aiError && (
               <p className="px-3 pb-3 text-xs text-red-500">{aiError}</p>
