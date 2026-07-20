@@ -297,6 +297,17 @@ export function useRealtimeSync(
                 // Also refresh conversations list for last_message preview + unread count.
                 pendingInvalidationsRef.current.add(queryKeys.messagingConversations.all);
                 pendingInvalidationsRef.current.add(queryKeys.messagingConversations.unreadCount());
+
+                // Segunda invalidação com delay: garante que conversas resolvidas que
+                // receberam nova mensagem apareçam em "Abertas" após a edge function
+                // atualizar o status (há ~200-500ms de latência entre INSERT e UPDATE).
+                setTimeout(() => {
+                  queryClient.invalidateQueries({
+                    queryKey: queryKeys.messagingConversations.all,
+                    exact: false,
+                    refetchType: 'active',
+                  });
+                }, 1200);
                 if (!flushScheduledRef.current) {
                   flushScheduledRef.current = true;
                   queueMicrotask(() => {

@@ -177,6 +177,20 @@ export const ConversationList = memo(function ConversationList({
 
   const { data: conversations, isLoading, error } = useConversations(filters);
 
+  // Toca alerta ao logar se há conversas com handoff da Júlia pendente
+  const handoffAlertedRef = useRef(false);
+  useEffect(() => {
+    if (isLoading || handoffAlertedRef.current) return;
+    const hasPending = conversations?.some(c => c.metadata?.ai_handoff_pending === true);
+    if (hasPending) {
+      playSound('ai_handoff');
+      handoffAlertedRef.current = true;
+    } else if (conversations !== undefined) {
+      // Marca como verificado mesmo sem pendentes, para não alertar em reloads
+      handoffAlertedRef.current = true;
+    }
+  }, [isLoading, conversations, playSound]);
+
   // Mensagens agendadas pendentes e lembretes para exibir sinalizadores na lista
   const { data: allScheduled = [] } = useScheduledMessagesQuery();
   const { data: dueReminders = [] } = useDueReminders();

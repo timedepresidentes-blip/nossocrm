@@ -489,6 +489,17 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
                     <CheckCircle className="w-5 h-5" />
                   </button>
                 )}
+                {selectedConversation.status === 'resolved' && (
+                  <button
+                    type="button"
+                    onClick={() => reopenConversation(selectedConversation.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-lg transition-colors"
+                    title="Reabrir conversa"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Reabrir
+                  </button>
+                )}
                 {!selectedConversation.contactId && (
                   <button
                     type="button"

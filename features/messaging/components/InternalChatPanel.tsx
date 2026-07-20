@@ -97,12 +97,28 @@ function MessageContent({ content, isMe }: { content: string; isMe: boolean }) {
   );
 }
 
+// Leitura persistente do chat via localStorage — garante que fechar e reabrir o app
+// não ressuscite o badge verde para mensagens já visualizadas.
+function chatReadKey(orgId: string | undefined, userId: string | undefined) {
+  return `nossocrm-chat-lastread-${orgId}-${userId}`;
+}
+function loadLastRead(orgId: string | undefined, userId: string | undefined): string {
+  if (!orgId || !userId || typeof window === 'undefined') return new Date(0).toISOString();
+  return localStorage.getItem(chatReadKey(orgId, userId)) ?? new Date(0).toISOString();
+}
+function saveLastRead(orgId: string | undefined, userId: string | undefined) {
+  if (!orgId || !userId || typeof window === 'undefined') return;
+  try { localStorage.setItem(chatReadKey(orgId, userId), new Date().toISOString()); } catch { /* ignore */ }
+}
+
 export function InternalChatPanel() {
   const { profile, organizationId } = useAuth();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
-  const [unread, setUnread] = useState(0);
   const [showEmoji, setShowEmoji] = useState(false);
+  const [lastReadAt, setLastReadAt] = useState<string>(() =>
+    loadLastRead(organizationId, profile?.id)
+  );
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [panelSize, setPanelSize] = useState({ w: DEFAULT_W, h: DEFAULT_H });
@@ -122,7 +138,18 @@ export function InternalChatPanel() {
   // Carrega tamanho salvo
   useEffect(() => { setPanelSize(loadSize()); }, []);
 
-  // Detecta mensagens novas
+  // lastReadAt sincronizado do localStorage ao montar (para casos de múltiplas abas)
+  useEffect(() => {
+    setLastReadAt(loadLastRead(organizationId, profile?.id));
+  }, [organizationId, profile?.id]);
+
+  // Unread derivado dos dados: mensagens de outros após o último timestamp de leitura
+  const unread = React.useMemo(() => {
+    if (!profile?.id) return 0;
+    return messages.filter(m => m.senderId !== profile.id && m.createdAt > lastReadAt).length;
+  }, [messages, profile?.id, lastReadAt]);
+
+  // Detecta mensagens novas para tocar som
   const prevCountRef = useRef(-1);
   useEffect(() => {
     if (prevCountRef.current === -1) {
@@ -130,20 +157,17 @@ export function InternalChatPanel() {
       return;
     }
     if (messages.length > prevCountRef.current) {
-      const added = messages.length - prevCountRef.current;
       const newest = messages[messages.length - 1];
       if (newest?.senderId !== profile?.id) {
         play('chat_interno');
-        if (!open) setUnread(u => u + added);
       }
     }
     prevCountRef.current = messages.length;
-  }, [messages.length, open, profile?.id, play]);
+  }, [messages.length, profile?.id, play]);
 
   useEffect(() => {
     if (open) {
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-      setUnread(0);
     }
   }, [open, messages.length]);
 
@@ -239,7 +263,18 @@ export function InternalChatPanel() {
       {/* Botão */}
       <button
         type="button"
-        onClick={() => { unlockAudio(); setOpen(o => !o); setShowEmoji(false); }}
+        onClick={() => {
+          unlockAudio();
+          setOpen(o => {
+            if (!o) {
+              // Abrindo painel: marca todas como lidas persistindo no localStorage
+              saveLastRead(organizationId, profile?.id);
+              setLastReadAt(new Date().toISOString());
+            }
+            return !o;
+          });
+          setShowEmoji(false);
+        }}
         className={cn(
           'relative flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 active:scale-95 select-none tracking-wide',
           unread > 0

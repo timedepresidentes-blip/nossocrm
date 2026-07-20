@@ -84,7 +84,7 @@ export interface DealsFilters {
  * Waits for auth to be ready before fetching to ensure RLS works correctly
  */
 export const useDeals = (filters?: DealsFilters, options?: { enabled?: boolean }) => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const externalEnabled = options?.enabled ?? true;
 
   return useQuery({
@@ -96,6 +96,11 @@ export const useDeals = (filters?: DealsFilters, options?: { enabled?: boolean }
       if (error) throw error;
 
       let deals = data || [];
+
+      // Vendedor vê apenas seus próprios leads (owner_id = userId)
+      if (profile?.role === 'vendedor') {
+        deals = deals.filter(d => d.ownerId === profile.id);
+      }
 
       // Apply client-side filters
       if (filters) {
@@ -124,14 +129,23 @@ export const useDeals = (filters?: DealsFilters, options?: { enabled?: boolean }
  * Waits for auth to be ready before fetching to ensure RLS works correctly
  */
 export const useDealsView = (filters?: DealsFilters) => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
+
+  // Scope a query key para evitar conflito de cache entre papéis
+  const roleScope = profile?.role === 'vendedor' ? profile.id : 'all';
 
   return useQuery<DealView[]>({
     queryKey: filters
-      ? [...queryKeys.deals.list(filters as Record<string, unknown>), 'view']
-      : [...queryKeys.deals.lists(), 'view'],
+      ? [...queryKeys.deals.list(filters as Record<string, unknown>), 'view', roleScope]
+      : [...queryKeys.deals.lists(), 'view', roleScope],
     queryFn: async ({ signal }) => {
-      const deals = await dealsViewQueryFn({ signal });
+      let deals = await dealsViewQueryFn({ signal });
+
+      // Vendedor vê apenas seus próprios leads
+      if (profile?.role === 'vendedor') {
+        deals = deals.filter(d => d.ownerId === profile.id);
+      }
+
       if (!filters) return deals;
 
       return deals.filter(deal => {
@@ -180,15 +194,26 @@ export const useDeal = (id: string | undefined) => {
  * A filtragem por boardId é feita via `select` no cliente.
  */
 export const useDealsByBoard = (boardId: string) => {
-  const { user, loading: authLoading } = useAuth();
-  const selectForBoard = useMemo(() => makeSelectByBoard(boardId), [boardId]);
+  const { user, profile, loading: authLoading } = useAuth();
+  const selectForBoard = useMemo(() => {
+    const filterByBoard = makeSelectByBoard(boardId);
+    // Vendedor vê apenas seus próprios leads no kanban
+    return (data: DealView[]) => {
+      const scoped = profile?.role === 'vendedor'
+        ? data.filter(d => d.ownerId === profile.id)
+        : data;
+      return filterByBoard(scoped);
+    };
+  }, [boardId, profile?.role, profile?.id]);
+
+  const roleScope = profile?.role === 'vendedor' ? profile.id : 'all';
+
   return useQuery<DealView[], Error, DealView[]>({
-    // CRÍTICO: Usar a mesma query key que useDealsView para compartilhar cache
-    queryKey: [...queryKeys.deals.lists(), 'view'],
+    // Query key com roleScope para não misturar cache entre papéis
+    queryKey: [...queryKeys.deals.lists(), 'view', roleScope],
     queryFn: ({ signal }) => dealsViewQueryFn({ signal }),
-    // Filtrar por boardId no cliente (compartilha cache mas retorna só os deals do board)
     select: selectForBoard,
-    staleTime: 2 * 60 * 1000, // 2 minutes (same as useDealsView)
+    staleTime: 2 * 60 * 1000,
     enabled: !authLoading && !!user && !!boardId && !boardId.startsWith('temp-'),
   });
 };

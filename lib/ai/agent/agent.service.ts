@@ -249,6 +249,18 @@ export async function processIncomingMessage(
     };
   }
 
+  // 0b2. Handoff pendente — aguardando atendimento humano, não processar
+  if (!triggerContext && conversationMetadata.ai_handoff_pending === true) {
+    console.log('[AIAgent] Handoff pending, skipping AI processing:', conversationId);
+    return {
+      success: true,
+      decision: {
+        action: 'skipped',
+        reason: 'Aguardando atendimento humano',
+      },
+    };
+  }
+
   // 0c. Check if AI is paused at the contact level (cross-channel)
   // triggerContext bypassa esta verificação — operador clicou "Devolver para Júlia" explicitamente
   if (!triggerContext && conversation?.contact_id) {
@@ -974,13 +986,14 @@ async function handleHandoff(
 
   const existingMetadata = (existing?.metadata as Record<string, unknown>) ?? {};
 
-  // Atualizar conversa para marcar handoff pendente
+  // Atualizar conversa: marca handoff pendente e pausa a IA imediatamente
   await supabase
     .from('messaging_conversations')
     .update({
       metadata: {
         ...existingMetadata,
         ai_handoff_pending: true,
+        ai_paused: true,
         ai_handoff_reason: reason,
         ai_handoff_at: now,
       },

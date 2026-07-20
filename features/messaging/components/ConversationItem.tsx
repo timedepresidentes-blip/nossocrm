@@ -3,7 +3,7 @@
 import React, { memo, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Bell, CalendarClock, Clock, User, UserCheck } from 'lucide-react';
+import { Bell, BellRing, CalendarClock, Clock, User, UserCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sanitizeUrl } from '@/lib/utils/sanitize';
 import { ChannelIndicator } from './ChannelIndicator';
@@ -71,7 +71,10 @@ export const ConversationItem = memo(function ConversationItem({
     assignedUserName,
     assignedUserId,
     status,
+    metadata,
   } = conversation;
+
+  const isHandoffPending = metadata?.ai_handoff_pending === true;
 
   const [isHovered, setIsHovered] = useState(false);
 
@@ -182,6 +185,17 @@ export const ConversationItem = memo(function ConversationItem({
 
         {/* Linha 3: Badges de status */}
         <div className="flex items-center gap-2 mt-1.5">
+
+          {/* Aguardando atendimento humano (handoff da Júlia) */}
+          {isHandoffPending && (
+            <span
+              title="Júlia transferiu — aguardando atendimento"
+              className="flex items-center gap-0.5 text-xs text-orange-600 dark:text-orange-400 font-medium animate-pulse"
+            >
+              <BellRing className="w-3 h-3" />
+              Aguardando
+            </span>
+          )}
 
           {/* Mensagem agendada */}
           {hasScheduled && (
