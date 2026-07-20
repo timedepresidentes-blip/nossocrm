@@ -7,6 +7,7 @@ export interface OrgQuoteSettings {
   companyEmail: string;
   companyAddress: string;
   quoteFooter: string;
+  bannerImageUrl?: string;
 }
 
 let cachedOrgId: string | null = null;
@@ -39,7 +40,7 @@ export const orgSettingsService = {
 
       const { data, error } = await supabase
         .from('organization_settings')
-        .select('logo_url, company_phone, company_email, company_address, quote_footer')
+        .select('logo_url, company_phone, company_email, company_address, quote_footer, quote_banner_url')
         .eq('organization_id', orgId)
         .maybeSingle();
 
@@ -54,6 +55,7 @@ export const orgSettingsService = {
           companyEmail: row.company_email ?? '',
           companyAddress: row.company_address ?? '',
           quoteFooter: row.quote_footer ?? '',
+          bannerImageUrl: row.quote_banner_url ?? '',
         },
         error: null,
       };
@@ -74,6 +76,7 @@ export const orgSettingsService = {
       if (updates.companyEmail !== undefined) payload.company_email = updates.companyEmail || null;
       if (updates.companyAddress !== undefined) payload.company_address = updates.companyAddress || null;
       if (updates.quoteFooter !== undefined) payload.quote_footer = updates.quoteFooter || null;
+      if (updates.bannerImageUrl !== undefined) payload.quote_banner_url = updates.bannerImageUrl || null;
 
       const { error } = await supabase
         .from('organization_settings')

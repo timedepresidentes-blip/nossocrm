@@ -48,6 +48,8 @@ type DbProduct = {
   cost_items: ProductCostItem[] | null;
   kit_description: string | null;
   kit_cost: number | null;
+  image_url: string | null;
+  kit_images: { label: string; url: string }[] | null;
   sku: string | null;
   observations: string | null;
   characteristics: ProductCharacteristic[] | null;
@@ -57,7 +59,7 @@ type DbProduct = {
   owner_id: string | null;
 };
 
-const PRODUCT_SELECT = 'id, organization_id, name, description, price, cost_price, cost_items, kit_description, kit_cost, sku, observations, characteristics, active, created_at, updated_at, owner_id';
+const PRODUCT_SELECT = 'id, organization_id, name, description, price, cost_price, cost_items, kit_description, kit_cost, image_url, kit_images, sku, observations, characteristics, active, created_at, updated_at, owner_id';
 
 function transformProduct(db: DbProduct): Product {
   const costItems: ProductCostItem[] = db.cost_items?.length
@@ -79,6 +81,8 @@ function transformProduct(db: DbProduct): Product {
     costItems,
     kitDescription: db.kit_description || undefined,
     kitCost,
+    imageUrl: db.image_url || undefined,
+    kitImages: db.kit_images || undefined,
     sku: db.sku || undefined,
     observations: db.observations || undefined,
     characteristics: db.characteristics || [],
@@ -125,7 +129,7 @@ export const productsService = {
     }
   },
 
-  async create(input: { name: string; price: number; costPrice?: number; costItems?: ProductCostItem[]; kitDescription?: string; kitCost?: number; sku?: string; description?: string; observations?: string; characteristics?: ProductCharacteristic[] }): Promise<{ data: Product | null; error: Error | null }> {
+  async create(input: { name: string; price: number; costPrice?: number; costItems?: ProductCostItem[]; kitDescription?: string; kitCost?: number; imageUrl?: string; kitImages?: { label: string; url: string }[]; sku?: string; description?: string; observations?: string; characteristics?: ProductCharacteristic[] }): Promise<{ data: Product | null; error: Error | null }> {
     try {
       if (!supabase) return { data: null, error: new Error('Supabase não configurado') };
 
@@ -144,6 +148,8 @@ export const productsService = {
           cost_items: costItems,
           kit_description: input.kitDescription || null,
           kit_cost: kitCost,
+          image_url: input.imageUrl || null,
+          kit_images: input.kitImages ?? null,
           sku: input.sku || null,
           description: input.description || null,
           observations: input.observations || null,
@@ -162,7 +168,7 @@ export const productsService = {
     }
   },
 
-  async update(id: string, updates: Partial<{ name: string; price: number; costPrice: number; costItems: ProductCostItem[]; kitDescription: string; kitCost: number; sku?: string; description?: string; observations?: string; characteristics?: ProductCharacteristic[]; active: boolean }>): Promise<{ error: Error | null }> {
+  async update(id: string, updates: Partial<{ name: string; price: number; costPrice: number; costItems: ProductCostItem[]; kitDescription: string; kitCost: number; imageUrl?: string; kitImages?: { label: string; url: string }[]; sku?: string; description?: string; observations?: string; characteristics?: ProductCharacteristic[]; active: boolean }>): Promise<{ error: Error | null }> {
     try {
       if (!supabase) return { error: new Error('Supabase não configurado') };
 
@@ -171,6 +177,8 @@ export const productsService = {
       if (updates.price !== undefined) payload.price = updates.price;
       if (updates.kitDescription !== undefined) payload.kit_description = updates.kitDescription || null;
       if (updates.kitCost !== undefined) payload.kit_cost = updates.kitCost;
+      if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl || null;
+      if (updates.kitImages !== undefined) payload.kit_images = updates.kitImages ?? null;
       if (updates.costItems !== undefined) {
         payload.cost_items = updates.costItems;
         const kitCost = Number(updates.kitCost ?? payload.kit_cost ?? 0);

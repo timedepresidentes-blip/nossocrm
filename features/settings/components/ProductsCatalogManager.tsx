@@ -46,6 +46,8 @@ function ProductForm({
   const [expanded, setExpanded] = useState(false);
 
   // Kit de equipamentos
+  const [imageUrl, setImageUrl] = useState(initial?.imageUrl ?? '');
+  const [kitImages, setKitImages] = useState<{ label: string; url: string }[]>(initial?.kitImages ?? []);
   const [hasKit, setHasKit] = useState(!!(initial?.kitDescription || (initial?.kitCost ?? 0) > 0));
   const [kitDescription, setKitDescription] = useState(initial?.kitDescription ?? '');
   const [kitCost, setKitCost] = useState(String(initial?.kitCost ?? ''));
@@ -98,6 +100,8 @@ function ProductForm({
       costItems: items,
       kitDescription: hasKit ? kitDescription.trim() : '',
       kitCost: kc,
+      imageUrl: imageUrl.trim() || undefined,
+      kitImages: kitImages.filter(img => img.url.trim()).length > 0 ? kitImages.filter(img => img.url.trim()) : undefined,
       sku: sku.trim() || undefined,
       description: description.trim() || undefined,
       observations: observations.trim() || undefined,
@@ -128,6 +132,25 @@ function ProductForm({
         <div className="sm:col-span-2">
           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">SKU</label>
           <input value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Opcional" className={inputCls} />
+        </div>
+      </div>
+
+      {/* Imagem do produto */}
+      <div>
+        <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+          Foto do produto (URL — aparece no orçamento)
+        </label>
+        <div className="flex gap-2 items-start">
+          <input
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            placeholder="https://... (link da imagem)"
+            className={inputCls + ' flex-1'}
+          />
+          {imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={imageUrl} alt="preview" className="w-12 h-12 object-contain rounded-lg border border-slate-200 dark:border-white/10 flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          )}
         </div>
       </div>
 
@@ -180,6 +203,57 @@ function ProductForm({
                 placeholder="0,00"
                 className={inputCls + ' text-xs'}
               />
+            </div>
+
+            {/* Fotos dos componentes do kit */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                  Fotos dos componentes (aparecem no orçamento)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setKitImages(prev => [...prev, { label: '', url: '' }])}
+                  className="inline-flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 font-semibold hover:underline"
+                >
+                  <Plus className="w-3 h-3" /> Adicionar foto
+                </button>
+              </div>
+              {kitImages.length === 0 ? (
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 py-1">Nenhuma foto — clique em Adicionar foto</p>
+              ) : (
+                <div className="space-y-2">
+                  {kitImages.map((img, idx) => (
+                    <div key={idx} className="flex gap-2 items-start">
+                      <div className="flex flex-col gap-1 flex-1">
+                        <input
+                          value={img.label}
+                          onChange={(e) => setKitImages(prev => prev.map((it, i) => i === idx ? { ...it, label: e.target.value } : it))}
+                          placeholder="Ex.: Painel Solar"
+                          className={inputCls + ' text-xs'}
+                        />
+                        <input
+                          value={img.url}
+                          onChange={(e) => setKitImages(prev => prev.map((it, i) => i === idx ? { ...it, url: e.target.value } : it))}
+                          placeholder="https://... (URL da imagem)"
+                          className={inputCls + ' text-xs'}
+                        />
+                      </div>
+                      {img.url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={img.url} alt={img.label} className="w-14 h-14 object-contain rounded-lg border border-slate-200 dark:border-white/10 flex-shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setKitImages(prev => prev.filter((_, i) => i !== idx))}
+                        className="text-slate-400 hover:text-red-500 mt-1"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

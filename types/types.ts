@@ -199,6 +199,10 @@ export interface Product {
   kitDescription?: string;
   /** Custo total do kit de equipamentos (interno, não aparece no orçamento). */
   kitCost?: number;
+  /** URL da imagem principal do produto. */
+  imageUrl?: string;
+  /** Galeria de fotos dos componentes do kit (exibida no orçamento). */
+  kitImages?: { label: string; url: string }[];
   sku?: string;
   observations?: string;
   characteristics?: ProductCharacteristic[];

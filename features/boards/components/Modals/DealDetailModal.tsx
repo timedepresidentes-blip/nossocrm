@@ -349,6 +349,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
       quantity: productQuantity,
     });
 
+    addToast(`"${product.name}" adicionado ao orçamento.`, 'success');
     setSelectedProductId('');
     setProductQuantity(1);
   };
@@ -941,7 +942,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                           <option value="">Selecione um item...</option>
                           {products.map(p => (
                             <option key={p.id} value={p.id}>
-                              {p.name} - ${p.price}
+                              {p.name} — R$ {p.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </option>
                           ))}
                         </select>
@@ -1047,10 +1048,10 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                                   {item.quantity}
                                 </td>
                                 <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-300">
-                                  ${item.price.toLocaleString()}
+                                  R$ {item.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                 </td>
                                 <td className="px-4 py-3 text-right font-bold text-slate-900 dark:text-white">
-                                  ${(item.price * item.quantity).toLocaleString()}
+                                  R$ {(item.price * item.quantity).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                 </td>
                                 <td className="px-4 py-3 text-center">
                                   <button
@@ -1073,12 +1074,24 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                               Total do Pedido
                             </td>
                             <td className="px-4 py-3 text-right font-bold text-primary-600 dark:text-primary-400 text-lg">
-                              ${deal.value.toLocaleString()}
+                              R$ {deal.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </td>
                             <td></td>
                           </tr>
                         </tfoot>
                       </table>
+                    </div>
+
+                    {/* Botão de gerar orçamento direto na aba de produtos */}
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => window.open(`/deals/${deal.id}/quote`, '_blank')}
+                        className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-500 text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors"
+                      >
+                        <FileText size={15} />
+                        Gerar Orçamento
+                      </button>
                     </div>
                   </div>
                 )}
