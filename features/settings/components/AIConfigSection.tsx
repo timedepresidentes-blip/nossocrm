@@ -47,37 +47,13 @@ async function validateApiKey(provider: string, apiKey: string, model: string): 
 
     try {
         if (provider === 'google') {
-            const body = JSON.stringify({
-                contents: [{ parts: [{ text: 'Hi' }] }],
-                generationConfig: { maxOutputTokens: 1 }
-            });
-
-            // Chaves Google AI Studio (formato AQ.) usam apenas o header x-goog-api-key
-            // Não usar ?key= na URL nem Authorization: Bearer
-            const res = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-                    body,
-                }
-            );
-
-            if (res.ok || res.status === 429) return { valid: true };
-
-            const error = await res.json().catch(() => ({}));
-            const message: string = error?.error?.message || 'Chave de API inválida';
-
-            if (res.status === 403) {
-                if (message.includes('denied access')) {
-                    return { valid: false, error: 'Projeto Google bloqueado. Crie um novo projeto no AI Studio e gere uma chave nele.' };
-                }
-                return { valid: false, error: 'Chave sem permissão. Verifique se a Gemini API está habilitada no projeto.' };
+            // Validação client-side da Google Gemini API não é confiável (CORS/formato variável).
+            // Aceita qualquer chave com formato AQ. ou AIza e deixa o servidor validar no uso real.
+            const looksLikeGoogleKey = apiKey.startsWith('AQ.') || apiKey.startsWith('AIza');
+            if (!looksLikeGoogleKey) {
+                return { valid: false, error: 'Chave inválida. Chaves Google começam com AQ. ou AIza.' };
             }
-            if (res.status === 400) {
-                return { valid: false, error: 'Modelo inválido ou chave incorreta.' };
-            }
-            return { valid: false, error: message };
+            return { valid: true };
 
         } else if (provider === 'openai') {
             // OpenAI validation
