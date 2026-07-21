@@ -99,14 +99,14 @@ function MessageContent({ content, isMe }: { content: string; isMe: boolean }) {
 
 // Leitura persistente do chat via localStorage — garante que fechar e reabrir o app
 // não ressuscite o badge verde para mensagens já visualizadas.
-function chatReadKey(orgId: string | undefined, userId: string | undefined) {
+function chatReadKey(orgId: string | null | undefined, userId: string | null | undefined) {
   return `nossocrm-chat-lastread-${orgId}-${userId}`;
 }
-function loadLastRead(orgId: string | undefined, userId: string | undefined): string {
+function loadLastRead(orgId: string | null | undefined, userId: string | null | undefined): string {
   if (!orgId || !userId || typeof window === 'undefined') return new Date(0).toISOString();
   return localStorage.getItem(chatReadKey(orgId, userId)) ?? new Date(0).toISOString();
 }
-function saveLastRead(orgId: string | undefined, userId: string | undefined) {
+function saveLastRead(orgId: string | null | undefined, userId: string | null | undefined) {
   if (!orgId || !userId || typeof window === 'undefined') return;
   try { localStorage.setItem(chatReadKey(orgId, userId), new Date().toISOString()); } catch { /* ignore */ }
 }
@@ -117,7 +117,7 @@ export function InternalChatPanel() {
   const [input, setInput] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [lastReadAt, setLastReadAt] = useState<string>(() =>
-    loadLastRead(organizationId ?? '', profile?.id ?? '')
+    loadLastRead(organizationId, profile?.id)
   );
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -140,7 +140,7 @@ export function InternalChatPanel() {
 
   // lastReadAt sincronizado do localStorage ao montar (para casos de múltiplas abas)
   useEffect(() => {
-    setLastReadAt(loadLastRead(organizationId ?? '', profile?.id ?? ''));
+    setLastReadAt(loadLastRead(organizationId, profile?.id));
   }, [organizationId, profile?.id]);
 
   // Unread derivado dos dados: mensagens de outros após o último timestamp de leitura
