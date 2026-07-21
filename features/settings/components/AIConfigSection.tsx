@@ -52,10 +52,10 @@ async function validateApiKey(provider: string, apiKey: string, model: string): 
                 generationConfig: { maxOutputTokens: 1 }
             });
 
-            // Chaves Google AI Studio (formato AQ. ou AIza) usam ?key= ou x-goog-api-key
-            // Nunca usar Authorization: Bearer — isso é para tokens OAuth2, não API keys
+            // Chaves Google AI Studio (formato AQ.) usam apenas o header x-goog-api-key
+            // Não usar ?key= na URL nem Authorization: Bearer
             const res = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
