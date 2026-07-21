@@ -140,7 +140,7 @@ export function InternalChatPanel() {
 
   // lastReadAt sincronizado do localStorage ao montar (para casos de múltiplas abas)
   useEffect(() => {
-    setLastReadAt(loadLastRead(organizationId, profile?.id));
+    setLastReadAt(loadLastRead(organizationId ?? '', profile?.id ?? ''));
   }, [organizationId, profile?.id]);
 
   // Unread derivado dos dados: mensagens de outros após o último timestamp de leitura
