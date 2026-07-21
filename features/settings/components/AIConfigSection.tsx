@@ -52,32 +52,32 @@ async function validateApiKey(provider: string, apiKey: string, model: string): 
                 generationConfig: { maxOutputTokens: 1 }
             });
 
-            const tryFetch = async (url: string, headers: Record<string, string>) => {
-                return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body });
-            };
-
-            const isOk = (r: Response) => r.ok || r.status === 429;
-
-            // Tenta formato antigo (?key=) e novo (Bearer) em paralelo
-            const [resQuery, resBearer] = await Promise.all([
-                tryFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {}),
-                tryFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { 'Authorization': `Bearer ${apiKey}`, 'x-goog-api-key': apiKey }),
-            ]);
-
-            if (isOk(resQuery) || isOk(resBearer)) return { valid: true };
-
-            // Tenta também endpoint v1 (sem beta)
-            const resV1 = await tryFetch(
-                `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`,
-                { 'x-goog-api-key': apiKey }
+            // Chaves Google AI Studio (formato AQ. ou AIza) usam ?key= ou x-goog-api-key
+            // Nunca usar Authorization: Bearer — isso é para tokens OAuth2, não API keys
+            const res = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+                    body,
+                }
             );
-            if (isOk(resV1)) return { valid: true };
 
-            const error = await (resQuery.ok ? resQuery : resBearer).json().catch(() => ({}));
-            if (resQuery.status === 403 && resBearer.status === 403) {
-                return { valid: false, error: 'Chave sem permissão para este modelo' };
+            if (res.ok || res.status === 429) return { valid: true };
+
+            const error = await res.json().catch(() => ({}));
+            const message: string = error?.error?.message || 'Chave de API inválida';
+
+            if (res.status === 403) {
+                if (message.includes('denied access')) {
+                    return { valid: false, error: 'Projeto Google bloqueado. Crie um novo projeto no AI Studio e gere uma chave nele.' };
+                }
+                return { valid: false, error: 'Chave sem permissão. Verifique se a Gemini API está habilitada no projeto.' };
             }
-            return { valid: false, error: error?.error?.message || 'Chave de API inválida' };
+            if (res.status === 400) {
+                return { valid: false, error: 'Modelo inválido ou chave incorreta.' };
+            }
+            return { valid: false, error: message };
 
         } else if (provider === 'openai') {
             // OpenAI validation
