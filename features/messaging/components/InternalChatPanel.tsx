@@ -117,7 +117,7 @@ export function InternalChatPanel() {
   const [input, setInput] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [lastReadAt, setLastReadAt] = useState<string>(() =>
-    loadLastRead(organizationId, profile?.id)
+    loadLastRead(organizationId ?? '', profile?.id ?? '')
   );
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
