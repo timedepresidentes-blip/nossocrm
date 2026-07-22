@@ -34,6 +34,40 @@ interface QuoteFromConversationModalProps {
   conversation: ConversationView;
 }
 
+interface InternalCosts {
+  nfPercent: string;
+  corrugado: string;
+  eletroduto: string;
+  estruturaTipo: 'solo' | 'telhado' | 'laje';
+  estrutura: string;
+  cabos: string;
+  campoKwp: string; // R$ por kWp instalado
+}
+
+const DEFAULT_COSTS: InternalCosts = {
+  nfPercent: '',
+  corrugado: '',
+  eletroduto: '',
+  estruturaTipo: 'telhado',
+  estrutura: '',
+  cabos: '',
+  campoKwp: '',
+};
+
+const COSTS_KEY = 'nossocrm-internal-costs-v1';
+
+function loadCosts(): InternalCosts {
+  if (typeof window === 'undefined') return DEFAULT_COSTS;
+  try {
+    const raw = localStorage.getItem(COSTS_KEY);
+    return raw ? { ...DEFAULT_COSTS, ...JSON.parse(raw) } : DEFAULT_COSTS;
+  } catch { return DEFAULT_COSTS; }
+}
+
+function saveCosts(c: InternalCosts) {
+  try { localStorage.setItem(COSTS_KEY, JSON.stringify(c)); } catch { /* ignore */ }
+}
+
 function emptyItem(): QuoteItem {
   return { productId: '', name: '', price: 0, quantity: 1 };
 }
@@ -119,11 +153,17 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
 
-  // NF: percentual de nota fiscal que é adicionado ao custo interno
-  const [nfPercent, setNfPercent] = useState<string>(() => {
-    if (typeof window === 'undefined') return '';
-    return localStorage.getItem('nossocrm-nf-percent') ?? '';
-  });
+  // Custos internos configuráveis — persistidos no localStorage
+  const [costs, setCosts] = useState<InternalCosts>(loadCosts);
+  const [showCosts, setShowCosts] = useState(false);
+
+  function updateCost<K extends keyof InternalCosts>(key: K, value: InternalCosts[K]) {
+    setCosts(prev => {
+      const next = { ...prev, [key]: value };
+      saveCosts(next);
+      return next;
+    });
+  }
 
   // Estado da extração solar com IA
   const [aiLoading, setAiLoading] = useState(false);
@@ -230,11 +270,25 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
     setItems(prev => prev.filter((_, i) => i !== index));
   }
 
-  // Fator multiplicador do NF: custo efetivo = costPrice * nfFactor
-  const nfFactor = 1 + (parseFloat(nfPercent.replace(',', '.')) || 0) / 100;
+  // kWp total: usa dado da IA quando disponível, senão soma as quantidades dos itens
+  const totalKwp = extracted?.systemPowerKwp ?? items.reduce((s, i) => s + i.quantity, 0);
+
+  // NF multiplica o custo dos produtos
+  const nfFactor = 1 + (parseFloat(costs.nfPercent.replace(',', '.')) || 0) / 100;
+
+  // Custos fixos internos (corrugado, eletroduto, estrutura, cabos)
+  const parseCost = (s: string) => parseFloat(s.replace(',', '.')) || 0;
+  const fixedInternal =
+    parseCost(costs.corrugado) +
+    parseCost(costs.eletroduto) +
+    parseCost(costs.estrutura) +
+    parseCost(costs.cabos);
+  const campoTotal = parseCost(costs.campoKwp) * totalKwp;
+  const totalInternal = fixedInternal + campoTotal;
 
   const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const totalCost = items.reduce((s, i) => s + (i.costPrice ?? 0) * nfFactor * i.quantity, 0);
+  const totalProductCost = items.reduce((s, i) => s + (i.costPrice ?? 0) * nfFactor * i.quantity, 0);
+  const totalCost = totalProductCost + totalInternal;
   const totalMargin = total > 0 && totalCost > 0 ? ((total - totalCost) / total) * 100 : null;
   const validItems = items.filter(i => i.name.trim() && i.price >= 0);
 
@@ -503,33 +557,134 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
             />
           </div>
 
-          {/* Configurações: NF */}
-          <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/3 px-4 py-3">
-            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Configurações</label>
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <label className="block text-[10px] text-slate-400 mb-0.5">NF — Nota Fiscal (%)</label>
-                <div className="flex items-center gap-1.5">
-                  <DecimalInput
-                    value={parseFloat(nfPercent.replace(',', '.')) || 0}
-                    min={0}
-                    onChange={v => {
-                      const str = v === 0 ? '' : String(v).replace('.', ',');
-                      setNfPercent(str);
-                      try { localStorage.setItem('nossocrm-nf-percent', str); } catch { /* ignore */ }
-                    }}
-                    placeholder="0"
-                    className="w-24 px-2.5 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-400"
-                  />
-                  <span className="text-sm text-slate-400">%</span>
-                  {nfPercent && parseFloat(nfPercent.replace(',', '.')) > 0 && (
-                    <span className="text-[11px] text-amber-600 dark:text-amber-400 ml-1">
-                      +{nfPercent}% sobre o custo interno
-                    </span>
-                  )}
-                </div>
+          {/* Custos Internos */}
+          <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/3 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowCosts(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 text-left"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Custos Internos</span>
+                {totalInternal > 0 && (
+                  <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                    {formatBRL(totalInternal)} adicional
+                  </span>
+                )}
               </div>
-            </div>
+              {showCosts
+                ? <ChevronUp className="w-4 h-4 text-slate-400" />
+                : <ChevronDown className="w-4 h-4 text-slate-400" />}
+            </button>
+
+            {showCosts && (
+              <div className="px-4 pb-4 space-y-3 border-t border-slate-200 dark:border-white/10 pt-3">
+                {/* NF */}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <label className="block text-[10px] text-slate-400 mb-0.5">NF — Nota Fiscal (%)</label>
+                    <div className="flex items-center gap-1">
+                      <DecimalInput
+                        value={parseCost(costs.nfPercent)}
+                        min={0}
+                        onChange={v => updateCost('nfPercent', v === 0 ? '' : String(v).replace('.', ','))}
+                        placeholder="0"
+                        className="w-20 px-2.5 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+                      />
+                      <span className="text-sm text-slate-400">%</span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-4 flex-1">Aplicado sobre o custo dos produtos do catálogo</p>
+                </div>
+
+                {/* Corrugado + Eletroduto */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">Corrugado (R$)</label>
+                    <DecimalInput
+                      value={parseCost(costs.corrugado)}
+                      min={0}
+                      onChange={v => updateCost('corrugado', v === 0 ? '' : String(v).replace('.', ','))}
+                      placeholder="0,00"
+                      className="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">Eletroduto (R$)</label>
+                    <DecimalInput
+                      value={parseCost(costs.eletroduto)}
+                      min={0}
+                      onChange={v => updateCost('eletroduto', v === 0 ? '' : String(v).replace('.', ','))}
+                      placeholder="0,00"
+                      className="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Estrutura */}
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-0.5">Estrutura (R$)</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={costs.estruturaTipo}
+                      onChange={e => updateCost('estruturaTipo', e.target.value as InternalCosts['estruturaTipo'])}
+                      className="w-32 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+                    >
+                      <option value="telhado">Telhado</option>
+                      <option value="solo">Solo</option>
+                      <option value="laje">Laje</option>
+                    </select>
+                    <DecimalInput
+                      value={parseCost(costs.estrutura)}
+                      min={0}
+                      onChange={v => updateCost('estrutura', v === 0 ? '' : String(v).replace('.', ','))}
+                      placeholder="0,00"
+                      className="flex-1 px-2.5 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Cabos */}
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-0.5">Cabos (R$)</label>
+                  <DecimalInput
+                    value={parseCost(costs.cabos)}
+                    min={0}
+                    onChange={v => updateCost('cabos', v === 0 ? '' : String(v).replace('.', ','))}
+                    placeholder="0,00"
+                    className="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+                  />
+                </div>
+
+                {/* Campo — R$/kWp */}
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-0.5">Campo — valor por kWp instalado</label>
+                  <div className="flex items-center gap-2">
+                    <DecimalInput
+                      value={parseCost(costs.campoKwp)}
+                      min={0}
+                      onChange={v => updateCost('campoKwp', v === 0 ? '' : String(v).replace('.', ','))}
+                      placeholder="0,00"
+                      className="w-32 px-2.5 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+                    />
+                    <span className="text-xs text-slate-400">R$/kWp</span>
+                    {parseCost(costs.campoKwp) > 0 && (
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        = {formatBRL(campoTotal)} ({totalKwp.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} kWp)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Resumo dos custos internos */}
+                {totalInternal > 0 && (
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-white/10">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Total custos internos</span>
+                    <span className="text-sm font-bold text-amber-600 dark:text-amber-400">{formatBRL(totalInternal)}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Itens */}
