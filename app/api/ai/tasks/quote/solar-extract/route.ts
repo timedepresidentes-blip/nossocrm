@@ -157,23 +157,26 @@ export async function POST(req: Request) {
       return json({ error: { code: 'INVALID_INPUT', message: 'Payload inválido.' } }, 400);
     }
 
-    // Extrair mensagem específica de erros da AI SDK / Google
-    let message = 'Erro ao extrair dados.';
-    if (err && typeof err === 'object') {
-      const e = err as Record<string, unknown>;
-      const status = (e.statusCode ?? e.status) as number | undefined;
-      if (status === 429) {
-        message = 'Cota de API esgotada. Habilite o faturamento no Google Cloud Console (console.cloud.google.com → Faturamento).';
-      } else if (status === 401 || status === 403) {
-        message = 'Chave de API inválida ou sem permissão. Reconfigure em Configurações.';
-      } else if (status === 404) {
-        message = 'Modelo de IA não encontrado. Verifique o modelo configurado em Configurações.';
-      } else if (typeof e.message === 'string' && e.message) {
-        message = e.message;
-      }
+    // Extrair mensagem real do erro para diagnóstico
+    const e = err as Record<string, unknown>;
+    const status = (e.statusCode ?? e.status) as number | undefined;
+    const rawMessage = typeof e.message === 'string' ? e.message : '';
+    const responseBody = typeof e.responseBody === 'string' ? e.responseBody : '';
+
+    console.error('[api/ai/tasks/quote/solar-extract] Error:', {
+      name: (err as Error)?.name,
+      status,
+      message: rawMessage,
+      responseBody,
+    });
+
+    let message = rawMessage || 'Erro ao extrair dados.';
+    if (status === 429 || rawMessage.includes('quota') || rawMessage.includes('RESOURCE_EXHAUSTED')) {
+      message = 'Cota de API esgotada. Verifique o faturamento no Google Cloud Console.';
+    } else if (status === 401 || status === 403 || rawMessage.includes('API_KEY_INVALID') || rawMessage.includes('PERMISSION_DENIED')) {
+      message = 'Chave de API inválida ou sem permissão. Reconfigure em Configurações.';
     }
 
-    console.error('[api/ai/tasks/quote/solar-extract] Error:', err);
     return json({ error: { code: 'INTERNAL_ERROR', message } }, 500);
   }
 }
