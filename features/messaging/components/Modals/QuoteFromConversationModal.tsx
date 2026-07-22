@@ -38,6 +38,59 @@ function emptyItem(): QuoteItem {
   return { productId: '', name: '', price: 0, quantity: 1 };
 }
 
+// Input numérico que aceita vírgula como separador decimal (padrão BR)
+// e resolve o bug do zero travado em campos controlados
+function DecimalInput({
+  value,
+  onChange,
+  className,
+  placeholder,
+  min,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  className?: string;
+  placeholder?: string;
+  min?: number;
+}) {
+  const [text, setText] = React.useState(() =>
+    value === 0 ? '' : String(value).replace('.', ',')
+  );
+
+  // Sincroniza quando o valor externo muda (ex: produto selecionado do catálogo)
+  const prevValue = React.useRef(value);
+  React.useEffect(() => {
+    if (prevValue.current !== value) {
+      prevValue.current = value;
+      setText(value === 0 ? '' : String(value).replace('.', ','));
+    }
+  }, [value]);
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      placeholder={placeholder}
+      value={text}
+      className={className}
+      onChange={e => {
+        const raw = e.target.value;
+        setText(raw);
+        const n = parseFloat(raw.replace(',', '.'));
+        if (!isNaN(n)) onChange(n);
+        else if (raw === '' || raw === '-') onChange(0);
+      }}
+      onBlur={() => {
+        const n = parseFloat(text.replace(',', '.'));
+        const safe = isNaN(n) ? (min ?? 0) : (min !== undefined ? Math.max(min, n) : n);
+        setText(safe === 0 && min === undefined ? '' : String(safe).replace('.', ','));
+        onChange(safe);
+      }}
+      onFocus={e => e.target.select()}
+    />
+  );
+}
+
 function makeTitle(contactName: string): string {
   const now = new Date();
   const date = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
@@ -65,6 +118,12 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
   const [dealTitle, setDealTitle] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
+
+  // NF: percentual de nota fiscal que é adicionado ao custo interno
+  const [nfPercent, setNfPercent] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem('nossocrm-nf-percent') ?? '';
+  });
 
   // Estado da extração solar com IA
   const [aiLoading, setAiLoading] = useState(false);
@@ -171,8 +230,11 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
     setItems(prev => prev.filter((_, i) => i !== index));
   }
 
+  // Fator multiplicador do NF: custo efetivo = costPrice * nfFactor
+  const nfFactor = 1 + (parseFloat(nfPercent.replace(',', '.')) || 0) / 100;
+
   const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
-  const totalCost = items.reduce((s, i) => s + (i.costPrice ?? 0) * i.quantity, 0);
+  const totalCost = items.reduce((s, i) => s + (i.costPrice ?? 0) * nfFactor * i.quantity, 0);
   const totalMargin = total > 0 && totalCost > 0 ? ((total - totalCost) / total) * 100 : null;
   const validItems = items.filter(i => i.name.trim() && i.price >= 0);
 
@@ -441,13 +503,43 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
             />
           </div>
 
+          {/* Configurações: NF */}
+          <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/3 px-4 py-3">
+            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Configurações</label>
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <label className="block text-[10px] text-slate-400 mb-0.5">NF — Nota Fiscal (%)</label>
+                <div className="flex items-center gap-1.5">
+                  <DecimalInput
+                    value={parseFloat(nfPercent.replace(',', '.')) || 0}
+                    min={0}
+                    onChange={v => {
+                      const str = v === 0 ? '' : String(v).replace('.', ',');
+                      setNfPercent(str);
+                      try { localStorage.setItem('nossocrm-nf-percent', str); } catch { /* ignore */ }
+                    }}
+                    placeholder="0"
+                    className="w-24 px-2.5 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+                  />
+                  <span className="text-sm text-slate-400">%</span>
+                  {nfPercent && parseFloat(nfPercent.replace(',', '.')) > 0 && (
+                    <span className="text-[11px] text-amber-600 dark:text-amber-400 ml-1">
+                      +{nfPercent}% sobre o custo interno
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Itens */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Produtos / serviços</label>
 
             <div className="space-y-2">
               {items.map((item, index) => {
-                const margin = calcMargin(item.price * item.quantity, (item.costPrice ?? 0) * item.quantity);
+                const effectiveCost = (item.costPrice ?? 0) * nfFactor;
+                const margin = calcMargin(item.price * item.quantity, effectiveCost * item.quantity);
                 return (
                   <div key={index} className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/3 p-3 space-y-2">
                     <div className="flex gap-2">
@@ -481,22 +573,21 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
                     <div className="flex gap-2 items-end">
                       <div className="flex-1">
                         <label className="block text-[10px] text-slate-400 mb-0.5">Preço (R$)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <DecimalInput
                           value={item.price}
-                          onChange={e => handleFieldChange(index, 'price', Number(e.target.value))}
+                          min={0}
+                          onChange={v => handleFieldChange(index, 'price', v)}
+                          placeholder="0,00"
                           className="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-400"
                         />
                       </div>
-                      <div className="w-20">
-                        <label className="block text-[10px] text-slate-400 mb-0.5">Qtd</label>
-                        <input
-                          type="number"
-                          min="1"
+                      <div className="w-24">
+                        <label className="block text-[10px] text-slate-400 mb-0.5">Qtd / kWp</label>
+                        <DecimalInput
                           value={item.quantity}
-                          onChange={e => handleFieldChange(index, 'quantity', parseInt(e.target.value) || 1)}
+                          min={0}
+                          onChange={v => handleFieldChange(index, 'quantity', v || 1)}
+                          placeholder="1"
                           className="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-400"
                         />
                       </div>
@@ -513,7 +604,7 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
                       <div className="flex items-center gap-1.5">
                         <TrendingUp className="w-3 h-3 text-emerald-500" />
                         <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                          Margem: {margin} · Custo total: {formatBRL((item.costPrice ?? 0) * item.quantity)}
+                          Margem: {margin} · Custo c/ NF: {formatBRL(effectiveCost * item.quantity)}
                         </span>
                       </div>
                     )}
