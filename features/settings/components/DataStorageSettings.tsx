@@ -3,7 +3,7 @@
 // =============================================================================
 
 import React, { useState } from 'react';
-import { Database, AlertTriangle, Trash2, Loader2 } from 'lucide-react';
+import { Database, AlertTriangle, Trash2, Loader2, Download, ShieldCheck } from 'lucide-react';
 import { useDeals } from '@/lib/query/hooks/useDealsQuery';
 import { useContacts } from '@/lib/query/hooks/useContactsQuery';
 import { useActivities } from '@/lib/query/hooks/useActivitiesQuery';
@@ -32,8 +32,42 @@ export const DataStorageSettings: React.FC = () => {
     const [showDangerZone, setShowDangerZone] = useState(false);
     const [confirmText, setConfirmText] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
 
     const isAdmin = profile?.role === 'admin';
+
+    const handleExportarDados = async () => {
+        if (!supabase) { addToast('Supabase não configurado', 'error'); return; }
+        setIsExporting(true);
+        try {
+            const [contactsRes, dealsRes, activitiesRes] = await Promise.all([
+                supabase.from('contacts').select('*').order('created_at', { ascending: false }),
+                supabase.from('deals').select('*').order('created_at', { ascending: false }),
+                supabase.from('activities').select('*').order('created_at', { ascending: false }),
+            ]);
+
+            const backup = {
+                exportadoEm: new Date().toISOString(),
+                versao: '1.0',
+                contatos: contactsRes.data ?? [],
+                negocios: dealsRes.data ?? [],
+                atividades: activitiesRes.data ?? [],
+            };
+
+            const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `nossocrm-backup-${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            addToast('Backup baixado com sucesso!', 'success');
+        } catch (err: any) {
+            addToast(`Erro ao exportar: ${err.message}`, 'error');
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     // Estatísticas
     const stats = {
@@ -175,6 +209,34 @@ export const DataStorageSettings: React.FC = () => {
 
     return (
         <div className="space-y-6">
+            {/* Backup e Exportação */}
+            <div className="bg-white dark:bg-dark-card rounded-lg border border-gray-200 dark:border-dark-border p-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                    Backup de Dados
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                    Baixe um arquivo JSON com todos os seus contatos, negócios e atividades.
+                    Recomendamos fazer isso semanalmente para manter um histórico seguro.
+                </p>
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={handleExportarDados}
+                        disabled={isExporting}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+                    >
+                        {isExporting ? (
+                            <><Loader2 className="w-4 h-4 animate-spin" /> Exportando...</>
+                        ) : (
+                            <><Download className="w-4 h-4" /> Exportar backup (JSON)</>
+                        )}
+                    </button>
+                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                        Inclui contatos · negócios · atividades
+                    </span>
+                </div>
+            </div>
+
             {/* Data Statistics */}
             <div className="bg-white dark:bg-dark-card rounded-lg border border-gray-200 dark:border-dark-border p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
