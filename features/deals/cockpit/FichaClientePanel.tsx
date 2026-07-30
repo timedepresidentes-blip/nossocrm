@@ -146,7 +146,7 @@ export const FichaClientePanel: React.FC<Props> = ({
   const handleGerarContrato = () => {
     const janela = window.open('', '_blank', 'width=900,height=1100');
     if (!janela) return;
-    const ref = dealId.slice(0, 8).toUpperCase();
+    const ref = (dealId ?? 'N/D').slice(0, 8).toUpperCase();
     const endComp = [f.enderecoRua, f.enderecoBairro, f.enderecoCidade, f.enderecoEstado]
       .filter(Boolean).join(', ') + (f.enderecoCep ? ` — CEP ${f.enderecoCep}` : '');
     const endInst = [f.instalacaoEndereco || f.enderecoRua, f.instalacaoCidade || f.enderecoCidade]
