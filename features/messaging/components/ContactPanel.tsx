@@ -44,6 +44,8 @@ import { ReminderModal } from '@/features/calendar/components/ReminderModal';
 import { QuoteFromConversationModal } from './Modals/QuoteFromConversationModal';
 import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
 import { useOrcafacilQuotes } from '@/lib/hooks/useOrcafacilQuotes';
+import { supabase } from '@/lib/supabase';
+import { FichaClientePanel } from '@/features/deals/cockpit/FichaClientePanel';
 
 interface ContactPanelProps {
   conversation: ConversationView | null | undefined;
@@ -154,6 +156,27 @@ export const ContactPanel = memo(function ContactPanel({
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const [resumoLoading, setResumoLoading] = useState(false);
   const [resumoFicha, setResumoFicha] = useState<string | null>(null);
+  const [linkedDealId, setLinkedDealId] = useState<string | null>(null);
+  const [linkedDealIsWon, setLinkedDealIsWon] = useState(false);
+  const [linkedDealValue, setLinkedDealValue] = useState<number | null>(null);
+
+  // Busca o deal mais recente do contato para exibir FichaClientePanel
+  useEffect(() => {
+    if (!contactId || !supabase) { setLinkedDealId(null); return; }
+    supabase
+      .from('deals')
+      .select('id, value, stage_id')
+      .eq('contact_id', contactId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        setLinkedDealId(data?.id ?? null);
+        setLinkedDealValue(data?.value ?? null);
+        // "Ganho" em boards normalmente é o estágio com position mais alta — simplificamos por nome/metadata
+        setLinkedDealIsWon(false); // será atualizado pelo próprio FichaClientePanel via load()
+      });
+  }, [contactId]);
 
   async function handleResumoOrçamento() {
     if (!conversation?.id) return;
@@ -496,7 +519,7 @@ export const ContactPanel = memo(function ContactPanel({
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto p-4">
-        {/* Gerar Orçamento + Resumo para Orçamento */}
+        {/* Ações principais */}
         <div className="mb-3 space-y-2">
           <button
             type="button"
@@ -506,28 +529,23 @@ export const ContactPanel = memo(function ContactPanel({
             <FileText className="w-4 h-4" />
             Gerar Orçamento
           </button>
-          <button
-            type="button"
-            onClick={handleResumoOrçamento}
-            disabled={resumoLoading}
-            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 text-xs font-semibold hover:bg-cyan-500/20 disabled:opacity-50 transition-colors"
-          >
-            {resumoLoading ? (
-              <><svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Extraindo resumo...</>
-            ) : (
-              <><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>Resumo para Orçamento (IA)</>
-            )}
-          </button>
-          {resumoFicha && (
-            <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wide">Dados extraídos</span>
-                <button type="button" onClick={() => setResumoFicha(null)} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
-              </div>
-              <pre className="text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed font-sans">{resumoFicha}</pre>
-            </div>
-          )}
         </div>
+
+        {/* Ficha do Cliente — aparece quando há um deal vinculado ao contato */}
+        {linkedDealId ? (
+          <div className="mb-3">
+            <FichaClientePanel
+              dealId={linkedDealId}
+              conversationId={conversation?.id ?? null}
+              isWon={linkedDealIsWon}
+              dealValue={linkedDealValue}
+            />
+          </div>
+        ) : contactId ? (
+          <div className="mb-3 rounded-xl border border-white/10 bg-white/2 px-3 py-2.5 text-[11px] text-slate-500">
+            Nenhum deal vinculado a este contato. Crie um deal para acessar a Ficha do Cliente, PDF e Contrato.
+          </div>
+        ) : null}
 
         {/* Orçamentos vinculados (OrçaFácil) */}
         {conversation?.contactPhone && (
