@@ -531,21 +531,17 @@ export const ContactPanel = memo(function ContactPanel({
           </button>
         </div>
 
-        {/* Ficha do Cliente — aparece quando há um deal vinculado ao contato */}
-        {linkedDealId ? (
+        {/* Ficha do Cliente — sempre visível na conversa */}
+        {conversation?.id && (
           <div className="mb-3">
             <FichaClientePanel
               dealId={linkedDealId}
-              conversationId={conversation?.id ?? null}
+              conversationId={conversation.id}
               isWon={linkedDealIsWon}
               dealValue={linkedDealValue}
             />
           </div>
-        ) : contactId ? (
-          <div className="mb-3 rounded-xl border border-white/10 bg-white/2 px-3 py-2.5 text-[11px] text-slate-500">
-            Nenhum deal vinculado a este contato. Crie um deal para acessar a Ficha do Cliente, PDF e Contrato.
-          </div>
-        ) : null}
+        )}
 
         {/* Orçamentos vinculados (OrçaFácil) */}
         {conversation?.contactPhone && (

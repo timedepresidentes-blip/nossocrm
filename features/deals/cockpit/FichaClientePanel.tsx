@@ -9,12 +9,11 @@ import { supabase } from '@/lib/supabase';
 import type { FichaClienteData } from '@/app/api/ai/tasks/deals/ficha-cliente/route';
 
 interface Props {
-  dealId: string;
+  dealId?: string | null;
   conversationId?: string | null;
   isWon?: boolean;
   dealTitle?: string;
   dealValue?: number | null;
-  // dados do DealCostsPanel para incluir no contrato
   custoTotal?: number;
   margemPct?: number;
 }
@@ -63,7 +62,7 @@ export const FichaClientePanel: React.FC<Props> = ({
 
   // Carrega ficha salva no deal
   const load = useCallback(async () => {
-    if (!supabase) return;
+    if (!supabase || !dealId) return;
     setLoading(true);
     const { data } = await supabase
       .from('deals')
@@ -95,7 +94,7 @@ export const FichaClientePanel: React.FC<Props> = ({
 
   // Salvar manualmente
   const handleSalvar = async () => {
-    if (!supabase) return;
+    if (!supabase || !dealId) return;
     setSaving(true);
     await supabase.from('deals').update({ ficha_cliente: ficha, updated_at: new Date().toISOString() }).eq('id', dealId);
     setSaving(false);
@@ -108,7 +107,7 @@ export const FichaClientePanel: React.FC<Props> = ({
   };
 
   const handleMarcarContratoAssinado = async () => {
-    if (!supabase) return;
+    if (!supabase || !dealId) return;
     setMarcandoContrato(true);
     const agora = new Date().toISOString();
     await supabase
@@ -516,15 +515,17 @@ export const FichaClientePanel: React.FC<Props> = ({
                   {extracting ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                   {extracting ? 'Extraindo...' : 'Extrair da conversa (IA)'}
                 </button>
-                <button
-                  type="button"
-                  onClick={handleSalvar}
-                  disabled={saving}
-                  className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/3 px-2.5 py-1.5 text-[11px] font-semibold text-slate-300 hover:bg-white/5 disabled:opacity-50"
-                >
-                  {saved ? <CheckCircle2 className="h-3 w-3 text-emerald-400" /> : saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                  {saved ? 'Salvo!' : 'Salvar ficha'}
-                </button>
+                {dealId && (
+                  <button
+                    type="button"
+                    onClick={handleSalvar}
+                    disabled={saving}
+                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/3 px-2.5 py-1.5 text-[11px] font-semibold text-slate-300 hover:bg-white/5 disabled:opacity-50"
+                  >
+                    {saved ? <CheckCircle2 className="h-3 w-3 text-emerald-400" /> : saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                    {saved ? 'Salvo!' : 'Salvar ficha'}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleBaixarFicha}
