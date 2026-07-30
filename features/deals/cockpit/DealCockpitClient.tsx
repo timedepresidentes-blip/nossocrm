@@ -41,6 +41,8 @@ import { ScheduleModal, type ScheduleData, type ScheduleType } from '@/features/
 
 import type { QuickScript, ScriptCategory } from '@/lib/supabase/quickScripts';
 import type { Activity, Board, BoardStage, Contact, DealView } from '@/types';
+import { DealCostsPanel } from './DealCostsPanel';
+import { FichaClientePanel } from './FichaClientePanel';
 
 type Tab = 'chat' | 'notas' | 'scripts' | 'arquivos';
 
@@ -1855,6 +1857,20 @@ export default function DealCockpitClient({ dealId }: { dealId?: string }) {
                 </div>
               </div>
             </Panel>
+
+            <DealCostsPanel
+              dealId={deal.id}
+              valorVenda={deal.value ?? 0}
+              kwp={(deal.aiExtracted as any)?.kwp ?? undefined}
+            />
+
+            <FichaClientePanel
+              dealId={deal.id}
+              conversationId={null}
+              isWon={deal.isWon ?? false}
+              dealTitle={deal.title}
+              dealValue={deal.value ?? null}
+            />
           </div>
 
           {/* Center */}

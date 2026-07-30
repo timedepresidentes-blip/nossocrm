@@ -43,6 +43,7 @@ import { useRemindersByContact, useCreateReminder, useUpdateReminder, useDeleteR
 import { ReminderModal } from '@/features/calendar/components/ReminderModal';
 import { QuoteFromConversationModal } from './Modals/QuoteFromConversationModal';
 import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
+import { useOrcafacilQuotes } from '@/lib/hooks/useOrcafacilQuotes';
 
 interface ContactPanelProps {
   conversation: ConversationView | null | undefined;
@@ -151,6 +152,54 @@ export const ContactPanel = memo(function ContactPanel({
   const [reminderModalOpen, setReminderModalOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<CalendarReminder | undefined>();
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
+  const [resumoLoading, setResumoLoading] = useState(false);
+  const [resumoFicha, setResumoFicha] = useState<string | null>(null);
+
+  async function handleResumoOrçamento() {
+    if (!conversation?.id) return;
+    setResumoLoading(true);
+    setResumoFicha(null);
+    try {
+      const res = await fetch('/api/ai/tasks/deals/ficha-cliente', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ conversationId: conversation.id }),
+      });
+      const body = await res.json();
+      if (body.ficha) {
+        const f = body.ficha;
+        const linhas = [
+          f.nomeCompleto && `👤 ${f.nomeCompleto}`,
+          f.cpfCnpj && `CPF/CNPJ: ${f.cpfCnpj}`,
+          f.telefone && `📞 ${f.telefone}`,
+          (f.enderecoCidade || f.enderecoEstado) && `📍 ${[f.enderecoCidade, f.enderecoEstado].filter(Boolean).join('/')}`,
+          (f.instalacaoEndereco || f.instalacaoCidade) && `🏠 Instalação: ${f.instalacaoEndereco || f.instalacaoCidade}`,
+          f.instalacaoFases && `⚡ ${f.instalacaoFases} | ${f.instalacaoTelhado ?? ''}`,
+          f.potenciaKwp && `☀️ Sistema: ${f.potenciaKwp} kWp — ${f.numPaineis ?? '?'} painéis`,
+          f.modeloPainel && `Painel: ${f.modeloPainel}`,
+          f.modeloInversor && `Inversor: ${f.modeloInversor}`,
+          f.valorTotal && `💰 Valor: R$ ${Number(f.valorTotal).toLocaleString('pt-BR')}`,
+          f.formaPagamento && `Pagamento: ${f.formaPagamento}`,
+          f.prazoEntrega && `🗓️ Prazo: ${f.prazoEntrega}`,
+          f.observacoes && `📝 ${f.observacoes}`,
+        ].filter(Boolean).join('\n');
+        setResumoFicha(linhas || 'Dados extraídos mas sem campos preenchidos.');
+      } else {
+        setResumoFicha('Não foi possível extrair dados da conversa.');
+      }
+    } catch {
+      setResumoFicha('Erro ao extrair resumo. Tente novamente.');
+    } finally {
+      setResumoLoading(false);
+    }
+  }
+
+  // Orçamentos do OrçaFácil — busca por telefone; fallback por nome do contato
+  const contactDisplayName = conversation?.contactName || conversation?.externalContactName || null;
+  const { quotes: orcamentos, loading: orcamentosLoading } = useOrcafacilQuotes(
+    conversation?.contactPhone,
+    contactDisplayName,
+  );
 
   function handleSaveReminder(data: {
     title: string;
@@ -447,8 +496,8 @@ export const ContactPanel = memo(function ContactPanel({
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto p-4">
-        {/* Gerar Orçamento */}
-        <div className="mb-3">
+        {/* Gerar Orçamento + Resumo para Orçamento */}
+        <div className="mb-3 space-y-2">
           <button
             type="button"
             onClick={() => setQuoteModalOpen(true)}
@@ -457,7 +506,88 @@ export const ContactPanel = memo(function ContactPanel({
             <FileText className="w-4 h-4" />
             Gerar Orçamento
           </button>
+          <button
+            type="button"
+            onClick={handleResumoOrçamento}
+            disabled={resumoLoading}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 text-xs font-semibold hover:bg-cyan-500/20 disabled:opacity-50 transition-colors"
+          >
+            {resumoLoading ? (
+              <><svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Extraindo resumo...</>
+            ) : (
+              <><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>Resumo para Orçamento (IA)</>
+            )}
+          </button>
+          {resumoFicha && (
+            <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wide">Dados extraídos</span>
+                <button type="button" onClick={() => setResumoFicha(null)} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
+              </div>
+              <pre className="text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed font-sans">{resumoFicha}</pre>
+            </div>
+          )}
         </div>
+
+        {/* Orçamentos vinculados (OrçaFácil) */}
+        {conversation?.contactPhone && (
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Orçamentos
+              </span>
+              {orcamentosLoading && (
+                <span className="text-[10px] text-slate-400">Carregando…</span>
+              )}
+            </div>
+            {!orcamentosLoading && orcamentos.length === 0 && (
+              <p className="text-xs text-slate-400">Nenhum orçamento encontrado.</p>
+            )}
+            {orcamentos.length > 0 && (
+              <div className="space-y-1.5">
+                {orcamentos.map(orc => {
+                  const statusColor =
+                    orc.status === 'fechado'
+                      ? 'bg-green-100 dark:bg-green-500/15 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-500/30'
+                      : orc.status === 'enviado'
+                      ? 'bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-300 border border-orange-300 dark:border-orange-500/40'
+                      : 'bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10';
+                  const statusLabel =
+                    orc.status === 'fechado' ? 'Fechado' : orc.status === 'enviado' ? 'Enviado' : 'Rascunho';
+                  const detailUrl = `https://app-eight-eta-92.vercel.app/orcamento/${orc.id}`;
+                  return (
+                    <a
+                      key={orc.id}
+                      href={detailUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-start gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 hover:border-primary-300 dark:hover:border-primary-700 transition-colors group"
+                    >
+                      <FileText className="w-3.5 h-3.5 mt-0.5 text-slate-400 group-hover:text-primary-500 flex-shrink-0 transition-colors" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-slate-800 dark:text-white truncate">
+                          {orc.cliente_nome}
+                        </p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          {orc.potencia_kwp} kWp
+                          {orc.valor_final
+                            ? ` · ${orc.valor_final.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+                            : ''}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full', statusColor)}>
+                          {statusLabel}
+                        </span>
+                        <ExternalLink className="w-3 h-3 text-slate-300 group-hover:text-primary-400 transition-colors" />
+                      </div>
+                    </a>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Etiquetas */}
         {contactId && (
