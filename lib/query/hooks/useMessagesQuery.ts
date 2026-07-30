@@ -43,11 +43,12 @@ export function useMessages(conversationId: string | undefined) {
         .from('messaging_messages')
         .select('*')
         .eq('conversation_id', conversationId!)
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false }) // mais recentes primeiro
         .limit(200);
 
       if (error) throw error;
-      return (data || []).map((row) => transformMessage(row as DbMessagingMessage));
+      // Reverter para exibição cronológica (mais antigas no topo)
+      return (data || []).reverse().map((row) => transformMessage(row as DbMessagingMessage));
     },
     staleTime: 1 * 1000,
     refetchInterval: 2 * 1000, // Polling a cada 2s — mensagens em tempo real
