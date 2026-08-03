@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useToast } from '@/context/ToastContext';
 import { Contact, Company, ContactStage, PaginationState, ContactsServerFilters, DEFAULT_PAGE_SIZE, ContactSortableColumn } from '@/types';
 import {
@@ -54,6 +54,7 @@ export const useContactsController = () => {
 
   const { addToast, showToast } = useToast();
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<
@@ -447,8 +448,10 @@ export const useContactsController = () => {
           source: formData.source?.trim() || 'Manual',
         },
         {
-          onSuccess: () => {
-            (addToast || showToast)('Contato criado!', 'success');
+          onSuccess: (newContact) => {
+            (addToast || showToast)('Contato criado! Selecione o funil para criar o negócio.', 'success');
+            // Abre automaticamente o modal para criar negócio para este contato
+            setCreateDealContactId(newContact.id);
           },
           onError: (error: Error) => {
             (addToast || showToast)(`Erro ao criar contato: ${error.message}`, 'error');
@@ -557,11 +560,12 @@ export const useContactsController = () => {
         isLost: false,
       },
       {
-        onSuccess: () => {
-          addToast(`Deal criado no board "${board.name}"`, 'success');
+        onSuccess: (createdDeal) => {
+          addToast(`Negócio criado! Abrindo ficha do cliente...`, 'success');
+          router.push(`/deals/${createdDeal.id}/cockpit-v2`);
         },
         onError: (error: Error) => {
-          addToast(`Erro ao criar deal: ${error.message}`, 'error');
+          addToast(`Erro ao criar negócio: ${error.message}`, 'error');
         },
       }
     );
