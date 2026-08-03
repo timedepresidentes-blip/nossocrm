@@ -303,6 +303,7 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
       const data = await res.json();
       if (!res.ok || data.error) { setSupplierError(data.error?.message || 'Erro ao analisar.'); return; }
       if (data.supplierData) setSupplierData(data.supplierData);
+      else if (data.supplierExtractError) setSupplierError(`Erro ao extrair PDF: ${data.supplierExtractError}`);
     } catch { setSupplierError('Erro de conexão.'); }
     finally { setSupplierAnalyzing(false); }
   }

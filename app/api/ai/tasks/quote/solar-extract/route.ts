@@ -1,4 +1,4 @@
-import { generateText, Output } from 'ai';
+import { generateText, generateObject, Output } from 'ai';
 import { z } from 'zod';
 import { requireAITaskContext, AITaskHttpError } from '@/lib/ai/tasks/server';
 
@@ -76,6 +76,34 @@ Extraia:
 Seja preciso com os valores monetários — use o valor final total do orçamento.
 Extraia APENAS o que está explícito no documento. Não invente dados.`;
 
+async function extractSupplierData(
+  model: Parameters<typeof generateObject>[0]['model'],
+  supplierQuoteBase64: string,
+  supplierQuoteMimeType: string,
+): Promise<z.infer<typeof SupplierQuoteSchema>> {
+  const mimeType = (supplierQuoteMimeType || 'application/pdf') as string;
+  const isImage = mimeType.startsWith('image/');
+
+  const contentPart = isImage
+    ? { type: 'image' as const, image: `data:${mimeType};base64,${supplierQuoteBase64}` }
+    : { type: 'file' as const, data: supplierQuoteBase64, mediaType: 'application/pdf' as const };
+
+  const { object } = await generateObject({
+    model,
+    schema: SupplierQuoteSchema,
+    system: SUPPLIER_SYSTEM_PROMPT,
+    messages: [{
+      role: 'user',
+      content: [
+        contentPart,
+        { type: 'text', text: 'Analise o orçamento de fornecedor acima e extraia todos os dados solicitados no sistema.' },
+      ],
+    }],
+  });
+
+  return object;
+}
+
 function extractTextContent(content: Record<string, unknown>): string {
   if (typeof content?.text === 'string') return content.text;
   if (typeof content?.body === 'string') return content.body;
@@ -102,43 +130,13 @@ export async function POST(req: Request) {
 
     // Se enviou apenas o PDF do fornecedor — extração independente
     if (supplierQuoteBase64 && !conversationId && !billImageBase64) {
-      const mimeType = (supplierQuoteMimeType || 'application/pdf') as string;
-      const isImage = mimeType.startsWith('image/');
-
-      let supplierResult;
-      if (isImage) {
-        supplierResult = await generateText({
-          model,
-          maxRetries: 2,
-          output: Output.object({ schema: SupplierQuoteSchema }),
-          system: SUPPLIER_SYSTEM_PROMPT,
-          messages: [{
-            role: 'user',
-            content: [{
-              type: 'image',
-              image: `data:${mimeType};base64,${supplierQuoteBase64}`,
-            }],
-          }],
-        });
-      } else {
-        // PDF — envia como texto base64 com instrução para interpretar
-        supplierResult = await generateText({
-          model,
-          maxRetries: 2,
-          output: Output.object({ schema: SupplierQuoteSchema }),
-          system: SUPPLIER_SYSTEM_PROMPT,
-          messages: [{
-            role: 'user',
-            content: [{
-              type: 'file',
-              data: supplierQuoteBase64,
-              mediaType: 'application/pdf',
-            }],
-          }],
-        });
+      try {
+        const supplierData = await extractSupplierData(model, supplierQuoteBase64, supplierQuoteMimeType || 'application/pdf');
+        return json({ supplierData });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Erro ao extrair PDF do fornecedor.';
+        return json({ error: { code: 'SUPPLIER_EXTRACT_ERROR', message: msg } }, 500);
       }
-
-      return json({ supplierData: supplierResult.output });
     }
 
     // Modo conversa + conta de energia
@@ -225,43 +223,20 @@ export async function POST(req: Request) {
 
     // Se também enviou PDF do fornecedor junto com a análise da conversa
     let supplierData: SupplierQuoteResult | null = null;
+    let supplierExtractError: string | null = null;
     if (supplierQuoteBase64) {
       try {
-        const mimeType = (supplierQuoteMimeType || 'application/pdf') as string;
-        const isImage = mimeType.startsWith('image/');
-        let supplierResult;
-        if (isImage) {
-          supplierResult = await generateText({
-            model,
-            maxRetries: 2,
-            output: Output.object({ schema: SupplierQuoteSchema }),
-            system: SUPPLIER_SYSTEM_PROMPT,
-            messages: [{
-              role: 'user',
-              content: [{ type: 'image', image: `data:${mimeType};base64,${supplierQuoteBase64}` }],
-            }],
-          });
-        } else {
-          supplierResult = await generateText({
-            model,
-            maxRetries: 2,
-            output: Output.object({ schema: SupplierQuoteSchema }),
-            system: SUPPLIER_SYSTEM_PROMPT,
-            messages: [{
-              role: 'user',
-              content: [{ type: 'file', data: supplierQuoteBase64, mediaType: 'application/pdf' }],
-            }],
-          });
-        }
-        supplierData = supplierResult.output;
-      } catch {
-        // Não bloqueia — retorna só o extracted sem supplierData
+        supplierData = await extractSupplierData(model, supplierQuoteBase64, supplierQuoteMimeType || 'application/pdf');
+      } catch (err) {
+        supplierExtractError = err instanceof Error ? err.message : 'Erro ao extrair PDF.';
+        console.error('[solar-extract] supplier extraction failed:', supplierExtractError);
       }
     }
 
     return json({
       extracted: result.output,
       supplierData,
+      supplierExtractError,
       products: products || [],
     });
   } catch (err: unknown) {
