@@ -50,7 +50,7 @@ function toStr(v: string | number | null | undefined): string {
 export const FichaClientePanel: React.FC<Props> = ({
   dealId, conversationId, isWon, dealTitle, dealValue, custoTotal, margemPct,
 }) => {
-  const [aberta, setAberta] = useState(false);
+  const [aberta, setAberta] = useState(true);
   const [ficha, setFicha] = useState<FichaClienteData>(empty());
   const [loading, setLoading] = useState(false);
   const [extracting, setExtracting] = useState(false);
