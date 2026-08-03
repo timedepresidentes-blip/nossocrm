@@ -8,6 +8,9 @@ import { supabase } from '@/lib/supabase/client';
 import { orgSettingsService, OrgQuoteSettings } from '@/lib/supabase/orgSettings';
 import { ChevronDown, ChevronUp, Download, Loader2, Pencil, Save, X, Upload } from 'lucide-react';
 
+interface ExtraItem { name: string; value: number }
+interface QuoteExtras { installationCost?: number; extraItems?: ExtraItem[] }
+
 interface QuoteItem {
   id: string;
   name: string;
@@ -83,6 +86,7 @@ export default function QuotePage() {
   const [savingOverride, setSavingOverride] = useState(false);
   const [savedMsg, setSavedMsg] = useState(false);
   const [uploadingField, setUploadingField] = useState<string | null>(null);
+  const [extras, setExtras] = useState<QuoteExtras>({ installationCost: undefined, extraItems: [] });
 
   useEffect(() => {
     async function load() {
@@ -124,6 +128,12 @@ export default function QuotePage() {
         ];
 
         const savedOverrides: Partial<OrgQuoteSettings> = d.quote_overrides ?? {};
+        const savedExtras: QuoteExtras = (d.quote_overrides as any)?.__extras ?? {};
+
+        setExtras({
+          installationCost: savedExtras.installationCost,
+          extraItems: savedExtras.extraItems ?? [],
+        });
 
         setQuote({
           dealTitle: d.title,
@@ -151,12 +161,12 @@ export default function QuotePage() {
   const saveOverride = async () => {
     if (!supabase || !dealId) return;
     setSavingOverride(true);
-    const clean: Record<string, string> = {};
+    const clean: Record<string, unknown> = { __extras: extras };
     for (const [k, v] of Object.entries(overrides)) {
       if (v && String(v).trim()) clean[k] = String(v).trim();
     }
     await supabase.from('deals').update({ quote_overrides: clean }).eq('id', dealId);
-    setQuote((prev) => prev ? { ...prev, quoteOverrides: clean } : prev);
+    setQuote((prev) => prev ? { ...prev, quoteOverrides: clean as Partial<OrgQuoteSettings> } : prev);
     setSavingOverride(false);
     setSavedMsg(true);
     setTimeout(() => setSavedMsg(false), 2000);
@@ -215,40 +225,75 @@ export default function QuotePage() {
   };
 
   const handleDownloadPDF = async () => {
-    const element = document.getElementById('quote-print-target');
-    if (!element) return;
+    const root = document.getElementById('quote-print-target');
+    if (!root) return;
     setIsDownloading(true);
     setPdfError('');
     const toolbar = document.getElementById('quote-toolbar');
     if (toolbar) toolbar.style.visibility = 'hidden';
     try {
-      // Clona o elemento em container isolado de 860px para captura sem sidebar
-      const container = document.createElement('div');
-      container.style.cssText = 'position:absolute;top:0;left:0;width:860px;overflow:visible;z-index:-1;pointer-events:none;';
-      const clone = element.cloneNode(true) as HTMLElement;
-      clone.style.cssText = 'width:860px;max-width:860px;margin:0;padding:32px;min-height:unset;position:static;';
-      container.appendChild(clone);
-      document.body.appendChild(container);
-      await new Promise(r => setTimeout(r, 200)); // aguarda render das imagens no clone
+      // Coleta Y de cada seção (CSS px relativos ao topo do root) como pontos de quebra naturais
+      const rootRect = root.getBoundingClientRect();
+      const sectionBreaksCssPx: number[] = [
+        'pdf-sec-header', 'pdf-sec-banner', 'pdf-sec-client',
+        'pdf-sec-items', 'pdf-sec-financing', 'pdf-sec-footer',
+      ]
+        .map(id => document.getElementById(id))
+        .filter((el): el is HTMLElement => !!el)
+        .map(el => el.getBoundingClientRect().top - rootRect.top);
 
-      const dataUrl = await toPng(clone, {
-        pixelRatio: 2,
-        backgroundColor: '#ffffff',
-        cacheBust: true,
+      // Captura todo o conteúdo em alta resolução
+      const dataUrl = await toPng(root, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true });
+
+      const img = await new Promise<HTMLImageElement>((resolve) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.src = dataUrl;
       });
 
-      document.body.removeChild(container);
       const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-      const pdfW = pdf.internal.pageSize.getWidth();
-      const pdfH = pdf.internal.pageSize.getHeight();
-      const imgProps = pdf.getImageProperties(dataUrl);
-      const imgH = (imgProps.height * pdfW) / imgProps.width;
-      let page = 0;
-      for (let pos = 0; pos < imgH; pos += pdfH) {
-        if (page > 0) pdf.addPage();
-        pdf.addImage(dataUrl, 'PNG', 0, -pos, pdfW, imgH);
-        page++;
+      const pdfW = pdf.internal.pageSize.getWidth();  // 210mm
+      const pdfH = pdf.internal.pageSize.getHeight(); // 297mm
+      const imgW = img.naturalWidth;
+      const imgH = img.naturalHeight;
+
+      // pixelRatio=2: 1 CSS px = 2 imagem px → converter posição DOM para mm na imagem
+      const mmPerPx = pdfW / imgW;
+      const totalMm = imgH * mmPerPx;
+      const breaksMm = sectionBreaksCssPx.map(cssPx => cssPx * 2 * mmPerPx);
+
+      // Gera páginas com quebra inteligente: prefere quebrar no início de uma seção
+      let posMm = 0;
+      let pageIdx = 0;
+      while (posMm < totalMm - 0.5) {
+        if (pageIdx > 0) pdf.addPage();
+
+        const idealEndMm = posMm + pdfH;
+        // Procura a última quebra de seção que cai nos 35% finais desta página
+        const threshold = posMm + pdfH * 0.65;
+        const naturalBreak = breaksMm
+          .filter(b => b > threshold && b <= idealEndMm)
+          .sort((a, b) => b - a)[0];
+
+        const pageEndMm = Math.min(naturalBreak ?? idealEndMm, totalMm);
+        const sliceHMm = pageEndMm - posMm;
+
+        // Extrai o slice via canvas sem re-renderizar o DOM
+        const srcYPx = Math.round(posMm / mmPerPx);
+        const srcHPx = Math.round(sliceHMm / mmPerPx);
+        const canvas = document.createElement('canvas');
+        canvas.width = imgW;
+        canvas.height = srcHPx;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, imgW, srcHPx);
+        ctx.drawImage(img, 0, srcYPx, imgW, srcHPx, 0, 0, imgW, srcHPx);
+
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdfW, sliceHMm);
+        posMm = pageEndMm;
+        pageIdx++;
       }
+
       pdf.save(`orcamento-${dealId.slice(0, 8).toUpperCase()}.pdf`);
     } catch (e: any) {
       setPdfError(e?.message || 'Erro ao gerar PDF');
@@ -259,7 +304,9 @@ export default function QuotePage() {
   };
 
   const hasOverride = Object.values(quote.quoteOverrides).some((v) => v && String(v).trim());
-  const subtotal = quote.items.reduce((sum, i) => sum + i.quantity * i.price, 0);
+  const instCost = extras.installationCost ?? 0;
+  const extrasCost = (extras.extraItems ?? []).reduce((s, e) => s + (e.value || 0), 0);
+  const subtotal = quote.items.reduce((sum, i) => sum + i.quantity * i.price, 0) + instCost + extrasCost;
 
   const inputCls = 'w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/40';
 
@@ -290,10 +337,10 @@ export default function QuotePage() {
           </button>
           {pdfError && <p className="text-xs text-red-500 bg-white rounded-lg px-3 py-1.5 shadow">{pdfError}</p>}
           <button
-            onClick={() => window.history.back()}
+            onClick={() => window.history.length > 1 ? window.history.back() : window.close()}
             className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-lg"
           >
-            Voltar
+            Fechar
           </button>
         </div>
 
@@ -402,6 +449,38 @@ export default function QuotePage() {
               </div>
             ))}
 
+            {/* Custo de instalação */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 mb-1">Custo de Instalação (R$)</label>
+              <input
+                type="number" min="0" step="0.01" placeholder="0,00"
+                value={extras.installationCost ?? ''}
+                onChange={(e) => setExtras(p => ({ ...p, installationCost: e.target.value ? Number(e.target.value) : undefined }))}
+                className={inputCls + ' text-xs'}
+              />
+            </div>
+
+            {/* Custos extras nomeados */}
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold text-slate-500">Custos adicionais</p>
+              {(extras.extraItems ?? []).map((item, i) => (
+                <div key={i} className="flex gap-1.5 items-center">
+                  <input type="text" placeholder="Nome (ex: Homologação)"
+                    value={item.name}
+                    onChange={e => setExtras(p => ({ ...p, extraItems: (p.extraItems ?? []).map((x, idx) => idx === i ? { ...x, name: e.target.value } : x) }))}
+                    className={inputCls + ' text-xs flex-1'} />
+                  <input type="number" min="0" step="0.01" placeholder="R$"
+                    value={item.value || ''}
+                    onChange={e => setExtras(p => ({ ...p, extraItems: (p.extraItems ?? []).map((x, idx) => idx === i ? { ...x, value: Number(e.target.value) } : x) }))}
+                    className={inputCls + ' text-xs w-24'} />
+                  <button onClick={() => setExtras(p => ({ ...p, extraItems: (p.extraItems ?? []).filter((_, idx) => idx !== i) }))}
+                    className="text-slate-300 hover:text-red-400 p-1 flex-shrink-0">✕</button>
+                </div>
+              ))}
+              <button onClick={() => setExtras(p => ({ ...p, extraItems: [...(p.extraItems ?? []), { name: '', value: 0 }] }))}
+                className="text-xs text-blue-500 hover:text-blue-700 font-medium">+ Adicionar custo</button>
+            </div>
+
             <div className="flex gap-2 pt-1">
               <button
                 onClick={saveOverride}
@@ -429,7 +508,7 @@ export default function QuotePage() {
       <div id="quote-print-target" className="min-h-screen bg-white print:bg-white p-8 max-w-[860px] mx-auto font-sans text-slate-800">
 
         {/* Cabeçalho */}
-        <div className="flex items-center justify-between mb-8 pb-6 border-b-2 border-slate-200">
+        <div id="pdf-sec-header" className="flex items-center justify-between mb-8 pb-6 border-b-2 border-slate-200">
           <div>
             {eff.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -455,7 +534,7 @@ export default function QuotePage() {
 
         {/* Banner da usina/instalação */}
         {eff.bannerImageUrl && (
-          <div className="mb-8 rounded-2xl overflow-hidden" style={{ height: '220px' }}>
+          <div id="pdf-sec-banner" className="mb-8 rounded-2xl overflow-hidden" style={{ height: '220px' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={eff.bannerImageUrl}
@@ -466,7 +545,7 @@ export default function QuotePage() {
         )}
 
         {/* Cliente */}
-        <div className="mb-8 grid grid-cols-2 gap-6">
+        <div id="pdf-sec-client" className="mb-8 grid grid-cols-2 gap-6">
           <div className="bg-slate-50 rounded-xl p-4">
             <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-1">Cliente</div>
             <div className="font-semibold text-slate-800">{quote.contactName}</div>
@@ -482,7 +561,7 @@ export default function QuotePage() {
         </div>
 
         {/* Tabela de itens */}
-        <table className="w-full mb-8 text-sm">
+        <table id="pdf-sec-items" className="w-full mb-8 text-sm">
           <thead>
             <tr className="bg-slate-800 text-white">
               <th className="text-left px-4 py-3 rounded-tl-lg font-semibold">Descrição</th>
@@ -532,6 +611,24 @@ export default function QuotePage() {
               </tr>
             ))}
           </tbody>
+          <tbody>
+            {instCost > 0 && (
+              <tr className="bg-slate-50/40">
+                <td className="px-4 py-3 text-slate-700 font-medium">Instalação</td>
+                <td className="px-4 py-3 text-center text-slate-500">1</td>
+                <td className="px-4 py-3 text-right text-slate-600">{formatBRL(instCost)}</td>
+                <td className="px-4 py-3 text-right font-semibold text-slate-800">{formatBRL(instCost)}</td>
+              </tr>
+            )}
+            {(extras.extraItems ?? []).filter(e => e.name && e.value > 0).map((e, i) => (
+              <tr key={`extra-${i}`} className="bg-slate-50/40">
+                <td className="px-4 py-3 text-slate-700 font-medium">{e.name}</td>
+                <td className="px-4 py-3 text-center text-slate-500">1</td>
+                <td className="px-4 py-3 text-right text-slate-600">{formatBRL(e.value)}</td>
+                <td className="px-4 py-3 text-right font-semibold text-slate-800">{formatBRL(e.value)}</td>
+              </tr>
+            ))}
+          </tbody>
           <tfoot>
             <tr className="border-t-2 border-slate-200">
               <td colSpan={2} />
@@ -547,7 +644,7 @@ export default function QuotePage() {
         </table>
 
         {/* Opções de financiamento */}
-        <div className="mb-8">
+        <div id="pdf-sec-financing" className="mb-8">
           <div className="flex items-center gap-3 mb-4">
             <div className="h-px flex-1 bg-slate-200" />
             <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">Opções de Pagamento</h2>
@@ -605,7 +702,7 @@ export default function QuotePage() {
 
         {/* Rodapé personalizado */}
         {eff.quoteFooter && (
-          <div className="mt-8 pt-6 border-t border-slate-200">
+          <div id="pdf-sec-footer" className="mt-8 pt-6 border-t border-slate-200">
             <p className="text-xs text-slate-400 whitespace-pre-wrap">{eff.quoteFooter}</p>
           </div>
         )}
