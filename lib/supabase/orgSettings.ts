@@ -1,6 +1,19 @@
 import { supabase } from './client';
 import { sanitizeUUID } from './utils';
 
+export interface OrgCostSettings {
+  custoArt: number;
+  custoNfKitPct: number;             // % NF sobre total do kit
+  custoNfServicoPct: number;         // % NF sobre somente serviço
+  custoEng1a3kwp: number;           // 1–2,99 kWp
+  custoEng3a5kwp: number;           // 3–4,99 kWp
+  custoEngAcima5kwp: number;        // ≥5 kWp
+  custoCorrugado: number;
+  custoEletroduto: number;
+  custoComissaoPct: number;          // comissão padrão %
+  custoComissaoAcima5kwpPct: number; // comissão para >5 kWp %
+}
+
 export interface OrgQuoteSettings {
   logoUrl: string;
   companyPhone: string;
@@ -77,6 +90,76 @@ export const orgSettingsService = {
       if (updates.companyAddress !== undefined) payload.company_address = updates.companyAddress || null;
       if (updates.quoteFooter !== undefined) payload.quote_footer = updates.quoteFooter || null;
       if (updates.bannerImageUrl !== undefined) payload.quote_banner_url = updates.bannerImageUrl || null;
+
+      const { error } = await supabase
+        .from('organization_settings')
+        .upsert({ organization_id: orgId, ...payload }, { onConflict: 'organization_id' });
+
+      return { error: error ?? null };
+    } catch (e) {
+      return { error: e as Error };
+    }
+  },
+
+  async getCostSettings(): Promise<{ data: OrgCostSettings | null; error: Error | null }> {
+    try {
+      if (!supabase) return { data: null, error: new Error('Supabase não configurado') };
+      const orgId = await getOrgId();
+      if (!orgId) return { data: null, error: new Error('Organização não encontrada') };
+
+      const { data, error } = await supabase
+        .from('organization_settings')
+        .select('custo_art, custo_nf_kit_pct, custo_nf_servico_pct, custo_eng_ate5kwp, custo_eng_3a5kwp, custo_eng_acima5kwp, custo_corrugado, custo_eletroduto, custo_comissao_pct, custo_comissao_acima5kwp_pct')
+        .eq('organization_id', orgId)
+        .maybeSingle();
+
+      if (error) return { data: null, error };
+      const defaults: OrgCostSettings = {
+        custoArt: 0, custoNfKitPct: 4, custoNfServicoPct: 6,
+        custoEng1a3kwp: 350, custoEng3a5kwp: 450, custoEngAcima5kwp: 600,
+        custoCorrugado: 0, custoEletroduto: 0,
+        custoComissaoPct: 5, custoComissaoAcima5kwpPct: 7,
+      };
+      if (!data) return { data: defaults, error: null };
+
+      const row = data as any;
+      return {
+        data: {
+          custoArt: Number(row.custo_art ?? 0),
+          custoNfKitPct: Number(row.custo_nf_kit_pct ?? 4),
+          custoNfServicoPct: Number(row.custo_nf_servico_pct ?? 6),
+          custoEng1a3kwp: Number(row.custo_eng_ate5kwp ?? 350),
+          custoEng3a5kwp: Number(row.custo_eng_3a5kwp ?? 450),
+          custoEngAcima5kwp: Number(row.custo_eng_acima5kwp ?? 600),
+          custoCorrugado: Number(row.custo_corrugado ?? 0),
+          custoEletroduto: Number(row.custo_eletroduto ?? 0),
+          custoComissaoPct: Number(row.custo_comissao_pct ?? 5),
+          custoComissaoAcima5kwpPct: Number(row.custo_comissao_acima5kwp_pct ?? 7),
+        },
+        error: null,
+      };
+    } catch (e) {
+      return { data: null, error: e as Error };
+    }
+  },
+
+  async updateCostSettings(updates: Partial<OrgCostSettings>): Promise<{ error: Error | null }> {
+    try {
+      if (!supabase) return { error: new Error('Supabase não configurado') };
+      const orgId = await getOrgId();
+      if (!orgId) return { error: new Error('Organização não encontrada') };
+
+      const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (updates.custoArt !== undefined) payload.custo_art = updates.custoArt;
+      if (updates.custoNfKitPct !== undefined) { payload.custo_nf_kit_pct = updates.custoNfKitPct; payload.custo_nf_pct = updates.custoNfKitPct; }
+      if (updates.custoNfServicoPct !== undefined) payload.custo_nf_servico_pct = updates.custoNfServicoPct;
+      if (updates.custoEng1a3kwp !== undefined) payload.custo_eng_ate5kwp = updates.custoEng1a3kwp;
+      if (updates.custoEng3a5kwp !== undefined) payload.custo_eng_3a5kwp = updates.custoEng3a5kwp;
+      if (updates.custoEngAcima5kwp !== undefined) payload.custo_eng_acima5kwp = updates.custoEngAcima5kwp;
+      if (updates.custoCorrugado !== undefined) payload.custo_corrugado = updates.custoCorrugado;
+      if (updates.custoEletroduto !== undefined) payload.custo_eletroduto = updates.custoEletroduto;
+      if (updates.custoComissaoPct !== undefined) payload.custo_comissao_pct = updates.custoComissaoPct;
+      if (updates.custoComissaoAcima5kwpPct !== undefined) payload.custo_comissao_acima5kwp_pct = updates.custoComissaoAcima5kwpPct;
 
       const { error } = await supabase
         .from('organization_settings')

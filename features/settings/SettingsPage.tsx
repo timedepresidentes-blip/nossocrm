@@ -13,6 +13,7 @@ import { BusinessUnitsSection } from './components/BusinessUnitsSection';
 import { DataStorageSettings } from './components/DataStorageSettings';
 import { ProductsCatalogManager } from './components/ProductsCatalogManager';
 import { QuoteSettingsSection } from './components/QuoteSettingsSection';
+import { CostSettingsSection } from './components/CostSettingsSection';
 import { AICenterSettings } from './AICenterSettings';
 import { QuickRepliesSection } from './components/QuickRepliesSection';
 
@@ -232,6 +233,7 @@ const ProductsSettings: React.FC = () => {
   return (
     <div className="pb-10">
       <QuoteSettingsSection />
+      <CostSettingsSection />
       <ProductsCatalogManager />
     </div>
   );
