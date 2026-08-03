@@ -6,7 +6,22 @@ import {
   Download, FileText, Loader2, RefreshCw, Save,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import type { FichaClienteData } from '@/app/api/ai/tasks/deals/ficha-cliente/route';
+
+export interface FichaClienteData {
+  nomeCompleto: string | null; cpfCnpj: string | null; rg: string | null;
+  telefone: string | null; email: string | null; estadoCivil: string | null;
+  enderecoRua: string | null; enderecoBairro: string | null; enderecoCidade: string | null;
+  enderecoEstado: string | null; enderecoCep: string | null;
+  instalacaoEndereco: string | null; instalacaoCidade: string | null;
+  instalacaoTipoImovel: string | null; instalacaoTelhado: string | null;
+  instalacaoFases: string | null; instalacaoDisjuntor: string | null;
+  potenciaKwp: number | null; numPaineis: number | null; modeloPainel: string | null;
+  potenciaPainelW: number | null; modeloInversor: string | null; tipoInversor: string | null;
+  qtdInversores: number | null; tipoEstrutura: string | null;
+  valorTotal: number | null; formaPagamento: string | null; condicoesPagamento: string | null;
+  prazoEntrega: string | null; consumoMensalKwh: number | null; valorContaAtual: number | null;
+  distribuidora: string | null; observacoes: string | null;
+}
 
 interface Props {
   dealId?: string | null;
