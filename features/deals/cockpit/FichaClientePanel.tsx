@@ -548,16 +548,14 @@ export const FichaClientePanel: React.FC<Props> = ({
                 >
                   <Download className="h-3 w-3" /> Baixar ficha PDF
                 </button>
-                {isWon && (
-                  <button
-                    type="button"
-                    onClick={handleGerarContrato}
-                    className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/15"
-                  >
-                    <FileText className="h-3 w-3" /> Gerar contrato
-                  </button>
-                )}
-                {isWon && !contratoAssinado && (
+                <button
+                  type="button"
+                  onClick={handleGerarContrato}
+                  className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/15"
+                >
+                  <FileText className="h-3 w-3" /> Gerar contrato
+                </button>
+                {dealId && !contratoAssinado && (
                   <button
                     type="button"
                     onClick={handleMarcarContratoAssinado}
