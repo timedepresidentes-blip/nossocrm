@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2, ChevronDown, ChevronUp, ClipboardList,
-  Download, FileText, Loader2, RefreshCw, Save,
+  Download, FileText, Loader2, RefreshCw, Save, Send, Upload, XCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -74,6 +74,13 @@ export const FichaClientePanel: React.FC<Props> = ({
   const [contratoAssinado, setContratoAssinado] = useState(false);
   const [marcandoContrato, setMarcandoContrato] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
+
+  // ClickSign
+  const pdfRefCs = useRef<HTMLInputElement>(null);
+  const [pdfFileCs, setPdfFileCs]     = useState<File | null>(null);
+  const [sendingCs, setSendingCs]     = useState(false);
+  const [sendResultCs, setSendResultCs] = useState<'ok' | 'error' | null>(null);
+  const [sendErrorCs, setSendErrorCs] = useState('');
 
   // Carrega ficha salva no deal
   const load = useCallback(async () => {
@@ -158,6 +165,45 @@ export const FichaClientePanel: React.FC<Props> = ({
   };
 
   // Impressão do contrato — AUREON ENERGIX / F. R. C. CINTRA (contrato real)
+  const handleEnviarAssinatura = async () => {
+    if (!pdfFileCs) return;
+    const email = f.email;
+    if (!email) { setSendResultCs('error'); setSendErrorCs('Preencha o e-mail do cliente na ficha antes de enviar.'); return; }
+    setSendingCs(true); setSendResultCs(null);
+    try {
+      const base64 = await new Promise<string>((res, rej) => {
+        const reader = new FileReader();
+        reader.onload  = () => res((reader.result as string).split(',')[1]);
+        reader.onerror = rej;
+        reader.readAsDataURL(pdfFileCs);
+      });
+      const resp = await fetch('/api/clicksign/send', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          dealId:             dealId ?? 'doc-avulso',
+          pdfBase64:          base64,
+          filename:           pdfFileCs.name,
+          signerName:         f.nomeCompleto ?? 'Cliente',
+          signerEmail:        email,
+          signerPhone:        f.telefone ?? undefined,
+          companySignerName:  'F.R.C Cintra',
+          companySignerEmail: 'fcintra4@hotmail.com',
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error ?? 'Erro ao enviar.');
+      setSendResultCs('ok');
+      setPdfFileCs(null);
+      if (pdfRefCs.current) pdfRefCs.current.value = '';
+    } catch (e) {
+      setSendResultCs('error');
+      setSendErrorCs(e instanceof Error ? e.message : 'Erro desconhecido.');
+    } finally {
+      setSendingCs(false);
+    }
+  };
+
   const handleGerarContrato = () => {
     const janela = window.open('', '_blank', 'width=900,height=1100');
     if (!janela) return;
@@ -555,6 +601,41 @@ export const FichaClientePanel: React.FC<Props> = ({
                 >
                   <FileText className="h-3 w-3" /> Gerar contrato
                 </button>
+                {/* Enviar para Assinatura Digital (ClickSign) */}
+                <div className="w-full mt-1 pt-1 border-t border-white/5">
+                  <input ref={pdfRefCs} type="file" accept=".pdf" className="hidden"
+                    onChange={e => { setPdfFileCs(e.target.files?.[0] ?? null); setSendResultCs(null); }} />
+                  <div className="flex gap-1.5 items-center flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => pdfRefCs.current?.click()}
+                      className="flex items-center gap-1.5 rounded-lg border border-blue-500/30 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-blue-300 hover:bg-blue-500/15"
+                    >
+                      <Upload className="h-3 w-3" />
+                      {pdfFileCs ? pdfFileCs.name.slice(0, 20) + (pdfFileCs.name.length > 20 ? '…' : '') : 'Selecionar PDF'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleEnviarAssinatura}
+                      disabled={!pdfFileCs || sendingCs}
+                      className="flex items-center gap-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-purple-300 hover:bg-purple-500/15 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {sendingCs ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                      {sendingCs ? 'Enviando…' : 'Enviar p/ Assinatura'}
+                    </button>
+                  </div>
+                  {sendResultCs === 'ok' && (
+                    <p className="text-[10px] text-emerald-400 flex items-center gap-1 mt-1">
+                      <CheckCircle2 className="h-3 w-3" /> Enviado! {f.nomeCompleto} e você receberão e-mail da ClickSign.
+                    </p>
+                  )}
+                  {sendResultCs === 'error' && (
+                    <p className="text-[10px] text-red-400 flex items-center gap-1 mt-1">
+                      <XCircle className="h-3 w-3" /> {sendErrorCs}
+                    </p>
+                  )}
+                </div>
+
                 {dealId && !contratoAssinado && (
                   <button
                     type="button"
