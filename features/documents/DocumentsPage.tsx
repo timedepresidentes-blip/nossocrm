@@ -7,6 +7,7 @@ import { gerarContrato, gerarAnexoII, gerarTermoCiencia, type ContratoData } fro
 import {
   MODULOS, INVERSORES, TIPOS_ESTRUTURA,
   getModulo, getInversor, gerarNumContrato,
+  detectModulo, detectInversor,
 } from './templates/fabricantes';
 
 function abrirHTML(html: string) {
@@ -177,14 +178,13 @@ function ContratoTab() {
 
   const set = (k: keyof ContratoData, v: string) => setForm(f => ({ ...f, [k]: v }));
 
-  // Ao selecionar fabricante do módulo, preenche o modelo e os dados de garantia
+  // Ao selecionar fabricante do módulo via dropdown, preenche modelo e dados de garantia
   const onModuloNomeChange = (nome: string) => {
     setModuloNome(nome);
     const fab = getModulo(nome);
     setForm(f => ({
       ...f,
       moduloFabricanteData: fab,
-      // pré-preenche modelo só se ainda estiver vazio ou for do fabricante anterior
       moduloModelo: f.moduloModelo || nome,
     }));
   };
@@ -197,6 +197,29 @@ function ContratoTab() {
       inversorFabricanteData: fab,
       inversorModelo: f.inversorModelo || nome,
     }));
+  };
+
+  // Ao digitar modelo, tenta detectar fabricante automaticamente por palavras-chave
+  const onModuloModeloChange = (v: string) => {
+    setForm(f => {
+      const detected = detectModulo(v);
+      if (detected && !f.moduloFabricanteData) {
+        setModuloNome(detected.nome);
+        return { ...f, moduloModelo: v, moduloFabricanteData: detected };
+      }
+      return { ...f, moduloModelo: v };
+    });
+  };
+
+  const onInversorModeloChange = (v: string) => {
+    setForm(f => {
+      const detected = detectInversor(v);
+      if (detected && !f.inversorFabricanteData) {
+        setInversorNome(detected.nome);
+        return { ...f, inversorModelo: v, inversorFabricanteData: detected };
+      }
+      return { ...f, inversorModelo: v };
+    });
   };
 
   const onEstruturaChange = (tipo: string) => {
@@ -309,7 +332,16 @@ function ContratoTab() {
           <Input value={form.moduloQtd} onChange={e => set('moduloQtd', e.target.value)} placeholder="Ex: 12" />
         </Field>
         <Field label="Modelo completo" span2>
-          <Input value={form.moduloModelo} onChange={e => set('moduloModelo', e.target.value)} placeholder="Ex: Canadian 550W HiKu6" />
+          <Input
+            value={form.moduloModelo}
+            onChange={e => onModuloModeloChange(e.target.value)}
+            placeholder="Ex: Canadian HiKu6 550W — detecta fabricante automaticamente"
+          />
+          {form.moduloFabricanteData && !moduloSelecionado && (
+            <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+              ✓ Fabricante detectado: <strong>{form.moduloFabricanteData.nome}</strong> — Garantia: {form.moduloFabricanteData.garantiaProduto} produto / {form.moduloFabricanteData.garantiaDesempenho}
+            </p>
+          )}
         </Field>
       </Section>
 
@@ -329,7 +361,16 @@ function ContratoTab() {
           <Input value={form.inversorQtd} onChange={e => set('inversorQtd', e.target.value)} placeholder="1" />
         </Field>
         <Field label="Modelo completo" span2>
-          <Input value={form.inversorModelo} onChange={e => set('inversorModelo', e.target.value)} placeholder="Ex: Deye SUN-6K-SG03LP1-EU" />
+          <Input
+            value={form.inversorModelo}
+            onChange={e => onInversorModeloChange(e.target.value)}
+            placeholder="Ex: Deye SUN-6K-SG03LP1-EU — detecta fabricante automaticamente"
+          />
+          {form.inversorFabricanteData && !inversorSelecionado && (
+            <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+              ✓ Fabricante detectado: <strong>{form.inversorFabricanteData.nome}</strong> — Garantia: {form.inversorFabricanteData.garantia}
+            </p>
+          )}
         </Field>
       </Section>
 

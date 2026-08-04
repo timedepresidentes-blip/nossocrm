@@ -140,10 +140,22 @@ d) Manter a estrutura de instalação em boas condições de conservação.</p>
 
 <h2>Garantias dos Equipamentos</h2>
 <table>
-  <tr><th>Equipamento</th><th>Modelo</th><th>Garantia Produto</th><th>Garantia Desempenho</th></tr>
-  <tr><td>Inversor</td><td>${d.inversorModelo} (${d.inversorQtd} un.)</td><td>${d.inversorFabricanteData?.garantia ?? '5 anos'}</td><td>—</td></tr>
-  <tr><td>Módulos Fotovoltaicos</td><td>${d.moduloModelo} (${d.moduloQtd} un.)</td><td>${d.moduloFabricanteData?.garantiaProduto ?? '12 anos'}</td><td>${d.moduloFabricanteData?.garantiaDesempenho ?? '25 anos (80% potência linear)'}</td></tr>
-  <tr><td>Instalação e Mão de Obra</td><td>—</td><td>1 ano</td><td>—</td></tr>
+  <tr><th>Equipamento</th><th>Modelo</th><th>Garantia Produto</th><th>Garantia Desempenho</th><th>Fabricante</th></tr>
+  <tr>
+    <td>Inversor</td>
+    <td>${d.inversorModelo} (${d.inversorQtd} un.)</td>
+    <td>${d.inversorFabricanteData?.garantia ?? '5 anos'}</td>
+    <td>—</td>
+    <td>${d.inversorFabricanteData?.nome ?? '—'}</td>
+  </tr>
+  <tr>
+    <td>Módulos Fotovoltaicos</td>
+    <td>${d.moduloModelo} (${d.moduloQtd} un.)</td>
+    <td>${d.moduloFabricanteData?.garantiaProduto ?? '12 anos'}</td>
+    <td>${d.moduloFabricanteData?.garantiaDesempenho ?? '25 anos (80% potência linear)'}</td>
+    <td>${d.moduloFabricanteData?.nome ?? '—'}</td>
+  </tr>
+  <tr><td>Instalação e Mão de Obra</td><td>—</td><td>1 ano</td><td>—</td><td>Aureon Energix</td></tr>
 </table>
 
 <p style="margin-top: 24px;">${d.cidade}, ${d.data}.</p>
