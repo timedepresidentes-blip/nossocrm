@@ -216,6 +216,126 @@ export const FichaClientePanel: React.FC<Props> = ({
     window.open(URL.createObjectURL(blob), '_blank');
   };
 
+  const handleGerarOS = () => {
+    const f = ficha;
+    const hoje = new Date().toLocaleDateString('pt-BR');
+    const osNum = `OS-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${dealId?.slice(0, 6).toUpperCase() ?? 'XXXXX'}`;
+    const endCliente = [f.enderecoRua, f.enderecoBairro, f.enderecoCidade, f.enderecoEstado]
+      .filter(Boolean).join(', ') + (f.enderecoCep ? ` — CEP ${f.enderecoCep}` : '');
+    const endInstalacao = f.instalacaoEndereco
+      ? `${f.instalacaoEndereco}${f.instalacaoCidade ? ', ' + f.instalacaoCidade : ''}`
+      : endCliente;
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head>
+<meta charset="UTF-8"><title>O.S. ${osNum}</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 11pt; color: #1a1a1a; line-height: 1.5; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1a5c2a; padding-bottom: 10px; margin-bottom: 14px; }
+  .empresa { font-size: 15pt; font-weight: bold; color: #1a5c2a; }
+  .sub { font-size: 9pt; color: #555; margin-top: 2px; }
+  .titulo { text-align: center; font-size: 14pt; font-weight: bold; letter-spacing: 1px; margin-bottom: 4px; }
+  .osnum { text-align: center; font-size: 10pt; color: #555; margin-bottom: 16px; }
+  .secao { font-size: 9pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; color: #1a5c2a; border-bottom: 1px solid #1a5c2a; margin: 14px 0 8px; padding-bottom: 2px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; margin-bottom: 4px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 16px; margin-bottom: 4px; }
+  .campo .label { font-size: 8pt; text-transform: uppercase; color: #666; letter-spacing: 0.04em; }
+  .campo .valor { border-bottom: 1px solid #aaa; padding: 2px 0; min-height: 17px; font-size: 10.5pt; }
+  .obs-box { border: 1px solid #aaa; border-radius: 4px; padding: 8px; min-height: 60px; margin-top: 4px; font-size: 10pt; }
+  .checklist { list-style: none; margin: 4px 0; }
+  .checklist li { display: flex; align-items: center; gap: 8px; font-size: 10pt; margin-bottom: 5px; }
+  .check { width: 14px; height: 14px; border: 1.5px solid #333; border-radius: 2px; flex-shrink: 0; }
+  .assinaturas { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 32px; }
+  .assin-bloco { text-align: center; }
+  .assin-linha { border-top: 1px solid #333; margin-bottom: 4px; }
+  .assin-nome { font-size: 9pt; }
+  .prestador-box { background: #f5f5f5; border-radius: 4px; padding: 8px 12px; font-size: 9.5pt; }
+  @media print { body { font-size: 10.5pt; } }
+</style>
+</head><body>
+
+<div class="header">
+  <div>
+    <div class="empresa">AUREON ENERGIX</div>
+    <div class="sub">F. R. C. CINTRA — CNPJ 33.071.872/0001-08</div>
+    <div class="sub">Araraquara — SP</div>
+  </div>
+  <div style="text-align:right">
+    <div class="sub">Data de emissão: ${hoje}</div>
+    <div class="sub">Prestador: FENIX SOLAR (J.W - FENIX SOLAR LTDA)</div>
+    <div class="sub">CNPJ: 61.338.707/0001-05 | Tel: (16) 9602-3210</div>
+    <div class="sub">Monte Alto/SP</div>
+  </div>
+</div>
+
+<div class="titulo">ORDEM DE SERVIÇO DE INSTALAÇÃO</div>
+<div class="osnum">Nº ${osNum}</div>
+
+<div class="secao">1. Dados do Cliente</div>
+<div class="grid2">
+  <div class="campo"><div class="label">Nome completo</div><div class="valor">${f.nomeCompleto ?? ''}</div></div>
+  <div class="campo"><div class="label">Telefone</div><div class="valor">${f.telefone ?? ''}</div></div>
+  <div class="campo" style="grid-column:span 2"><div class="label">Endereço do cliente</div><div class="valor">${endCliente}</div></div>
+  <div class="campo" style="grid-column:span 2"><div class="label">Local de instalação</div><div class="valor">${endInstalacao}</div></div>
+</div>
+
+<div class="secao">2. Especificações Técnicas do Sistema</div>
+<div class="grid3">
+  <div class="campo"><div class="label">Potência total (kWp)</div><div class="valor">${f.potenciaKwp ?? ''}</div></div>
+  <div class="campo"><div class="label">Qtd. de painéis</div><div class="valor">${f.numPaineis ?? ''}</div></div>
+  <div class="campo"><div class="label">Potência do painel (W)</div><div class="valor">${f.potenciaPainelW ?? ''}</div></div>
+</div>
+<div class="grid2">
+  <div class="campo"><div class="label">Modelo / Marca do painel</div><div class="valor">${f.modeloPainel ?? ''}</div></div>
+  <div class="campo"><div class="label">Qtd. de inversores</div><div class="valor">${f.qtdInversores ?? ''}</div></div>
+  <div class="campo"><div class="label">Modelo / Marca do inversor</div><div class="valor">${f.modeloInversor ?? ''}</div></div>
+  <div class="campo"><div class="label">Tipo (inversor / microinversor)</div><div class="valor">${f.tipoInversor ?? ''}</div></div>
+</div>
+
+<div class="secao">3. Informações da Instalação</div>
+<div class="grid2">
+  <div class="campo"><div class="label">Tipo de telhado</div><div class="valor">${f.instalacaoTelhado ?? ''}</div></div>
+  <div class="campo"><div class="label">Tipo de estrutura</div><div class="valor">${f.tipoEstrutura ?? ''}</div></div>
+  <div class="campo"><div class="label">Fases elétricas</div><div class="valor">${f.instalacaoFases ?? ''}</div></div>
+  <div class="campo"><div class="label">Disjuntor (A)</div><div class="valor">${f.instalacaoDisjuntor ?? ''}</div></div>
+  <div class="campo"><div class="label">Tipo de imóvel</div><div class="valor">${f.instalacaoTipoImovel ?? ''}</div></div>
+</div>
+
+<div class="secao">4. Checklist de Conclusão</div>
+<ul class="checklist">
+  <li><span class="check"></span> Equipamentos instalados conforme especificação técnica</li>
+  <li><span class="check"></span> Sistema ligado e testado (geração verificada no inversor)</li>
+  <li><span class="check"></span> Quadro elétrico organizado e identificado</li>
+  <li><span class="check"></span> String box / proteções CA e CC instaladas</li>
+  <li><span class="check"></span> Estrutura fixada e vedações concluídas</li>
+  <li><span class="check"></span> Local limpo e entregue ao cliente</li>
+  <li><span class="check"></span> Cliente orientado sobre o funcionamento e aplicativo de monitoramento</li>
+</ul>
+
+<div class="secao">5. Observações</div>
+<div class="obs-box">${f.observacoes ?? ''}</div>
+
+<div class="assinaturas">
+  <div class="assin-bloco">
+    <div class="assin-linha"></div>
+    <div class="assin-nome">CLIENTE<br>${f.nomeCompleto ?? '___________________________'}</div>
+  </div>
+  <div class="assin-bloco">
+    <div class="assin-linha"></div>
+    <div class="assin-nome">FENIX SOLAR<br>Responsável pela instalação</div>
+  </div>
+  <div class="assin-bloco">
+    <div class="assin-linha"></div>
+    <div class="assin-nome">AUREON ENERGIX<br>F. R. C. CINTRA</div>
+  </div>
+</div>
+
+<script>window.onload = () => window.print();</script>
+</body></html>`;
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    window.open(URL.createObjectURL(blob), '_blank');
+  };
+
   const toBase64 = (file: File) => new Promise<string>((res, rej) => {
     const r = new FileReader();
     r.onload  = () => res((r.result as string).split(',')[1]);
@@ -795,8 +915,17 @@ export const FichaClientePanel: React.FC<Props> = ({
                   </button>
                 )}
                 {contratoAssinado && (
-                  <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300">
-                    <CheckCircle2 className="h-3 w-3" /> Contrato assinado
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300">
+                      <CheckCircle2 className="h-3 w-3" /> Contrato assinado
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleGerarOS}
+                      className="flex items-center gap-1.5 rounded-lg border border-orange-500/40 bg-orange-500/15 px-2.5 py-1.5 text-[11px] font-semibold text-orange-300 hover:bg-orange-500/25"
+                    >
+                      <FileText className="h-3 w-3" /> Gerar O.S.
+                    </button>
                   </div>
                 )}
               </div>
