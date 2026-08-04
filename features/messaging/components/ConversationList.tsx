@@ -98,7 +98,7 @@ export const ConversationList = memo(function ConversationList({
   const [showFilters, setShowFilters] = useState(false);
   const [labelFilter, setLabelFilter] = useState<string>('all');
   // Lê a preferência salva nas configurações do usuário
-  const [inboxDefaultView] = usePersistedState<'mine' | 'all'>('crm_inbox_default_view', 'mine');
+  const [inboxDefaultView] = usePersistedState<'mine' | 'all'>('crm_inbox_default_view', 'all');
   const [myOnly, setMyOnly] = useState(() => inboxDefaultView !== 'all');
   const [agentFilter, setAgentFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
