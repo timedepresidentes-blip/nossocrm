@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { ServiceWorkerRegister } from '@/components/pwa/ServiceWorkerRegister'
@@ -12,6 +12,13 @@ export const metadata: Metadata = {
   other: {
     'facebook-domain-verification': 'pp2xjidmxftgughoygico9p1yawuu0',
   },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
 }
 
 /**

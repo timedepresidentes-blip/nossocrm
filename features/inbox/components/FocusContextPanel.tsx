@@ -62,6 +62,7 @@ const MessageComposerModal = dynamic(
 );
 import { callAIProxy } from '@/lib/supabase/ai-proxy';
 import type { ScriptCategory } from '@/lib/supabase/quickScripts';
+import { ContractSignSection } from '@/features/deals/components/ContractSignSection';
 
 // Performance: reuse Intl formatter instances.
 const PT_BR_SHORT_DATE_FORMATTER = new Intl.DateTimeFormat('pt-BR');
@@ -1511,7 +1512,7 @@ export const FocusContextPanel: React.FC<FocusContextPanelProps> = ({
                         <div className="w-[400px] flex flex-col min-h-0 bg-slate-900/20 border-l border-white/5 relative">
                             {/* Workspace Tabs */}
                             <div className="shrink-0 flex items-center px-4 h-14 border-b border-white/5 gap-4">
-                                {['chat', 'notas', 'scripts', 'files'].map((tab) => (
+                                {['chat', 'notas', 'scripts', 'files', 'contrato'].map((tab) => (
                                     <button
                                         key={tab}
                                         onClick={() => setActiveTab(tab)}
@@ -1520,7 +1521,7 @@ export const FocusContextPanel: React.FC<FocusContextPanelProps> = ({
                                             : 'text-slate-500 hover:text-slate-300'
                                             }`}
                                     >
-                                        {tab === 'notas' ? 'Notas' : tab === 'chat' ? 'Chat IA' : tab === 'scripts' ? 'Scripts' : 'Arquivos'}
+                                        {tab === 'notas' ? 'Notas' : tab === 'chat' ? 'Chat IA' : tab === 'scripts' ? 'Scripts' : tab === 'files' ? 'Arquivos' : 'Contrato'}
                                         {activeTab === tab && (
                                             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-500 shadow-[0_0_15px_rgba(var(--primary-500),0.8)]" />
                                         )}
@@ -1795,6 +1796,18 @@ export const FocusContextPanel: React.FC<FocusContextPanelProps> = ({
                                             })
                                         )}
                                     </div>
+                                </div>
+                            )}
+
+                            {/* Contrato Digital - ClickSign */}
+                            {activeTab === 'contrato' && (
+                                <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800">
+                                    <ContractSignSection
+                                        deal={deal}
+                                        contactName={contact?.name}
+                                        contactEmail={contact?.email}
+                                        contactPhone={contact?.phone}
+                                    />
                                 </div>
                             )}
 
