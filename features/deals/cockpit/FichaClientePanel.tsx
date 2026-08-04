@@ -216,7 +216,8 @@ export const FichaClientePanel: React.FC<Props> = ({
     window.open(URL.createObjectURL(blob), '_blank');
   };
 
-  const handleGerarOS = () => {
+  const handleGerarOS = async () => {
+    const logo = await fetchLogoBase64();
     const f = ficha;
     const hoje = new Date().toLocaleDateString('pt-BR');
     const osNum = `OS-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${dealId?.slice(0, 6).toUpperCase() ?? 'XXXXX'}`;
@@ -255,10 +256,13 @@ export const FichaClientePanel: React.FC<Props> = ({
 </head><body>
 
 <div class="header">
-  <div>
-    <div class="empresa">AUREON ENERGIX</div>
-    <div class="sub">F. R. C. CINTRA — CNPJ 33.071.872/0001-08</div>
-    <div class="sub">Araraquara — SP</div>
+  <div style="display:flex;align-items:center;gap:12px">
+    ${logo ? `<img src="${logo}" alt="Aureon Energix" style="height:52px;width:auto">` : ''}
+    <div>
+      <div class="empresa">AUREON ENERGIX</div>
+      <div class="sub">F. R. C. CINTRA — CNPJ 33.071.872/0001-08</div>
+      <div class="sub">Araraquara — SP</div>
+    </div>
   </div>
   <div style="text-align:right">
     <div class="sub">Data de emissão: ${hoje}</div>
@@ -419,9 +423,22 @@ export const FichaClientePanel: React.FC<Props> = ({
     }
   };
 
-  const handleGerarContrato = () => {
+  const fetchLogoBase64 = async (): Promise<string> => {
+    try {
+      const res = await fetch('/logo-aureon.png');
+      const blob = await res.blob();
+      return await new Promise<string>(resolve => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.readAsDataURL(blob);
+      });
+    } catch { return ''; }
+  };
+
+  const handleGerarContrato = async () => {
     const janela = window.open('', '_blank', 'width=900,height=1100');
     if (!janela) return;
+    const logo = await fetchLogoBase64();
     const ref = (dealId ?? 'N/D').slice(0, 8).toUpperCase();
     const endComp = [f.enderecoRua, f.enderecoBairro, f.enderecoCidade, f.enderecoEstado]
       .filter(Boolean).join(', ') + (f.enderecoCep ? ` — CEP ${f.enderecoCep}` : '');
@@ -453,6 +470,7 @@ export const FichaClientePanel: React.FC<Props> = ({
   @media print{body{padding:20px}.pb2{page-break-before:always}}
 </style></head><body>
 
+${logo ? `<div style="text-align:center;margin-bottom:12px"><img src="${logo}" alt="Aureon Energix" style="height:60px;width:auto"></div>` : ''}
 <h1>Contrato de Compra, Venda e Instalação<br>de Sistema de Geração Fotovoltaica</h1>
 <p class="sub">Nº de Referência: ${ref} &nbsp;|&nbsp; Data: ${hoje}</p>
 
