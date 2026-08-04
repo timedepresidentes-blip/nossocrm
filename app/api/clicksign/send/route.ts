@@ -17,16 +17,22 @@ function json(body: unknown, status = 200) {
   });
 }
 
-// Contrato Aureon Energix — assinaturas lado a lado na página 2 (A4, ~2 páginas)
-// Esquerda = Vendedora (empresa), Direita = Compradora
-// x/y/width/height em coordenadas relativas 0–1 (0,0 = topo-esquerda)
+// Contrato: assinaturas lado a lado na página 2
 const DEFAULT_COMPANY_POSITION: SignaturePosition = { page: 2, x: 0.05, y: 0.78, width: 0.38, height: 0.08 };
 const DEFAULT_CLIENT_POSITION: SignaturePosition  = { page: 2, x: 0.57, y: 0.78, width: 0.38, height: 0.08 };
+
+// Procuração: assinatura centralizada na página 1 (abaixo da linha de assinatura)
+const PROC_CLIENT_POSITION: SignaturePosition = { page: 1, x: 0.15, y: 0.72, width: 0.70, height: 0.08 };
 
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null);
-    const { dealId, pdfBase64, filename, signerName, signerEmail, signerPhone, companySignerName, companySignerEmail } = body ?? {};
+    const {
+      dealId, pdfBase64, filename,
+      signerName, signerEmail, signerPhone,
+      companySignerName, companySignerEmail,
+      procuracaoBase64, procuracaoFilename,
+    } = body ?? {};
 
     if (!pdfBase64) {
       return json({ error: 'pdfBase64 é obrigatório.' }, 400);
@@ -58,13 +64,21 @@ export async function POST(req: Request) {
     // 3. Adicionar signatário(s)
     const clientSigner = await addSigner(envelope.id, signerName, signerEmail, signerPhone);
 
-    // Posição do cliente
+    // Posição do cliente no contrato
     await addRequirement(envelope.id, document.id, clientSigner.id, DEFAULT_CLIENT_POSITION);
 
     // Signatário da empresa (opcional)
     if (companySignerEmail && companySignerName) {
       const companySigner = await addSigner(envelope.id, companySignerName, companySignerEmail);
       await addRequirement(envelope.id, document.id, companySigner.id, DEFAULT_COMPANY_POSITION);
+    }
+
+    // 3b. Procuração no mesmo envelope (opcional)
+    if (procuracaoBase64) {
+      const procFilename = procuracaoFilename ?? 'procuracao.pdf';
+      const procDocument = await addDocument(envelope.id, procFilename, procuracaoBase64);
+      // Apenas o cliente assina a procuração
+      await addRequirement(envelope.id, procDocument.id, clientSigner.id, PROC_CLIENT_POSITION);
     }
 
     // 4. Ativar (dispara os emails automaticamente)

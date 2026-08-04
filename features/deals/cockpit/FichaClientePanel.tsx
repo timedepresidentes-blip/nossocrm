@@ -75,12 +75,18 @@ export const FichaClientePanel: React.FC<Props> = ({
   const [marcandoContrato, setMarcandoContrato] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
-  // ClickSign
+  // ClickSign — contrato
   const pdfRefCs = useRef<HTMLInputElement>(null);
-  const [pdfFileCs, setPdfFileCs]     = useState<File | null>(null);
-  const [sendingCs, setSendingCs]     = useState(false);
-  const [sendResultCs, setSendResultCs] = useState<'ok' | 'error' | null>(null);
-  const [sendErrorCs, setSendErrorCs] = useState('');
+  const [pdfFileCs, setPdfFileCs]         = useState<File | null>(null);
+  const [sendingCs, setSendingCs]         = useState(false);
+  const [sendResultCs, setSendResultCs]   = useState<'ok' | 'error' | null>(null);
+  const [sendErrorCs, setSendErrorCs]     = useState('');
+
+  // ClickSign — procuração
+  const pdfRefProc = useRef<HTMLInputElement>(null);
+  const [inclProc, setInclProc]           = useState(false);   // toggle
+  const [pdfFileProc, setPdfFileProc]     = useState<File | null>(null);
+  const [procAvulsa, setProcAvulsa]       = useState(false);   // separado vs mesmo envelope
 
   // Carrega ficha salva no deal
   const load = useCallback(async () => {
@@ -165,37 +171,126 @@ export const FichaClientePanel: React.FC<Props> = ({
   };
 
   // Impressão do contrato — AUREON ENERGIX / F. R. C. CINTRA (contrato real)
+  // Gera HTML da procuração pré-preenchida com dados da ficha
+  const gerarProcuracaoHtml = () => {
+    const f = ficha;
+    const nome = f.nomeCompleto ?? '___________________________';
+    const cpf  = f.cpfCnpj ?? '___________';
+    const end  = [f.enderecoRua, f.enderecoBairro, f.enderecoCidade, f.enderecoEstado]
+      .filter(Boolean).join(', ') + (f.enderecoCep ? ` - CEP: ${f.enderecoCep}` : '');
+    const cidade = f.enderecoCidade ?? 'Araraquara';
+    const data   = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    return `<!DOCTYPE html><html lang="pt-BR"><head>
+<meta charset="UTF-8"><title>Procuração – ${nome}</title>
+<style>
+  @page { size: A4; margin: 35mm 30mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 12pt; line-height: 1.7; color: #1a1a1a; }
+  h1 { text-align: center; font-size: 16pt; font-weight: bold; margin-bottom: 40px; letter-spacing: 1px; }
+  p { text-align: justify; margin-bottom: 14px; }
+  u { text-decoration: underline; }
+  .data { text-align: center; margin: 50px 0 80px; }
+  .assin { text-align: center; margin-top: 20px; }
+  .linha { border-top: 1px solid #333; width: 68%; margin: 0 auto 8px; }
+  .nome-cpf { font-size: 11pt; }
+</style>
+</head>
+<body>
+<h1>PROCURAÇÃO</h1>
+<p>Pelo presente instrumento particular de procuração <strong>${nome.toUpperCase()}</strong>, portador do CPF:<strong>${cpf}</strong>, residente e domiciliado(a) no endereço: <strong>${end.toUpperCase()}</strong>, nomeia e constitui seu procurador <strong>HENRIQUE IWANO</strong>, portador do CPF: 365.349.468-07, situada no endereço: RUA VN 24, 294, CJH VIDA NOVA, BARRETOS - SP, CEP: 14.784-776, para representá-la junto à Companhia de Energia, com a finalidade específica assinalada abaixo:</p>
+<p>Outros poderes (especificar): <u>Viabilidade para carga no projeto de homologação energia solar, executar projeto elétrico de geração distribuída de energia solar fotovoltaica, solicitação de viabilidade, alteração de carga, inspeção, fiscalização, assinar ART, solicitação de acesso, compensação de créditos de energia elétrica e/ou quaisquer serviços necessários para instalação e homologação de usina solar fotovoltaica.</u></p>
+<div class="data">${cidade.toUpperCase()} – SP, ${data}.</div>
+<div class="assin">
+  <div class="linha"></div>
+  <div class="nome-cpf">Nome: ${nome.toUpperCase()}</div>
+  <div class="nome-cpf">CPF: ${cpf}</div>
+</div>
+<script>window.onload = () => window.print();</script>
+</body></html>`;
+  };
+
+  const handleAbrirProcuracao = () => {
+    const html  = gerarProcuracaoHtml();
+    const blob  = new Blob([html], { type: 'text/html;charset=utf-8' });
+    window.open(URL.createObjectURL(blob), '_blank');
+  };
+
+  const toBase64 = (file: File) => new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload  = () => res((r.result as string).split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+
   const handleEnviarAssinatura = async () => {
     if (!pdfFileCs) return;
-    const email = f.email;
-    if (!email) { setSendResultCs('error'); setSendErrorCs('Preencha o e-mail do cliente na ficha antes de enviar.'); return; }
+    const email = ficha.email;
+    if (!email) {
+      setSendResultCs('error');
+      setSendErrorCs('Preencha o e-mail do cliente na ficha antes de enviar.');
+      return;
+    }
+    if (inclProc && !pdfFileProc) {
+      setSendResultCs('error');
+      setSendErrorCs('Selecione também o PDF da procuração ou desmarque a opção.');
+      return;
+    }
+
     setSendingCs(true); setSendResultCs(null);
     try {
-      const base64 = await new Promise<string>((res, rej) => {
-        const reader = new FileReader();
-        reader.onload  = () => res((reader.result as string).split(',')[1]);
-        reader.onerror = rej;
-        reader.readAsDataURL(pdfFileCs);
-      });
+      const contratoBase64  = await toBase64(pdfFileCs);
+      const procBase64      = inclProc && pdfFileProc ? await toBase64(pdfFileProc) : null;
+
+      // Se procuração avulsa → envia em envelope separado ANTES do contrato
+      if (inclProc && procBase64 && procAvulsa) {
+        const respProc = await fetch('/api/clicksign/send', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            dealId:             'doc-avulso',
+            pdfBase64:          procBase64,
+            filename:           pdfFileProc!.name,
+            signerName:         ficha.nomeCompleto ?? 'Cliente',
+            signerEmail:        email,
+            signerPhone:        ficha.telefone ?? undefined,
+            // procuração: apenas cliente assina (sem vendedora)
+          }),
+        });
+        if (!respProc.ok) {
+          const d = await respProc.json();
+          throw new Error(`Procuração: ${d.error ?? 'Erro ao enviar.'}`);
+        }
+      }
+
+      // Envia contrato (+ procuração junto se não for avulsa)
       const resp = await fetch('/api/clicksign/send', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          dealId:             dealId ?? 'doc-avulso',
-          pdfBase64:          base64,
-          filename:           pdfFileCs.name,
-          signerName:         f.nomeCompleto ?? 'Cliente',
-          signerEmail:        email,
-          signerPhone:        f.telefone ?? undefined,
-          companySignerName:  'F.R.C Cintra',
-          companySignerEmail: 'fcintra4@hotmail.com',
+          dealId:                 dealId ?? 'doc-avulso',
+          pdfBase64:              contratoBase64,
+          filename:               pdfFileCs.name,
+          signerName:             ficha.nomeCompleto ?? 'Cliente',
+          signerEmail:            email,
+          signerPhone:            ficha.telefone ?? undefined,
+          companySignerName:      'F.R.C Cintra',
+          companySignerEmail:     'fcintra4@hotmail.com',
+          // procuração no mesmo envelope (não avulsa)
+          ...(inclProc && procBase64 && !procAvulsa ? {
+            procuracaoBase64:     procBase64,
+            procuracaoFilename:   pdfFileProc!.name,
+          } : {}),
         }),
       });
+
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error ?? 'Erro ao enviar.');
+
       setSendResultCs('ok');
-      setPdfFileCs(null);
-      if (pdfRefCs.current) pdfRefCs.current.value = '';
+      setPdfFileCs(null);  setPdfFileProc(null);
+      if (pdfRefCs.current)   pdfRefCs.current.value   = '';
+      if (pdfRefProc.current) pdfRefProc.current.value = '';
     } catch (e) {
       setSendResultCs('error');
       setSendErrorCs(e instanceof Error ? e.message : 'Erro desconhecido.');
@@ -602,9 +697,58 @@ export const FichaClientePanel: React.FC<Props> = ({
                   <FileText className="h-3 w-3" /> Gerar contrato
                 </button>
                 {/* Enviar para Assinatura Digital (ClickSign) */}
-                <div className="w-full mt-1 pt-1 border-t border-white/5">
-                  <input ref={pdfRefCs} type="file" accept=".pdf" className="hidden"
+                <div className="w-full mt-1 pt-2 border-t border-white/5 space-y-2">
+                  {/* Inputs ocultos */}
+                  <input ref={pdfRefCs}   type="file" accept=".pdf" className="hidden"
                     onChange={e => { setPdfFileCs(e.target.files?.[0] ?? null); setSendResultCs(null); }} />
+                  <input ref={pdfRefProc} type="file" accept=".pdf" className="hidden"
+                    onChange={e => { setPdfFileProc(e.target.files?.[0] ?? null); setSendResultCs(null); }} />
+
+                  {/* Toggle procuração */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setInclProc(v => !v); setPdfFileProc(null); setSendResultCs(null); }}
+                      className={`relative inline-flex h-4 w-7 shrink-0 rounded-full border transition-colors ${inclProc ? 'bg-amber-500 border-amber-400' : 'bg-white/10 border-white/20'}`}
+                    >
+                      <span className={`inline-block h-3 w-3 rounded-full bg-white shadow transition-transform mt-0.5 ${inclProc ? 'translate-x-3' : 'translate-x-0.5'}`} />
+                    </button>
+                    <span className="text-[11px] text-slate-400">Incluir Procuração</span>
+                    {inclProc && (
+                      <label className="flex items-center gap-1 ml-1 text-[10px] text-slate-500 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={procAvulsa}
+                          onChange={e => setProcAvulsa(e.target.checked)}
+                          className="accent-amber-500 h-3 w-3"
+                        />
+                        Envelope separado
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Upload procuração (aparece só quando toggle ON) */}
+                  {inclProc && (
+                    <div className="flex items-center gap-1.5 flex-wrap pl-1">
+                      <button
+                        type="button"
+                        onClick={handleAbrirProcuracao}
+                        className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/15"
+                      >
+                        <FileText className="h-3 w-3" /> Gerar Procuração
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => pdfRefProc.current?.click()}
+                        className="flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/8 px-2.5 py-1.5 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/12"
+                      >
+                        <Upload className="h-3 w-3" />
+                        {pdfFileProc ? pdfFileProc.name.slice(0, 18) + (pdfFileProc.name.length > 18 ? '…' : '') : 'PDF da Procuração'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Upload contrato + botão enviar */}
                   <div className="flex gap-1.5 items-center flex-wrap">
                     <button
                       type="button"
@@ -612,7 +756,7 @@ export const FichaClientePanel: React.FC<Props> = ({
                       className="flex items-center gap-1.5 rounded-lg border border-blue-500/30 bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-blue-300 hover:bg-blue-500/15"
                     >
                       <Upload className="h-3 w-3" />
-                      {pdfFileCs ? pdfFileCs.name.slice(0, 20) + (pdfFileCs.name.length > 20 ? '…' : '') : 'Selecionar PDF'}
+                      {pdfFileCs ? pdfFileCs.name.slice(0, 18) + (pdfFileCs.name.length > 18 ? '…' : '') : 'PDF do Contrato'}
                     </button>
                     <button
                       type="button"
@@ -624,13 +768,16 @@ export const FichaClientePanel: React.FC<Props> = ({
                       {sendingCs ? 'Enviando…' : 'Enviar p/ Assinatura'}
                     </button>
                   </div>
+
                   {sendResultCs === 'ok' && (
-                    <p className="text-[10px] text-emerald-400 flex items-center gap-1 mt-1">
-                      <CheckCircle2 className="h-3 w-3" /> Enviado! {f.nomeCompleto} e você receberão e-mail da ClickSign.
+                    <p className="text-[10px] text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Enviado! {ficha.nomeCompleto} e você receberão e-mail da ClickSign.
+                      {inclProc && procAvulsa && ' (Procuração em envelope separado.)'}
                     </p>
                   )}
                   {sendResultCs === 'error' && (
-                    <p className="text-[10px] text-red-400 flex items-center gap-1 mt-1">
+                    <p className="text-[10px] text-red-400 flex items-center gap-1">
                       <XCircle className="h-3 w-3" /> {sendErrorCs}
                     </p>
                   )}
