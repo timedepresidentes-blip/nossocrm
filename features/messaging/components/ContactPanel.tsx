@@ -432,6 +432,15 @@ export const ContactPanel = memo(function ContactPanel({
             <p className="text-sm text-slate-500 dark:text-slate-400">
               {channelName}
             </p>
+            {contactPhone && (
+              <a
+                href={`tel:${contactPhone}`}
+                className="flex items-center gap-1 mt-0.5 text-sm text-primary-500 dark:text-primary-400 hover:underline"
+              >
+                <Phone className="w-3.5 h-3.5 shrink-0" />
+                {contactPhone}
+              </a>
+            )}
             {/* Status badges */}
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <span
