@@ -246,7 +246,7 @@ export const FichaClientePanel: React.FC<Props> = ({
   .checklist { list-style: none; margin: 4px 0; }
   .checklist li { display: flex; align-items: center; gap: 8px; font-size: 10pt; margin-bottom: 5px; }
   .check { width: 14px; height: 14px; border: 1.5px solid #333; border-radius: 2px; flex-shrink: 0; }
-  .assinaturas { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 32px; }
+  .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 32px; max-width: 600px; }
   .assin-bloco { text-align: center; }
   .assin-linha { border-top: 1px solid #333; margin-bottom: 4px; }
   .assin-nome { font-size: 9pt; }
@@ -309,8 +309,6 @@ export const FichaClientePanel: React.FC<Props> = ({
 <ul class="checklist">
   <li><span class="check"></span> Equipamentos instalados conforme especificação técnica</li>
   <li><span class="check"></span> Sistema ligado e testado (geração verificada no inversor)</li>
-  <li><span class="check"></span> Quadro elétrico organizado e identificado</li>
-  <li><span class="check"></span> String box / proteções CA e CC instaladas</li>
   <li><span class="check"></span> Estrutura fixada e vedações concluídas</li>
   <li><span class="check"></span> Local limpo e entregue ao cliente</li>
   <li><span class="check"></span> Cliente orientado sobre o funcionamento e aplicativo de monitoramento</li>
@@ -327,10 +325,6 @@ export const FichaClientePanel: React.FC<Props> = ({
   <div class="assin-bloco">
     <div class="assin-linha"></div>
     <div class="assin-nome">FENIX SOLAR<br>Responsável pela instalação</div>
-  </div>
-  <div class="assin-bloco">
-    <div class="assin-linha"></div>
-    <div class="assin-nome">AUREON ENERGIX<br>F. R. C. CINTRA</div>
   </div>
 </div>
 
