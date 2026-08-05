@@ -2,7 +2,7 @@ import { generateText, Output } from 'ai';
 import { requireAITaskContext, AITaskHttpError } from '@/lib/ai/tasks/server';
 import { FichaClienteSchema } from '@/lib/ai/schemas/fichaCliente';
 
-export const maxDuration = 90;
+export const maxDuration = 120;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -11,32 +11,33 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-const SYSTEM_PROMPT = `Você é especialista em extrair dados cadastrais e comerciais de contratos de energia solar.
+const EXTRACT_SYSTEM = `Você é um extrator de dados de contratos de energia solar.
+Leia o documento inteiro e transcreva TODOS os dados relevantes, preservando valores e nomes exatamente como aparecem:
+- Dados do cliente: nome completo, CPF/CNPJ, RG, telefone, e-mail, estado civil
+- Endereço do cliente: rua, número, bairro, cidade, estado, CEP
+- Local de instalação (se diferente do endereço)
+- Tipo de imóvel, telhado, fases elétricas, disjuntor
+- Sistema fotovoltaico: potência em kWp, quantidade e modelo dos painéis, potência unitária, modelo e quantidade do inversor, tipo de estrutura
+- Valor total do contrato em R$, forma de pagamento, parcelas/financiamento, prazo
+- Distribuidora, consumo mensal, valor da conta (se constar)
+Seja fiel ao documento. Não invente informações.`;
 
-Analise o documento completo e extraia TODAS as informações presentes para montar a ficha do cliente.
-
-Extraia com atenção:
-- Dados pessoais: nome completo, CPF/CNPJ, RG, telefone, e-mail, estado civil
-- Endereço completo do cliente (rua, bairro, cidade, estado, CEP)
-- Local de instalação (se diferente do endereço do cliente)
-- Tipo de imóvel e características elétricas (fases, disjuntor, tipo de telhado)
-- Sistema solar: potência total em kWp, quantidade e modelo dos painéis, potência unitária do painel, modelo e quantidade do inversor/microinversor, tipo de estrutura
-- Condições comerciais: valor total do contrato em R$ (número puro), forma de pagamento, parcelas/financiamento, prazo de entrega/instalação
-- Consumo atual, distribuidora, valor da conta de energia (se constar)
-- Observações relevantes
-
-REGRAS CRÍTICAS:
-- Extraia SOMENTE o que está explícito no documento
-- Nunca invente nem suponha dados ausentes — retorne null para o que não constar
-- valorTotal deve ser um número (ex: 28500.00), não uma string
-- potenciaKwp deve ser um número (ex: 3.85), não uma string`;
+const STRUCTURE_SYSTEM = `Você é especialista em estruturar dados de contratos de energia solar.
+Analise o texto transcrito e preencha os campos do esquema.
+REGRAS:
+- Extraia SOMENTE o que está no texto
+- Não invente nem suponha dados ausentes — retorne null
+- valorTotal deve ser número (ex: 28500.00)
+- potenciaKwp deve ser número (ex: 3.85)`;
 
 export async function POST(req: Request) {
   try {
     const { model, supabase } = await requireAITaskContext(req);
 
     const formData = await req.formData().catch(() => null);
-    if (!formData) return json({ error: { code: 'INVALID_BODY', message: 'Envie o PDF via multipart/form-data.' } }, 400);
+    if (!formData) {
+      return json({ error: { code: 'INVALID_BODY', message: 'Envie o PDF via multipart/form-data.' } }, 400);
+    }
 
     const pdfFile = formData.get('pdf') as File | null;
     const dealId  = formData.get('dealId') as string | null;
@@ -52,25 +53,41 @@ export async function POST(req: Request) {
     const pdfBuffer = await pdfFile.arrayBuffer();
     const pdfBase64 = Buffer.from(pdfBuffer).toString('base64');
 
-    const result = await generateText({
+    // Passo 1 — extrai texto do PDF via modelo multimodal
+    const textResult = await generateText({
       model,
       maxRetries: 2,
-      output: Output.object({ schema: FichaClienteSchema }),
-      system: SYSTEM_PROMPT,
+      system: EXTRACT_SYSTEM,
       messages: [
         {
           role: 'user',
           content: [
             { type: 'file', data: pdfBase64, mimeType: 'application/pdf' },
-            { type: 'text', text: 'Extraia todos os dados deste contrato de energia solar conforme as instruções.' },
+            { type: 'text', text: 'Transcreva todos os dados relevantes deste contrato.' },
           ],
         },
       ],
     });
 
-    const ficha = result.output;
+    if (!textResult.text?.trim()) {
+      return json({ error: { code: 'EMPTY_EXTRACTION', message: 'Não foi possível ler o conteúdo do PDF.' } }, 422);
+    }
 
-    // Atualiza deal se fornecido: ficha, valor e título (quando não preenchidos)
+    // Passo 2 — estrutura o texto extraído usando Output.object (sem arquivo)
+    const structResult = await generateText({
+      model,
+      maxRetries: 2,
+      output: Output.object({ schema: FichaClienteSchema }),
+      system: STRUCTURE_SYSTEM,
+      prompt: textResult.text,
+    });
+
+    const ficha = structResult.output;
+    if (!ficha) {
+      return json({ error: { code: 'PARSE_ERROR', message: 'Não foi possível estruturar os dados extraídos.' } }, 422);
+    }
+
+    // Atualiza deal se fornecido
     if (dealId && ficha) {
       const { data: deal } = await supabase
         .from('deals')
@@ -84,13 +101,11 @@ export async function POST(req: Request) {
         updated_at: new Date().toISOString(),
       };
 
-      // Atualiza valor do deal se estiver vazio/zero e o contrato trouxer valorTotal
       if (ficha.valorTotal && (!deal?.value || deal.value === 0)) {
         updates.value = ficha.valorTotal;
       }
 
-      // Atualiza título com o nome do cliente se o título for genérico
-      if (ficha.nomeCompleto && deal?.title && deal.title.startsWith('Deal -')) {
+      if (ficha.nomeCompleto && deal?.title?.startsWith('Deal -')) {
         updates.title = `Deal - ${ficha.nomeCompleto}`;
       }
 
@@ -101,7 +116,12 @@ export async function POST(req: Request) {
   } catch (err: unknown) {
     if (err instanceof AITaskHttpError) return err.toResponse();
     const e = err as Record<string, unknown>;
-    console.error('[api/ai/tasks/deals/ficha-from-pdf] Error:', e);
-    return json({ error: { code: 'INTERNAL_ERROR', message: (e.message as string) || 'Erro ao extrair dados do contrato.' } }, 500);
+    console.error('[ficha-from-pdf]', e);
+    return json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: (e?.message as string) || 'Erro ao processar o contrato.',
+      },
+    }, 500);
   }
 }
