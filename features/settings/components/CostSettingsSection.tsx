@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { CheckCircle2, DollarSign, Loader2 } from 'lucide-react';
 import { orgSettingsService, OrgCostSettings } from '@/lib/supabase/orgSettings';
 import { Button } from '@/components/ui/button';
+import { MoneyInput } from '@/components/ui/MoneyInput';
 
 const defaults: OrgCostSettings = {
   custoArt: 0,
@@ -33,8 +34,8 @@ export const CostSettingsSection: React.FC = () => {
     });
   }, []);
 
-  const setNum = (key: keyof OrgCostSettings) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm((f) => ({ ...f, [key]: parseFloat(e.target.value) || 0 }));
+  const setNum = (key: keyof OrgCostSettings) => (val: number) =>
+    setForm((f) => ({ ...f, [key]: val }));
 
   const handleSave = async () => {
     setSaving(true);
@@ -88,7 +89,7 @@ export const CostSettingsSection: React.FC = () => {
             <div>
               <label className={lbl}>NF — Total do kit solar (%)</label>
               <div className="relative">
-                <input type="number" min={0} max={100} step={0.01} value={form.custoNfKitPct} onChange={setNum('custoNfKitPct')} className={inp} placeholder="4" />
+                <MoneyInput value={form.custoNfKitPct} onChange={setNum('custoNfKitPct')} min={0} max={100} className={inp} placeholder="4" />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">%</span>
               </div>
               <p className={hint}>% aplicado ao valor total da nota fiscal (kit + serviço).</p>
@@ -96,7 +97,7 @@ export const CostSettingsSection: React.FC = () => {
             <div>
               <label className={lbl}>NF — Somente serviço (%)</label>
               <div className="relative">
-                <input type="number" min={0} max={100} step={0.01} value={form.custoNfServicoPct} onChange={setNum('custoNfServicoPct')} className={inp} placeholder="6" />
+                <MoneyInput value={form.custoNfServicoPct} onChange={setNum('custoNfServicoPct')} min={0} max={100} className={inp} placeholder="6" />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">%</span>
               </div>
               <p className={hint}>% aplicado sobre a diferença entre o valor final vendido ao cliente e o custo do fornecedor. Ex.: venda R$28.000 – fornecedor R$20.000 = R$8.000 × 6% = R$480.</p>
@@ -115,21 +116,21 @@ export const CostSettingsSection: React.FC = () => {
               <label className={lbl}>1 a 2,99 kWp</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">R$</span>
-                <input type="number" min={0} step={0.01} value={form.custoEng1a3kwp} onChange={setNum('custoEng1a3kwp')} className={inp + ' pl-8'} placeholder="350" />
+                <MoneyInput value={form.custoEng1a3kwp} onChange={setNum('custoEng1a3kwp')} min={0} className={inp + ' pl-8'} placeholder="350" />
               </div>
             </div>
             <div>
               <label className={lbl}>3 a 4,99 kWp</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">R$</span>
-                <input type="number" min={0} step={0.01} value={form.custoEng3a5kwp} onChange={setNum('custoEng3a5kwp')} className={inp + ' pl-8'} placeholder="450" />
+                <MoneyInput value={form.custoEng3a5kwp} onChange={setNum('custoEng3a5kwp')} min={0} className={inp + ' pl-8'} placeholder="450" />
               </div>
             </div>
             <div>
               <label className={lbl}>Acima de 5 kWp</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">R$</span>
-                <input type="number" min={0} step={0.01} value={form.custoEngAcima5kwp} onChange={setNum('custoEngAcima5kwp')} className={inp + ' pl-8'} placeholder="600" />
+                <MoneyInput value={form.custoEngAcima5kwp} onChange={setNum('custoEngAcima5kwp')} min={0} className={inp + ' pl-8'} placeholder="600" />
               </div>
             </div>
           </div>
@@ -137,7 +138,7 @@ export const CostSettingsSection: React.FC = () => {
             <label className={lbl}>ART de Engenharia (fixo por projeto)</label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">R$</span>
-              <input type="number" min={0} step={0.01} value={form.custoArt} onChange={setNum('custoArt')} className={inp + ' pl-8'} placeholder="0" />
+              <MoneyInput value={form.custoArt} onChange={setNum('custoArt')} min={0} className={inp + ' pl-8'} placeholder="0" />
             </div>
             <p className={hint}>Custo fixo da Anotação de Responsabilidade Técnica por projeto.</p>
           </div>
@@ -151,14 +152,14 @@ export const CostSettingsSection: React.FC = () => {
               <label className={lbl}>Corrugado (por orçamento)</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">R$</span>
-                <input type="number" min={0} step={0.01} value={form.custoCorrugado} onChange={setNum('custoCorrugado')} className={inp + ' pl-8'} placeholder="0" />
+                <MoneyInput value={form.custoCorrugado} onChange={setNum('custoCorrugado')} min={0} className={inp + ' pl-8'} placeholder="0" />
               </div>
             </div>
             <div>
               <label className={lbl}>Eletroduto (por orçamento)</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">R$</span>
-                <input type="number" min={0} step={0.01} value={form.custoEletroduto} onChange={setNum('custoEletroduto')} className={inp + ' pl-8'} placeholder="0" />
+                <MoneyInput value={form.custoEletroduto} onChange={setNum('custoEletroduto')} min={0} className={inp + ' pl-8'} placeholder="0" />
               </div>
             </div>
           </div>
@@ -174,14 +175,14 @@ export const CostSettingsSection: React.FC = () => {
             <div>
               <label className={lbl}>Comissão padrão (até 4,99 kWp)</label>
               <div className="relative">
-                <input type="number" min={0} max={100} step={0.01} value={form.custoComissaoPct} onChange={setNum('custoComissaoPct')} className={inp} placeholder="5" />
+                <MoneyInput value={form.custoComissaoPct} onChange={setNum('custoComissaoPct')} min={0} max={100} className={inp} placeholder="5" />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">%</span>
               </div>
             </div>
             <div>
               <label className={lbl}>Comissão acima de 5 kWp (vendedor)</label>
               <div className="relative">
-                <input type="number" min={0} max={100} step={0.01} value={form.custoComissaoAcima5kwpPct} onChange={setNum('custoComissaoAcima5kwpPct')} className={inp} placeholder="7" />
+                <MoneyInput value={form.custoComissaoAcima5kwpPct} onChange={setNum('custoComissaoAcima5kwpPct')} min={0} max={100} className={inp} placeholder="7" />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">%</span>
               </div>
               <p className={hint}>Aplicado automaticamente para sistemas ≥ 5 kWp.</p>

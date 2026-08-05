@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, DollarSign, Loader2, Plus, TrendingUp, X } from 'lucide-react';
 import { dealCostsService, calcDealCosts, calcEngCost, calcComissaoPct, calcNfCost, DealCostData } from '@/lib/supabase/dealCosts';
 import { orgSettingsService, OrgCostSettings } from '@/lib/supabase/orgSettings';
+import { MoneyInput } from '@/components/ui/MoneyInput';
 
 interface Props {
   dealId: string;
@@ -75,14 +76,13 @@ export const DealCostsPanel: React.FC<Props> = ({ dealId, valorVenda, kwp }) => 
     setCosts((prev) => recalc({ ...prev, custoNfTipo: tipo }, orgCfg));
   };
 
-  const setField = (key: keyof DealCostData) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = parseFloat(e.target.value) || 0;
+  const setField = (key: keyof DealCostData) => (val: number) => {
     setCosts((prev) => recalc({ ...prev, [key]: val }, orgCfg));
   };
 
   const adicionarExtra = () => {
     const desc = newExtraDesc.trim();
-    const valor = parseFloat(newExtraValor) || 0;
+    const valor = parseFloat(newExtraValor.replace(',', '.')) || 0;
     if (!desc) return;
     setCosts((prev) => {
       const extras = [...prev.custosExtras, { descricao: desc, valor }];
@@ -164,7 +164,7 @@ export const DealCostsPanel: React.FC<Props> = ({ dealId, valorVenda, kwp }) => 
             <div className="text-[10px] text-slate-500 mb-0.5">{label}</div>
             <div className="relative">
               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">R$</span>
-              <input type="number" min={0} step={0.01} value={costs[key] || ''} onChange={setField(key)} className={inputCls + ' pl-6'} placeholder="0" />
+              <MoneyInput value={costs[key] as number} onChange={setField(key)} className={inputCls + ' pl-6'} placeholder="0" min={0} />
             </div>
           </div>
         ))}
@@ -188,8 +188,8 @@ export const DealCostsPanel: React.FC<Props> = ({ dealId, valorVenda, kwp }) => 
             onKeyDown={(e) => e.key === 'Enter' && adicionarExtra()} />
           <div className="relative w-20 shrink-0">
             <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">R$</span>
-            <input type="number" min={0} step={0.01} value={newExtraValor}
-              onChange={(e) => setNewExtraValor(e.target.value)}
+            <input type="text" inputMode="decimal" value={newExtraValor}
+              onChange={(e) => setNewExtraValor(e.target.value.replace(/[^\d,\.]/g, ''))}
               placeholder="0" className={inputCls + ' pl-6'}
               onKeyDown={(e) => e.key === 'Enter' && adicionarExtra()} />
           </div>
