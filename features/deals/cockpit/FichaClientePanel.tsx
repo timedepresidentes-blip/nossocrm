@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2, ChevronDown, ChevronUp, ClipboardList,
-  Download, FileText, Loader2, RefreshCw, Save, Send, Upload, XCircle,
+  Download, FileText, Loader2, RefreshCw, Save, Send, ScanSearch, Upload, XCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -88,6 +88,11 @@ export const FichaClientePanel: React.FC<Props> = ({
   const [pdfFileProc, setPdfFileProc]     = useState<File | null>(null);
   const [procAvulsa, setProcAvulsa]       = useState(false);   // separado vs mesmo envelope
 
+  // Extração via contrato PDF
+  const pdfContratoRef = useRef<HTMLInputElement>(null);
+  const [extractingPdf, setExtractingPdf] = useState(false);
+  const [pdfExtractMsg, setPdfExtractMsg] = useState<'ok' | 'error' | null>(null);
+
   // Carrega ficha salva no deal
   const load = useCallback(async () => {
     if (!supabase || !dealId) return;
@@ -117,6 +122,32 @@ export const FichaClientePanel: React.FC<Props> = ({
       if (body.ficha) setFicha(body.ficha);
     } finally {
       setExtracting(false);
+    }
+  };
+
+  // Extração via contrato PDF assinado
+  const handleExtrairContrato = async (file: File) => {
+    setExtractingPdf(true);
+    setPdfExtractMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append('pdf', file);
+      if (dealId) fd.append('dealId', dealId);
+      const res = await fetch('/api/ai/tasks/deals/ficha-from-pdf', { method: 'POST', body: fd });
+      const body = await res.json();
+      if (body.ficha) {
+        setFicha(body.ficha);
+        if (body.ficha.valorTotal || body.ficha.nomeCompleto) setContratoAssinado(true);
+        setPdfExtractMsg('ok');
+      } else {
+        setPdfExtractMsg('error');
+      }
+    } catch {
+      setPdfExtractMsg('error');
+    } finally {
+      setExtractingPdf(false);
+      setTimeout(() => setPdfExtractMsg(null), 5000);
+      if (pdfContratoRef.current) pdfContratoRef.current.value = '';
     }
   };
 
@@ -803,6 +834,38 @@ ${logo ? `<div style="text-align:center;margin-bottom:12px"><img src="${logo}" a
                   {extracting ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                   {extracting ? 'Extraindo...' : 'Extrair da conversa (IA)'}
                 </button>
+
+                {/* Extração via contrato PDF */}
+                <input
+                  ref={pdfContratoRef}
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void handleExtrairContrato(f);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => pdfContratoRef.current?.click()}
+                  disabled={extractingPdf}
+                  className="flex items-center gap-1.5 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-violet-300 hover:bg-violet-500/15 disabled:opacity-50"
+                  title="Faça upload do contrato assinado (PDF) para extrair os dados automaticamente"
+                >
+                  {extractingPdf ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanSearch className="h-3 w-3" />}
+                  {extractingPdf ? 'Lendo contrato...' : 'Extrair do contrato (PDF)'}
+                </button>
+                {pdfExtractMsg === 'ok' && (
+                  <span className="flex items-center gap-1 text-[10px] text-emerald-400">
+                    <CheckCircle2 className="h-3 w-3" /> Dados extraídos com sucesso!
+                  </span>
+                )}
+                {pdfExtractMsg === 'error' && (
+                  <span className="flex items-center gap-1 text-[10px] text-rose-400">
+                    <XCircle className="h-3 w-3" /> Falha ao ler o contrato.
+                  </span>
+                )}
                 {dealId && (
                   <button
                     type="button"
