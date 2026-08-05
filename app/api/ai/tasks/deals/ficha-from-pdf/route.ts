@@ -1,4 +1,4 @@
-import { generateText, Output } from 'ai';
+import { generateText, generateObject } from 'ai';
 import { requireAITaskContext, AITaskHttpError } from '@/lib/ai/tasks/server';
 import { FichaClienteSchema } from '@/lib/ai/schemas/fichaCliente';
 
@@ -53,38 +53,51 @@ export async function POST(req: Request) {
     const pdfBuffer = await pdfFile.arrayBuffer();
     const pdfBase64 = Buffer.from(pdfBuffer).toString('base64');
 
-    // Passo 1 — extrai texto do PDF via modelo multimodal
-    const textResult = await generateText({
-      model,
-      maxRetries: 2,
-      system: EXTRACT_SYSTEM,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'file', data: pdfBase64, mimeType: 'application/pdf' },
-            { type: 'text', text: 'Transcreva todos os dados relevantes deste contrato.' },
-          ],
-        },
-      ],
-    });
-
-    if (!textResult.text?.trim()) {
-      return json({ error: { code: 'EMPTY_EXTRACTION', message: 'Não foi possível ler o conteúdo do PDF.' } }, 422);
+    // Passo 1 — extrai texto do PDF via modelo multimodal (sem saída estruturada)
+    let extractedText: string;
+    try {
+      const textResult = await generateText({
+        model,
+        maxRetries: 1,
+        system: EXTRACT_SYSTEM,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'file', data: pdfBase64, mimeType: 'application/pdf' },
+              { type: 'text', text: 'Transcreva todos os dados relevantes deste contrato.' },
+            ],
+          },
+        ],
+      });
+      extractedText = textResult.text?.trim() ?? '';
+    } catch (err: unknown) {
+      const msg = (err as Record<string, unknown>)?.message as string | undefined;
+      return json({
+        error: { code: 'PDF_READ_ERROR', message: `Falha ao processar o PDF: ${msg ?? 'erro desconhecido'}` },
+      }, 422);
     }
 
-    // Passo 2 — estrutura o texto extraído usando Output.object (sem arquivo)
-    const structResult = await generateText({
-      model,
-      maxRetries: 2,
-      output: Output.object({ schema: FichaClienteSchema }),
-      system: STRUCTURE_SYSTEM,
-      prompt: textResult.text,
-    });
+    if (!extractedText) {
+      return json({ error: { code: 'EMPTY_EXTRACTION', message: 'O modelo não conseguiu ler o conteúdo do PDF. Verifique se o arquivo está legível.' } }, 422);
+    }
 
-    const ficha = structResult.output;
-    if (!ficha) {
-      return json({ error: { code: 'PARSE_ERROR', message: 'Não foi possível estruturar os dados extraídos.' } }, 422);
+    // Passo 2 — estrutura o texto extraído com generateObject (sem arquivo)
+    let ficha: Record<string, unknown>;
+    try {
+      const { object } = await generateObject({
+        model,
+        schema: FichaClienteSchema,
+        maxRetries: 2,
+        system: STRUCTURE_SYSTEM,
+        prompt: extractedText,
+      });
+      ficha = object as Record<string, unknown>;
+    } catch (err: unknown) {
+      const msg = (err as Record<string, unknown>)?.message as string | undefined;
+      return json({
+        error: { code: 'STRUCTURE_ERROR', message: `Falha ao estruturar os dados: ${msg ?? 'erro desconhecido'}` },
+      }, 422);
     }
 
     // Atualiza deal se fornecido
@@ -101,12 +114,14 @@ export async function POST(req: Request) {
         updated_at: new Date().toISOString(),
       };
 
-      if (ficha.valorTotal && (!deal?.value || deal.value === 0)) {
-        updates.value = ficha.valorTotal;
+      const valorTotal = ficha.valorTotal as number | null;
+      if (valorTotal && (!deal?.value || deal.value === 0)) {
+        updates.value = valorTotal;
       }
 
-      if (ficha.nomeCompleto && deal?.title?.startsWith('Deal -')) {
-        updates.title = `Deal - ${ficha.nomeCompleto}`;
+      const nomeCompleto = ficha.nomeCompleto as string | null;
+      if (nomeCompleto && deal?.title?.startsWith('Deal -')) {
+        updates.title = `Deal - ${nomeCompleto}`;
       }
 
       await supabase.from('deals').update(updates).eq('id', dealId);
@@ -120,7 +135,7 @@ export async function POST(req: Request) {
     return json({
       error: {
         code: 'INTERNAL_ERROR',
-        message: (e?.message as string) || 'Erro ao processar o contrato.',
+        message: (e?.message as string) || 'Erro interno ao processar o contrato.',
       },
     }, 500);
   }

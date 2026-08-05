@@ -92,6 +92,7 @@ export const FichaClientePanel: React.FC<Props> = ({
   const pdfContratoRef = useRef<HTMLInputElement>(null);
   const [extractingPdf, setExtractingPdf] = useState(false);
   const [pdfExtractMsg, setPdfExtractMsg] = useState<'ok' | 'error' | null>(null);
+  const [pdfExtractError, setPdfExtractError] = useState<string>('');
 
   // Carrega ficha salva no deal
   const load = useCallback(async () => {
@@ -129,24 +130,28 @@ export const FichaClientePanel: React.FC<Props> = ({
   const handleExtrairContrato = async (file: File) => {
     setExtractingPdf(true);
     setPdfExtractMsg(null);
+    setPdfExtractError('');
     try {
       const fd = new FormData();
       fd.append('pdf', file);
       if (dealId) fd.append('dealId', dealId);
       const res = await fetch('/api/ai/tasks/deals/ficha-from-pdf', { method: 'POST', body: fd });
-      const body = await res.json();
+      const body = await res.json().catch(() => ({}));
       if (body.ficha) {
         setFicha(body.ficha);
         if (body.ficha.valorTotal || body.ficha.nomeCompleto) setContratoAssinado(true);
         setPdfExtractMsg('ok');
       } else {
+        const msg = body.error?.message || `HTTP ${res.status}`;
+        setPdfExtractError(msg);
         setPdfExtractMsg('error');
       }
-    } catch {
+    } catch (e: unknown) {
+      setPdfExtractError(e instanceof Error ? e.message : 'Erro de rede');
       setPdfExtractMsg('error');
     } finally {
       setExtractingPdf(false);
-      setTimeout(() => setPdfExtractMsg(null), 5000);
+      setTimeout(() => setPdfExtractMsg(null), 8000);
       if (pdfContratoRef.current) pdfContratoRef.current.value = '';
     }
   };
@@ -862,8 +867,9 @@ ${logo ? `<div style="text-align:center;margin-bottom:12px"><img src="${logo}" a
                   </span>
                 )}
                 {pdfExtractMsg === 'error' && (
-                  <span className="flex items-center gap-1 text-[10px] text-rose-400">
-                    <XCircle className="h-3 w-3" /> Falha ao ler o contrato.
+                  <span className="flex flex-col gap-0.5 text-[10px] text-rose-400">
+                    <span className="flex items-center gap-1"><XCircle className="h-3 w-3 shrink-0" /> Falha ao ler o contrato.</span>
+                    {pdfExtractError && <span className="pl-4 text-rose-300/70">{pdfExtractError}</span>}
                   </span>
                 )}
                 {dealId && (
