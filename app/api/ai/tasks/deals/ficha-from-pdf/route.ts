@@ -64,7 +64,7 @@ export async function POST(req: Request) {
           {
             role: 'user',
             content: [
-              { type: 'file', data: pdfBase64, mimeType: 'application/pdf' },
+              { type: 'file', data: pdfBase64, mediaType: 'application/pdf' },
               { type: 'text', text: 'Transcreva todos os dados relevantes deste contrato.' },
             ],
           },
