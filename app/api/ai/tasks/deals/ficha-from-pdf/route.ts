@@ -108,10 +108,15 @@ export async function POST(req: Request) {
         .eq('id', dealId)
         .maybeSingle();
 
+      const agora = new Date().toISOString();
       const updates: Record<string, unknown> = {
         ficha_cliente: ficha,
         contrato_assinado: true,
-        updated_at: new Date().toISOString(),
+        contrato_assinado_at: agora,
+        is_won: true,
+        is_lost: false,
+        closed_at: agora,
+        updated_at: agora,
       };
 
       const valorTotal = ficha.valorTotal as number | null;

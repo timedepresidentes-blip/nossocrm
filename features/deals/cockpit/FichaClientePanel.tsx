@@ -176,7 +176,14 @@ export const FichaClientePanel: React.FC<Props> = ({
     const agora = new Date().toISOString();
     await supabase
       .from('deals')
-      .update({ contrato_assinado: true, contrato_assinado_at: agora, updated_at: agora })
+      .update({
+        contrato_assinado: true,
+        contrato_assinado_at: agora,
+        is_won: true,
+        is_lost: false,
+        closed_at: agora,
+        updated_at: agora,
+      })
       .eq('id', dealId);
     setContratoAssinado(true);
     setMarcandoContrato(false);
