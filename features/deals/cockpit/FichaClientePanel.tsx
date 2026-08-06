@@ -25,6 +25,7 @@ export interface FichaClienteData {
 
 interface Props {
   dealId?: string | null;
+  contactId?: string | null;
   conversationId?: string | null;
   isWon?: boolean;
   dealTitle?: string;
@@ -63,7 +64,7 @@ function toStr(v: string | number | null | undefined): string {
 }
 
 export const FichaClientePanel: React.FC<Props> = ({
-  dealId, conversationId, isWon, dealTitle, dealValue, custoTotal, margemPct,
+  dealId, contactId, conversationId, isWon, dealTitle, dealValue, custoTotal, margemPct,
 }) => {
   const [aberta, setAberta] = useState(true);
   const [ficha, setFicha] = useState<FichaClienteData>(empty());
@@ -140,6 +141,7 @@ export const FichaClientePanel: React.FC<Props> = ({
       if (body.ficha) {
         setFicha(body.ficha);
         if (body.ficha.valorTotal || body.ficha.nomeCompleto) setContratoAssinado(true);
+        if (contactId) await applyVendaLabel(contactId);
         setPdfExtractMsg('ok');
       } else {
         const msg = body.error?.message || `HTTP ${res.status}`;
@@ -170,6 +172,22 @@ export const FichaClientePanel: React.FC<Props> = ({
     setFicha(prev => ({ ...prev, [key]: val || null }));
   };
 
+  // Aplica a primeira etiqueta "Venda concluída" (syncs_with_won) ao contato
+  const applyVendaLabel = async (cid: string) => {
+    if (!supabase) return;
+    const { data: label } = await supabase
+      .from('labels')
+      .select('id')
+      .eq('syncs_with_won', true)
+      .limit(1)
+      .maybeSingle();
+    if (label?.id) {
+      await supabase
+        .from('contact_labels')
+        .upsert({ contact_id: cid, label_id: label.id }, { onConflict: 'contact_id,label_id' });
+    }
+  };
+
   const handleMarcarContratoAssinado = async () => {
     if (!supabase || !dealId) return;
     setMarcandoContrato(true);
@@ -185,6 +203,7 @@ export const FichaClientePanel: React.FC<Props> = ({
         updated_at: agora,
       })
       .eq('id', dealId);
+    if (contactId) await applyVendaLabel(contactId);
     setContratoAssinado(true);
     setMarcandoContrato(false);
   };

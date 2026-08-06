@@ -545,6 +545,7 @@ export const ContactPanel = memo(function ContactPanel({
           <div className="mb-3">
             <FichaClientePanel
               dealId={linkedDealId}
+              contactId={contactId ?? null}
               conversationId={conversation.id}
               isWon={linkedDealIsWon}
               dealValue={linkedDealValue}

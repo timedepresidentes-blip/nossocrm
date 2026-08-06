@@ -1866,6 +1866,7 @@ export default function DealCockpitClient({ dealId }: { dealId?: string }) {
 
             <FichaClientePanel
               dealId={deal.id}
+              contactId={deal.contactId ?? null}
               conversationId={null}
               isWon={deal.isWon ?? false}
               dealTitle={deal.title}
