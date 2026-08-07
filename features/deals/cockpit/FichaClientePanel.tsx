@@ -143,6 +143,7 @@ export const FichaClientePanel: React.FC<Props> = ({
         setFicha(body.ficha);
         if (body.ficha.valorTotal || body.ficha.nomeCompleto) setContratoAssinado(true);
         if (contactId) await applyVendaLabel(contactId);
+        if (dealId) autoFillDealCosts(dealId).catch(console.warn);
         setPdfExtractMsg('ok');
       } else {
         const msg = body.error?.message || `HTTP ${res.status}`;
