@@ -360,8 +360,8 @@ export const useBoardsController = () => {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - 30);
     const cutoffTime = cutoffDate.getTime();
-    // Deals ganhos/perdidos nas últimas 6h continuam visíveis no filtro "Em Aberto"
-    const recentClosedCutoff = Date.now() - 6 * 60 * 60 * 1000;
+    // Deals ganhos/perdidos nos últimos 7 dias continuam visíveis no filtro "Em Aberto"
+    const recentClosedCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
     // Cache do searchTerm em lowercase (evita toLowerCase() 2x por deal)
     const searchLower = searchTerm.toLowerCase();
@@ -396,8 +396,9 @@ export const useBoardsController = () => {
       // Status Filter Logic
       let matchesStatus = true;
       if (statusFilter === 'open') {
+        const closedRef = l.closedAt || l.updatedAt;
         const recentlyClosed = (l.isWon || l.isLost) &&
-          new Date(l.updatedAt).getTime() >= recentClosedCutoff;
+          !!closedRef && new Date(closedRef).getTime() >= recentClosedCutoff;
         matchesStatus = (!l.isWon && !l.isLost) || recentlyClosed;
       } else if (statusFilter === 'won') {
         matchesStatus = l.isWon;

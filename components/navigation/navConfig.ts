@@ -10,6 +10,7 @@ import {
   BarChart3,
   Settings,
   User,
+  Wallet,
 } from 'lucide-react';
 
 export type PrimaryNavId = 'inbox' | 'messaging' | 'boards' | 'contacts' | 'activities' | 'more';
@@ -31,7 +32,7 @@ export const PRIMARY_NAV: PrimaryNavItem[] = [
   { id: 'more', label: 'Mais', icon: MoreHorizontal },
 ];
 
-export type SecondaryNavId = 'dashboard' | 'reports' | 'settings' | 'profile';
+export type SecondaryNavId = 'dashboard' | 'reports' | 'financeiro' | 'settings' | 'profile';
 
 export interface SecondaryNavItem {
   id: SecondaryNavId;
@@ -44,6 +45,7 @@ export interface SecondaryNavItem {
 export const SECONDARY_NAV: SecondaryNavItem[] = [
   { id: 'dashboard', label: 'Visão Geral', href: '/dashboard', icon: LayoutDashboard },
   { id: 'reports', label: 'Relatórios', href: '/reports', icon: BarChart3 },
+  { id: 'financeiro', label: 'Financeiro', href: '/financeiro', icon: Wallet },
   { id: 'settings', label: 'Configurações', href: '/settings', icon: Settings },
   { id: 'profile', label: 'Perfil', href: '/profile', icon: User },
 ];

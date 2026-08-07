@@ -267,6 +267,21 @@ export interface Deal {
 
   // @deprecated - Use clientCompanyId instead
   companyId?: string;
+
+  // Dados financeiros da venda
+  fichaCliente?: Record<string, any>;   // Dados do contrato (inclui potenciaKwp, valorTotal, etc.)
+  custoNf?: number;                     // Custo da nota fiscal
+  custoNfTipo?: string;                 // Tipo NF (ex: "percentual", "fixo")
+  custoEngenharia?: number;             // Custo de engenharia/projeto
+  custoCorrugado?: number;              // Custo de corrugado
+  custoEletroduto?: number;             // Custo de eletroduto
+  custoFornecedor?: number;             // Custo do fornecedor (equipamentos)
+  custoArt?: number;                    // Custo da ART
+  custosExtras?: { descricao: string; valor: number }[]; // Custos imprevistos/adicionais
+  custoTotal?: number;                  // Total de custos (calculado)
+  comissaoValor?: number;               // Valor da comissão
+  lucroBruto?: number;                  // Lucro bruto (receita - custos)
+  margemPct?: number;                   // Margem em %
 }
 
 // Helper Type para Visualização (Desnormalizado)

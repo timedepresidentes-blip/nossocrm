@@ -102,6 +102,23 @@ export interface DbDeal {
   closed_at: string | null;
   /** AI-extracted BANT fields (zero config). */
   ai_extracted: Record<string, any> | null;
+  /** Ficha do cliente extraída do contrato. */
+  ficha_cliente: Record<string, any> | null;
+  /** Campos financeiros da venda. */
+  custo_nf: number | null;
+  custo_nf_tipo: string | null;
+  custo_engenharia: number | null;
+  custo_corrugado: number | null;
+  custo_eletroduto: number | null;
+  custo_fornecedor: number | null;
+  custo_art: number | null;
+  custos_extras: { descricao: string; valor: number }[] | null;
+  custo_total: number | null;
+  comissao_valor: number | null;
+  lucro_bruto: number | null;
+  margem_pct: number | null;
+  contrato_assinado: boolean | null;
+  contrato_assinado_at: string | null;
 }
 
 /**
@@ -175,6 +192,19 @@ const transformDeal = (db: DbDeal | DbDealWithItems, items?: DbDealItem[]): Deal
     lastStageChangeDate: db.last_stage_change_date || undefined,
     customFields: db.custom_fields || {},
     aiExtracted: db.ai_extracted || undefined,
+    fichaCliente: (db as any).ficha_cliente || undefined,
+    custoNf: (db as any).custo_nf ?? undefined,
+    custoNfTipo: (db as any).custo_nf_tipo || undefined,
+    custoEngenharia: (db as any).custo_engenharia ?? undefined,
+    custoCorrugado: (db as any).custo_corrugado ?? undefined,
+    custoEletroduto: (db as any).custo_eletroduto ?? undefined,
+    custoFornecedor: (db as any).custo_fornecedor ?? undefined,
+    custoArt: (db as any).custo_art ?? undefined,
+    custosExtras: (db as any).custos_extras || undefined,
+    custoTotal: (db as any).custo_total ?? undefined,
+    comissaoValor: (db as any).comissao_valor ?? undefined,
+    lucroBruto: (db as any).lucro_bruto ?? undefined,
+    margemPct: (db as any).margem_pct ?? undefined,
     createdAt: db.created_at,
     updatedAt: db.updated_at,
     items: filteredItems.map(i => ({
@@ -225,6 +255,21 @@ const transformDealToDb = (deal: Partial<Deal>): Partial<DbDeal> => {
   if (deal.lastStageChangeDate !== undefined) db.last_stage_change_date = deal.lastStageChangeDate || null;
   if (deal.customFields !== undefined) db.custom_fields = deal.customFields;
   if (deal.ownerId !== undefined) db.owner_id = sanitizeUUID(deal.ownerId);
+
+  // Campos financeiros
+  if (deal.fichaCliente !== undefined) (db as any).ficha_cliente = deal.fichaCliente;
+  if (deal.custoNf !== undefined) (db as any).custo_nf = deal.custoNf;
+  if (deal.custoNfTipo !== undefined) (db as any).custo_nf_tipo = deal.custoNfTipo;
+  if (deal.custoEngenharia !== undefined) (db as any).custo_engenharia = deal.custoEngenharia;
+  if (deal.custoCorrugado !== undefined) (db as any).custo_corrugado = deal.custoCorrugado;
+  if (deal.custoEletroduto !== undefined) (db as any).custo_eletroduto = deal.custoEletroduto;
+  if (deal.custoFornecedor !== undefined) (db as any).custo_fornecedor = deal.custoFornecedor;
+  if (deal.custoArt !== undefined) (db as any).custo_art = deal.custoArt;
+  if (deal.custosExtras !== undefined) (db as any).custos_extras = deal.custosExtras;
+  if (deal.custoTotal !== undefined) (db as any).custo_total = deal.custoTotal;
+  if (deal.comissaoValor !== undefined) (db as any).comissao_valor = deal.comissaoValor;
+  if (deal.lucroBruto !== undefined) (db as any).lucro_bruto = deal.lucroBruto;
+  if (deal.margemPct !== undefined) (db as any).margem_pct = deal.margemPct;
 
   return db;
 };

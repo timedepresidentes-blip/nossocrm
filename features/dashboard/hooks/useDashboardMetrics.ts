@@ -205,6 +205,42 @@ export const useDashboardMetrics = (period: PeriodFilter = 'this_month', boardId
     });
   }, [allDeals, previousDateRange, boardId]);
 
+  // Deals GANHOS no período (filtrado por closedAt, com fallback para updatedAt)
+  const wonDealsInPeriod = React.useMemo(() => {
+    return allDeals.filter(deal => {
+      if (!deal.isWon) return false;
+      const ref = deal.closedAt || deal.updatedAt;
+      if (!ref) return false;
+      const closeDate = new Date(ref);
+      const boardMatch = boardId ? deal.boardId === boardId : true;
+      return closeDate >= dateRange.start && closeDate <= dateRange.end && boardMatch;
+    });
+  }, [allDeals, dateRange, boardId]);
+
+  // Deals PERDIDOS no período (filtrado por closedAt, com fallback para updatedAt)
+  const lostDealsInPeriod = React.useMemo(() => {
+    return allDeals.filter(deal => {
+      if (!deal.isLost) return false;
+      const ref = deal.closedAt || deal.updatedAt;
+      if (!ref) return false;
+      const closeDate = new Date(ref);
+      const boardMatch = boardId ? deal.boardId === boardId : true;
+      return closeDate >= dateRange.start && closeDate <= dateRange.end && boardMatch;
+    });
+  }, [allDeals, dateRange, boardId]);
+
+  // Deals GANHOS no período anterior (filtrado por closedAt, com fallback para updatedAt)
+  const previousWonDealsInPeriod = React.useMemo(() => {
+    return allDeals.filter(deal => {
+      if (!deal.isWon) return false;
+      const ref = deal.closedAt || deal.updatedAt;
+      if (!ref) return false;
+      const closeDate = new Date(ref);
+      const boardMatch = boardId ? deal.boardId === boardId : true;
+      return closeDate >= previousDateRange.start && closeDate <= previousDateRange.end && boardMatch;
+    });
+  }, [allDeals, previousDateRange, boardId]);
+
   // Filtrar contacts por período atual
   const contacts = React.useMemo(() => {
     return allContacts.filter(contact => {
@@ -226,22 +262,21 @@ export const useDashboardMetrics = (period: PeriodFilter = 'this_month', boardId
   // Total Value -> Valor total de novos negócios no período
   const totalValue = deals.reduce((acc, deal) => acc + deal.value, 0);
 
-  // Won Deals -> Negócios ganhos que foram criados neste período (Cohort View)
-  // TODO: Em um futuro refactor, talvez o usuário queira "Ganhos neste mês" independente de criação.
-  // Por enquanto, mantemos a consistência com "deals" que é filtrado por criação.
-  const wonDeals = deals.filter(d => d.isWon);
-  const lostDeals = deals.filter(d => d.isLost);
+  // Won/Lost Deals → filtrados por closedAt (quando foram ganhos/perdidos no período)
+  const wonDeals = wonDealsInPeriod;
+  const lostDeals = lostDealsInPeriod;
 
   // Pipeline Value -> Valor total em aberto HOJE (Snapshot)
   const pipelineValue = activeSnapshotDeals.reduce((acc, l) => acc + l.value, 0);
 
   const wonRevenue = wonDeals.reduce((acc, l) => acc + l.value, 0);
 
-  // Win Rate do período
-  const winRate = deals.length > 0 ? (wonDeals.length / deals.length) * 100 : 0;
+  // Win Rate do período (ganhos vs total fechados no período)
+  const closedInPeriod = wonDeals.length + lostDeals.length;
+  const winRate = closedInPeriod > 0 ? (wonDeals.length / closedInPeriod) * 100 : 0;
 
   // Métricas do período anterior
-  const previousWonDeals = previousDeals.filter(d => d.isWon);
+  const previousWonDeals = previousWonDealsInPeriod;
 
   // Para comparação do Pipeline Value, precisamos do snapshot anterior... 
   // O que é difícil calcular precisamente sem histórico.
@@ -257,8 +292,17 @@ export const useDashboardMetrics = (period: PeriodFilter = 'this_month', boardId
   const currentPipelineValueProxy = activeDealsInPeriod.reduce((acc, l) => acc + l.value, 0);
 
   const previousWonRevenue = previousWonDeals.reduce((acc, l) => acc + l.value, 0);
-  const previousWinRate = previousDeals.length > 0
-    ? (previousWonDeals.length / previousDeals.length) * 100
+  const previousLostDealsInPeriod = allDeals.filter(d => {
+    if (!d.isLost) return false;
+    const ref = d.closedAt || d.updatedAt;
+    if (!ref) return false;
+    const closeDate = new Date(ref);
+    const boardMatch = boardId ? d.boardId === boardId : true;
+    return closeDate >= previousDateRange.start && closeDate <= previousDateRange.end && boardMatch;
+  });
+  const previousClosedInPeriod = previousWonDeals.length + previousLostDealsInPeriod.length;
+  const previousWinRate = previousClosedInPeriod > 0
+    ? (previousWonDeals.length / previousClosedInPeriod) * 100
     : 0;
 
   // Calcular variações percentuais
@@ -322,9 +366,11 @@ export const useDashboardMetrics = (period: PeriodFilter = 'this_month', boardId
      * (Previously: for each month, `wonDeals.reduce(...)`.)
      */
     const revenueByMonthKey = new Map<string, number>();
-    for (const deal of wonDeals) {
-      if (!deal.updatedAt) continue;
-      const dt = new Date(deal.updatedAt);
+    for (const deal of allDeals) {
+      if (!deal.isWon) continue;
+      const ref = deal.closedAt || deal.updatedAt;
+      if (!ref) continue;
+      const dt = new Date(ref);
       const key = `${dt.getMonth()}-${dt.getFullYear()}`;
       revenueByMonthKey.set(key, (revenueByMonthKey.get(key) ?? 0) + deal.value);
     }
@@ -345,7 +391,7 @@ export const useDashboardMetrics = (period: PeriodFilter = 'this_month', boardId
         revenue: monthlyRevenue
       };
     });
-  }, [wonDeals]);
+  }, [allDeals]);
 
   // Wallet Health Metrics - Usa TODOS os contatos (não filtrados por período)
   // A saúde da carteira é um snapshot atual, não depende do período selecionado
