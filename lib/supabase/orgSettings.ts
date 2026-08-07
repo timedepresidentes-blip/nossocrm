@@ -1,6 +1,11 @@
 import { supabase } from './client';
 import { sanitizeUUID } from './utils';
 
+export interface CustoAdicionalFixo {
+  nome: string;
+  valor: number;
+}
+
 export interface OrgCostSettings {
   custoArt: number;
   custoNfKitPct: number;             // % NF sobre total do kit
@@ -12,6 +17,7 @@ export interface OrgCostSettings {
   custoEletroduto: number;
   custoComissaoPct: number;          // comissão padrão %
   custoComissaoAcima5kwpPct: number; // comissão para >5 kWp %
+  custosAdicionaisFixos: CustoAdicionalFixo[];
 }
 
 export interface OrgQuoteSettings {
@@ -109,7 +115,7 @@ export const orgSettingsService = {
 
       const { data, error } = await supabase
         .from('organization_settings')
-        .select('custo_art, custo_nf_kit_pct, custo_nf_servico_pct, custo_eng_ate5kwp, custo_eng_3a5kwp, custo_eng_acima5kwp, custo_corrugado, custo_eletroduto, custo_comissao_pct, custo_comissao_acima5kwp_pct')
+        .select('custo_art, custo_nf_kit_pct, custo_nf_servico_pct, custo_eng_ate5kwp, custo_eng_3a5kwp, custo_eng_acima5kwp, custo_corrugado, custo_eletroduto, custo_comissao_pct, custo_comissao_acima5kwp_pct, custos_adicionais_fixos')
         .eq('organization_id', orgId)
         .maybeSingle();
 
@@ -119,6 +125,7 @@ export const orgSettingsService = {
         custoEng1a3kwp: 350, custoEng3a5kwp: 450, custoEngAcima5kwp: 600,
         custoCorrugado: 0, custoEletroduto: 0,
         custoComissaoPct: 5, custoComissaoAcima5kwpPct: 7,
+        custosAdicionaisFixos: [],
       };
       if (!data) return { data: defaults, error: null };
 
@@ -135,6 +142,7 @@ export const orgSettingsService = {
           custoEletroduto: Number(row.custo_eletroduto ?? 0),
           custoComissaoPct: Number(row.custo_comissao_pct ?? 5),
           custoComissaoAcima5kwpPct: Number(row.custo_comissao_acima5kwp_pct ?? 7),
+          custosAdicionaisFixos: Array.isArray(row.custos_adicionais_fixos) ? row.custos_adicionais_fixos : [],
         },
         error: null,
       };
@@ -160,6 +168,7 @@ export const orgSettingsService = {
       if (updates.custoEletroduto !== undefined) payload.custo_eletroduto = updates.custoEletroduto;
       if (updates.custoComissaoPct !== undefined) payload.custo_comissao_pct = updates.custoComissaoPct;
       if (updates.custoComissaoAcima5kwpPct !== undefined) payload.custo_comissao_acima5kwp_pct = updates.custoComissaoAcima5kwpPct;
+      if (updates.custosAdicionaisFixos !== undefined) payload.custos_adicionais_fixos = updates.custosAdicionaisFixos;
 
       const { error } = await supabase
         .from('organization_settings')

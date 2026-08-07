@@ -154,6 +154,13 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
       setCustoCorrugado(cfg.custoCorrugado > 0 ? fmtMoeda(cfg.custoCorrugado) : '');
       setCustoEletroduto(cfg.custoEletroduto > 0 ? fmtMoeda(cfg.custoEletroduto) : '');
       setCustoComissaoPct(String(cfg.custoComissaoPct));
+      // Carrega custos adicionais fixos da org como ponto de partida
+      if (cfg.custosAdicionaisFixos && cfg.custosAdicionaisFixos.length > 0) {
+        setCustosAdicionais(cfg.custosAdicionaisFixos.map(c => ({
+          nome: c.nome,
+          valor: fmtMoeda(c.valor),
+        })));
+      }
       setCfgLoaded(true);
     });
   }, [isOpen, contactName]);
@@ -343,7 +350,7 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
         });
       }
 
-      // Salva custos fixos como novo padrão da organização (fire and forget)
+      // Salva custos fixos e adicionais como novo padrão da organização (fire and forget)
       // Fornecedor e instalação são específicos por deal — não sobem para o padrão
       const novoPadrao: Partial<import('@/lib/supabase/orgSettings').OrgCostSettings> = {};
       const artNum = parseFlt(custoArt);
@@ -354,9 +361,11 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
       if (corrugadoNum > 0) novoPadrao.custoCorrugado = corrugadoNum;
       if (eletrodutoNum > 0) novoPadrao.custoEletroduto = eletrodutoNum;
       if (tipoVenda === 'vendedor' && comissaoNum > 0) novoPadrao.custoComissaoPct = comissaoNum;
-      if (Object.keys(novoPadrao).length > 0) {
-        orgSettingsService.updateCostSettings(novoPadrao).catch(console.warn);
-      }
+      // Custos adicionais nomeados viram padrão da org (o operador edita a lista pelo próprio modal)
+      novoPadrao.custosAdicionaisFixos = custosAdicionais
+        .filter(e => e.nome.trim() && parseFlt(e.valor) > 0)
+        .map(e => ({ nome: e.nome.trim(), valor: parseFlt(e.valor) }));
+      orgSettingsService.updateCostSettings(novoPadrao).catch(console.warn);
 
       window.open(buildOrcafacilUrl(dealId), '_blank');
       onClose();
