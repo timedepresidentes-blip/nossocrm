@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { supabase } from '@/lib/supabase/client';
 import { orgSettingsService, OrgQuoteSettings } from '@/lib/supabase/orgSettings';
-import { ChevronDown, ChevronUp, Download, Loader2, Pencil, Save, X, Upload } from 'lucide-react';
+import { ChevronDown, ChevronUp, Download, Loader2, Pencil, Save, X, Upload, Plus, Trash2, Check } from 'lucide-react';
 
 interface ExtraItem { name: string; value: number }
 interface QuoteExtras { installationCost?: number; extraItems?: ExtraItem[] }
@@ -72,8 +72,17 @@ const FINANCING_OPTIONS: FinancingOption[] = [
   },
 ];
 
+interface EditableItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+  isNew?: boolean;
+}
+
 export default function QuotePage() {
   const { dealId } = useParams<{ dealId: string }>();
+  const searchParams = useSearchParams();
   const [quote, setQuote] = useState<QuoteData | null>(null);
   const [orgSettings, setOrgSettings] = useState<OrgQuoteSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -88,6 +97,14 @@ export default function QuotePage() {
   const [uploadingField, setUploadingField] = useState<string | null>(null);
   const [extras, setExtras] = useState<QuoteExtras>({ installationCost: undefined, extraItems: [] });
 
+  // Modo de edição
+  const [isEditing, setIsEditing] = useState(() => searchParams?.get('edit') === '1');
+  const [editItems, setEditItems] = useState<EditableItem[]>([]);
+  const [editTitle, setEditTitle] = useState('');
+  const [editFormaPagamento, setEditFormaPagamento] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editSaved, setEditSaved] = useState(false);
+
   useEffect(() => {
     async function load() {
       if (!supabase || !dealId) return;
@@ -96,7 +113,7 @@ export default function QuotePage() {
           supabase
             .from('deals')
             .select(`
-              id, title, value, created_at, contact_id, quote_overrides,
+              id, title, value, created_at, contact_id, quote_overrides, ficha_cliente,
               deal_items(id, name, quantity, price, product_id, products(kit_description, image_url, kit_images)),
               contacts(name, phone, email, client_company_id),
               crm_companies(name)
@@ -135,7 +152,7 @@ export default function QuotePage() {
           extraItems: savedExtras.extraItems ?? [],
         });
 
-        setQuote({
+        const quoteData: QuoteData = {
           dealTitle: d.title,
           dealValue: Number(d.value ?? 0),
           contactName: contact?.name ?? '—',
@@ -145,7 +162,18 @@ export default function QuotePage() {
           createdAt: d.created_at,
           items: effectiveItems,
           quoteOverrides: savedOverrides,
-        });
+        };
+        setQuote(quoteData);
+
+        // Inicializa estado de edição
+        setEditItems(effectiveItems.map(i => ({
+          id: i.id,
+          name: i.name,
+          quantity: i.quantity,
+          price: i.price,
+        })));
+        setEditTitle(d.title || '');
+        setEditFormaPagamento(d.ficha_cliente?.formaPagamento || '');
 
         if (settingsRes.data) setOrgSettings(settingsRes.data);
         setOverrides(savedOverrides);
@@ -178,6 +206,85 @@ export default function QuotePage() {
     await supabase.from('deals').update({ quote_overrides: {} }).eq('id', dealId);
     setOverrides({});
     setQuote((prev) => prev ? { ...prev, quoteOverrides: {} } : prev);
+  };
+
+  const saveEdit = async () => {
+    if (!supabase || !dealId) return;
+    setSavingEdit(true);
+    try {
+      const validItems = editItems.filter(i => i.name.trim());
+      const newTotal = validItems.reduce((s, i) => s + i.quantity * i.price, 0);
+
+      // Remove itens antigos que não são "total" fallback
+      const existingIds = validItems.filter(i => !i.isNew && i.id !== 'total').map(i => i.id);
+      const { data: currentItems } = await supabase
+        .from('deal_items')
+        .select('id')
+        .eq('deal_id', dealId);
+      const toDelete = (currentItems || []).map((r: any) => r.id).filter((id: string) => !existingIds.includes(id));
+      if (toDelete.length > 0) {
+        await supabase.from('deal_items').delete().in('id', toDelete);
+      }
+
+      // Upsert itens editados
+      for (const item of validItems) {
+        if (item.isNew || item.id === 'total') {
+          await supabase.from('deal_items').insert({
+            deal_id: dealId,
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price,
+          });
+        } else {
+          await supabase.from('deal_items').update({
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price,
+          }).eq('id', item.id);
+        }
+      }
+
+      // Atualiza deal: título, valor, forma de pagamento
+      const fichaUpdate = editFormaPagamento
+        ? { ficha_cliente: { formaPagamento: editFormaPagamento } }
+        : {};
+      await supabase.from('deals').update({
+        title: editTitle || undefined,
+        value: newTotal,
+        ...fichaUpdate,
+      }).eq('id', dealId);
+
+      // Reflete no estado local
+      const newItems = validItems.map(i => ({
+        id: i.id === 'total' ? crypto.randomUUID() : i.id,
+        name: i.name,
+        quantity: i.quantity,
+        price: i.price,
+      }));
+      setQuote(prev => prev ? {
+        ...prev,
+        dealTitle: editTitle || prev.dealTitle,
+        dealValue: newTotal,
+        items: newItems,
+      } : prev);
+      setEditItems(newItems);
+      setEditSaved(true);
+      setTimeout(() => { setEditSaved(false); setIsEditing(false); }, 1500);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const addEditItem = () => {
+    setEditItems(prev => [...prev, { id: crypto.randomUUID(), name: '', quantity: 1, price: 0, isNew: true }]);
+  };
+
+  const removeEditItem = (idx: number) => {
+    setEditItems(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateEditItem = (idx: number, field: keyof EditableItem, value: string | number) => {
+    setEditItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
   };
 
   // Faz upload de imagem para o bucket público 'assets' e retorna a URL pública
@@ -327,23 +434,53 @@ export default function QuotePage() {
     <>
       {/* Toolbar — oculta na impressão */}
       <div id="quote-toolbar" className="print:hidden fixed top-4 right-4 z-50 flex flex-col items-end gap-2">
-        <div className="flex gap-2">
-          <button
-            onClick={handleDownloadPDF}
-            disabled={isDownloading}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-500 shadow-lg disabled:opacity-60"
-          >
-            {isDownloading ? <><Loader2 className="w-4 h-4 animate-spin" />Gerando…</> : <><Download className="w-4 h-4" />Baixar PDF</>}
-          </button>
-          {pdfError && <p className="text-xs text-red-500 bg-white rounded-lg px-3 py-1.5 shadow">{pdfError}</p>}
-          <button
-            onClick={() => window.history.length > 1 ? window.history.back() : window.close()}
-            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-lg"
-          >
-            Fechar
-          </button>
+        <div className="flex gap-2 flex-wrap justify-end">
+          {/* Botões de edição */}
+          {isEditing ? (
+            <>
+              <button
+                onClick={saveEdit}
+                disabled={savingEdit}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-500 shadow-lg disabled:opacity-60"
+              >
+                {savingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : editSaved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                {editSaved ? 'Salvo!' : savingEdit ? 'Salvando...' : 'Salvar edições'}
+              </button>
+              <button
+                onClick={() => setIsEditing(false)}
+                className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-lg"
+              >
+                Cancelar
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={handleDownloadPDF}
+                disabled={isDownloading}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-500 shadow-lg disabled:opacity-60"
+              >
+                {isDownloading ? <><Loader2 className="w-4 h-4 animate-spin" />Gerando…</> : <><Download className="w-4 h-4" />Baixar PDF</>}
+              </button>
+              {pdfError && <p className="text-xs text-red-500 bg-white rounded-lg px-3 py-1.5 shadow">{pdfError}</p>}
+              <button
+                onClick={() => setIsEditing(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-lg"
+              >
+                <Pencil className="w-4 h-4" />
+                Editar orçamento
+              </button>
+              <button
+                onClick={() => window.history.length > 1 ? window.history.back() : window.close()}
+                className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-lg"
+              >
+                Fechar
+              </button>
+            </>
+          )}
         </div>
 
+        {!isEditing && (
         <button
           onClick={() => setIsCustomizing((v) => !v)}
           className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium shadow-lg border transition-colors ${
@@ -356,6 +493,7 @@ export default function QuotePage() {
           {hasOverride ? 'Personalizado' : 'Personalizar este orçamento'}
           {isCustomizing ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
         </button>
+        )}
 
         {isCustomizing && (
           <div className="bg-white border border-slate-200 rounded-2xl shadow-xl p-4 w-80 space-y-3 max-h-[80vh] overflow-y-auto">
@@ -504,8 +642,15 @@ export default function QuotePage() {
         )}
       </div>
 
+      {/* Banner de modo de edição */}
+      {isEditing && (
+        <div className="print:hidden fixed top-0 left-0 right-0 z-40 bg-amber-500 text-white text-center py-2 text-sm font-semibold">
+          ✏️ Modo de edição — clique nos campos do orçamento para editar
+        </div>
+      )}
+
       {/* Documento imprimível */}
-      <div id="quote-print-target" className="min-h-screen bg-white print:bg-white p-8 max-w-[860px] mx-auto font-sans text-slate-800">
+      <div id="quote-print-target" className={`min-h-screen bg-white print:bg-white p-8 max-w-[860px] mx-auto font-sans text-slate-800 ${isEditing ? 'mt-10' : ''}`}>
 
         {/* Cabeçalho */}
         <div id="pdf-sec-header" className="flex items-center justify-between mb-8 pb-6 border-b-2 border-slate-200">
@@ -527,7 +672,16 @@ export default function QuotePage() {
           </div>
           <div className="text-right">
             <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold">Orçamento</div>
-            <div className="text-lg font-bold text-slate-700 mt-0.5">#{dealId.slice(0, 8).toUpperCase()}</div>
+            {isEditing ? (
+              <input
+                value={editTitle}
+                onChange={e => setEditTitle(e.target.value)}
+                className="mt-1 text-sm font-medium text-slate-700 border border-amber-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-400/40 w-64 text-right"
+                placeholder="Título do orçamento"
+              />
+            ) : (
+              <div className="text-lg font-bold text-slate-700 mt-0.5">#{dealId.slice(0, 8).toUpperCase()}</div>
+            )}
             <div className="text-xs text-slate-500 mt-1">{formatDate(quote.createdAt)}</div>
           </div>
         </div>
@@ -561,6 +715,94 @@ export default function QuotePage() {
         </div>
 
         {/* Tabela de itens */}
+        {isEditing ? (
+          /* Modo edição: inputs inline */
+          <div id="pdf-sec-items" className="mb-8 border border-amber-200 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-amber-50 text-amber-800 border-b border-amber-200">
+                  <th className="text-left px-4 py-3 font-semibold">Descrição</th>
+                  <th className="text-center px-3 py-3 font-semibold w-20">Qtd</th>
+                  <th className="text-right px-3 py-3 font-semibold w-36">Preço Unit.</th>
+                  <th className="text-right px-3 py-3 font-semibold w-32">Total</th>
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {editItems.map((item, i) => (
+                  <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                    <td className="px-3 py-2">
+                      <input
+                        value={item.name}
+                        onChange={e => updateEditItem(i, 'name', e.target.value)}
+                        className="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+                        placeholder="Descrição do item"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="number" min="1"
+                        value={item.quantity}
+                        onChange={e => updateEditItem(i, 'quantity', Number(e.target.value) || 1)}
+                        className="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-sm text-center text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="number" min="0" step="0.01"
+                        value={item.price}
+                        onChange={e => updateEditItem(i, 'price', Number(e.target.value) || 0)}
+                        className="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-sm text-right text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right text-sm font-semibold text-slate-700">
+                      {formatBRL(item.quantity * item.price)}
+                    </td>
+                    <td className="px-2 py-2">
+                      <button
+                        onClick={() => removeEditItem(i)}
+                        className="p-1 text-slate-300 hover:text-red-400 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={5} className="px-3 py-2">
+                    <button
+                      onClick={addEditItem}
+                      className="inline-flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-900 font-medium"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Adicionar item
+                    </button>
+                  </td>
+                </tr>
+                <tr className="border-t border-amber-200 bg-amber-50">
+                  <td colSpan={2} />
+                  <td className="px-3 py-3 text-right font-bold text-amber-800">TOTAL</td>
+                  <td className="px-3 py-3 text-right font-bold text-amber-900">
+                    {formatBRL(editItems.reduce((s, i) => s + i.quantity * i.price, 0))}
+                  </td>
+                  <td />
+                </tr>
+                <tr className="bg-amber-50/50">
+                  <td colSpan={5} className="px-3 py-2">
+                    <label className="text-xs font-semibold text-amber-700 block mb-1">Forma de pagamento</label>
+                    <input
+                      value={editFormaPagamento}
+                      onChange={e => setEditFormaPagamento(e.target.value)}
+                      className="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+                      placeholder="Ex: À vista no PIX, Financiamento Santander 60x..."
+                    />
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        ) : (
         <table id="pdf-sec-items" className="w-full mb-8 text-sm">
           <thead>
             <tr className="bg-slate-800 text-white">
@@ -580,7 +822,6 @@ export default function QuotePage() {
                       {item.kitDescription}
                     </div>
                   )}
-                  {/* Galeria de componentes do kit */}
                   {item.kitImages && item.kitImages.length > 0 && (
                     <div className="mt-4 flex flex-wrap gap-4">
                       {item.kitImages.map((img, idx) => (
@@ -597,7 +838,6 @@ export default function QuotePage() {
                       ))}
                     </div>
                   )}
-                  {/* Fallback: imagem principal se não houver galeria */}
                   {(!item.kitImages || item.kitImages.length === 0) && item.imageUrl && (
                     <div className="mt-3">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -642,6 +882,7 @@ export default function QuotePage() {
             </tr>
           </tfoot>
         </table>
+        )}
 
         {/* Opções de financiamento */}
         <div id="pdf-sec-financing" className="mb-8">
