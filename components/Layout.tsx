@@ -47,6 +47,7 @@ import {
   PanelLeftOpen,
   Megaphone,
   FileText,
+  Wallet,
 } from 'lucide-react';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useAuth } from '../context/AuthContext';
@@ -87,6 +88,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/reports': 'Relatórios',
   '/documentos': 'Documentos',
   '/campaigns': 'Campanhas',
+  '/financeiro': 'Financeiro',
   '/settings': 'Configurações',
   '/profile': 'Perfil',
   '/ai': 'Assistente IA',
@@ -363,6 +365,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             { to: '/contacts', icon: Users, label: 'Contatos', prefetch: 'contacts' as const, badge: undefined },
             { to: '/activities', icon: CheckSquare, label: 'Atividades', prefetch: 'activities' as const, badge: undefined },
             { to: '/reports', icon: BarChart3, label: 'Relatórios', prefetch: 'reports' as const, badge: undefined },
+            { to: '/financeiro', icon: Wallet, label: 'Financeiro', prefetch: undefined, badge: undefined },
             { to: '/documentos', icon: FileText, label: 'Documentos', prefetch: undefined, badge: undefined },
             { to: '/campaigns', icon: Megaphone, label: 'Campanhas', prefetch: undefined, badge: undefined },
             { to: '/settings', icon: Settings, label: 'Configurações', prefetch: 'settings' as const, badge: undefined },
