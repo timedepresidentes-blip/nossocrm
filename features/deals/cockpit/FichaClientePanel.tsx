@@ -6,6 +6,7 @@ import {
   Download, FileText, Loader2, RefreshCw, Save, Send, ScanSearch, Upload, XCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { autoFillDealCosts } from '@/lib/supabase/autoFillDealCosts';
 
 export interface FichaClienteData {
   nomeCompleto: string | null; cpfCnpj: string | null; rg: string | null;
@@ -204,6 +205,7 @@ export const FichaClientePanel: React.FC<Props> = ({
       })
       .eq('id', dealId);
     if (contactId) await applyVendaLabel(contactId);
+    if (dealId) autoFillDealCosts(dealId).catch(console.warn);
     setContratoAssinado(true);
     setMarcandoContrato(false);
   };

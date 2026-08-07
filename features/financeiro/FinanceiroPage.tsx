@@ -1,9 +1,12 @@
 'use client';
 import React, { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDeals } from '@/lib/query/hooks/useDealsQuery';
+import { DEALS_VIEW_KEY } from '@/lib/query/queryKeys';
 import { Deal } from '@/types';
 import { DealFinanceiroSheet } from './components/DealFinanceiroSheet';
-import { TrendingUp, TrendingDown, DollarSign, Percent, BarChart3, ChevronRight, AlertTriangle } from 'lucide-react';
+import { autoFillDealCosts } from '@/lib/supabase/autoFillDealCosts';
+import { TrendingUp, TrendingDown, DollarSign, Percent, BarChart3, ChevronRight, AlertTriangle, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type Periodo = 'all' | 'this_month' | 'last_month' | 'last_3_months' | 'this_year';
@@ -55,8 +58,10 @@ function StatusMargem({ pct }: { pct: number | undefined }) {
 
 export function FinanceiroPage() {
   const { data: allDeals = [], isLoading } = useDeals();
+  const queryClient = useQueryClient();
   const [periodo, setPeriodo] = useState<Periodo>('all');
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const { start, end } = useMemo(() => getRange(periodo), [periodo]);
 
@@ -85,7 +90,14 @@ export function FinanceiroPage() {
     return { receita, custos, lucro, margem, kwpTotal, comDetalhe };
   }, [wonDeals]);
 
-  const semFinanceiro = wonDeals.filter(d => !d.custoFornecedor && !d.custoNf && !d.custoTotal).length;
+  const semFinanceiro = wonDeals.filter(d => !d.custoFornecedor && !d.custoNf && !d.custoTotal);
+
+  const handleSincronizarTodos = async () => {
+    setSyncing(true);
+    await Promise.allSettled(semFinanceiro.map(d => autoFillDealCosts(d.id)));
+    await queryClient.invalidateQueries({ queryKey: DEALS_VIEW_KEY });
+    setSyncing(false);
+  };
 
   return (
     <div className="min-h-screen bg-dark text-white">
@@ -155,13 +167,23 @@ export function FinanceiroPage() {
         </div>
 
         {/* Aviso se há vendas sem financeiro */}
-        {semFinanceiro > 0 && (
-          <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-sm">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span>
-              <strong>{semFinanceiro}</strong> venda{semFinanceiro > 1 ? 's' : ''} sem custos lançados.
-              Clique na venda para preencher a planilha financeira.
-            </span>
+        {semFinanceiro.length > 0 && (
+          <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-sm">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>
+                <strong>{semFinanceiro.length}</strong> venda{semFinanceiro.length > 1 ? 's' : ''} sem custos lançados.
+                Clique na venda para editar manualmente ou sincronize com os padrões da organização.
+              </span>
+            </div>
+            <button
+              onClick={handleSincronizarTodos}
+              disabled={syncing}
+              className="flex items-center gap-1.5 shrink-0 text-xs font-medium bg-yellow-500/20 hover:bg-yellow-500/30 disabled:opacity-60 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', syncing && 'animate-spin')} />
+              {syncing ? 'Sincronizando...' : 'Sincronizar Padrões'}
+            </button>
           </div>
         )}
 

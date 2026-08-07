@@ -19,6 +19,7 @@ import { activitiesService } from '@/lib/supabase/activities';
 import { contactsService } from '@/lib/supabase/contacts';
 import { getClient } from '@/lib/supabase/client';
 import type { Deal, DealView, Board, Activity } from '@/types';
+import { autoFillDealCosts } from '@/lib/supabase/autoFillDealCosts';
 
 interface MoveDealParams {
   dealId: string;
@@ -135,7 +136,14 @@ export const useMoveDeal = () => {
       }
       // #endregion
 
-      // 2. Sincroniza etiqueta "Perdido" com o estado is_lost do deal (fire and forget)
+      // 2. Auto-preenche custos financeiros ao ganhar (fire and forget)
+      if (isWon === true) {
+        autoFillDealCosts(dealId).catch(err =>
+          console.warn('[useMoveDeal] autoFillDealCosts falhou:', err)
+        );
+      }
+
+      // 3. Sincroniza etiqueta "Perdido" com o estado is_lost do deal (fire and forget)
       if (deal.contactId) {
         (async () => {
           try {
