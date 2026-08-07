@@ -343,6 +343,21 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
         });
       }
 
+      // Salva custos fixos como novo padrão da organização (fire and forget)
+      // Fornecedor e instalação são específicos por deal — não sobem para o padrão
+      const novoPadrao: Partial<import('@/lib/supabase/orgSettings').OrgCostSettings> = {};
+      const artNum = parseFlt(custoArt);
+      const corrugadoNum = parseFlt(custoCorrugado);
+      const eletrodutoNum = parseFlt(custoEletroduto);
+      const comissaoNum = parseFlt(custoComissaoPct);
+      if (artNum > 0) novoPadrao.custoArt = artNum;
+      if (corrugadoNum > 0) novoPadrao.custoCorrugado = corrugadoNum;
+      if (eletrodutoNum > 0) novoPadrao.custoEletroduto = eletrodutoNum;
+      if (tipoVenda === 'vendedor' && comissaoNum > 0) novoPadrao.custoComissaoPct = comissaoNum;
+      if (Object.keys(novoPadrao).length > 0) {
+        orgSettingsService.updateCostSettings(novoPadrao).catch(console.warn);
+      }
+
       window.open(buildOrcafacilUrl(dealId), '_blank');
       onClose();
     } catch (e: unknown) {
