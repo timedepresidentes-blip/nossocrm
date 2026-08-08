@@ -5,8 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { gerarPropostaHtmlCRM } from '@/lib/gerarPropostaHtmlCRM';
 import { orgSettingsService, OrgQuoteSettings } from '@/lib/supabase/orgSettings';
-import { ChevronDown, ChevronUp, Download, Loader2, Pencil, Save, X, Upload, Plus, Trash2, Check } from 'lucide-react';
-// Loader2 mantido para o loading de dados
+import { ChevronDown, ChevronUp, Download, Loader2, Pencil, Save, X, Upload, Plus, Trash2, Check, ExternalLink, Link2 } from 'lucide-react';
 
 interface ExtraItem { name: string; value: number }
 interface QuoteExtras { installationCost?: number; extraItems?: ExtraItem[] }
@@ -85,6 +84,9 @@ export default function QuotePage() {
   const [uploadingField, setUploadingField] = useState<string | null>(null);
   const [extras, setExtras] = useState<QuoteExtras>({ installationCost: undefined, extraItems: [] });
 
+  const [orcafacilId, setOrcafacilId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
   // Modo de edição
   const [isEditing, setIsEditing] = useState(() => searchParams?.get('edit') === '1');
   const [editItems, setEditItems] = useState<EditableItem[]>([]);
@@ -101,7 +103,7 @@ export default function QuotePage() {
           supabase
             .from('deals')
             .select(`
-              id, title, value, created_at, contact_id, quote_overrides, ficha_cliente,
+              id, title, value, created_at, contact_id, quote_overrides, ficha_cliente, orcafacil_id,
               deal_items(id, name, quantity, price, product_id, products(kit_description, image_url, kit_images)),
               contacts(name, phone, email, client_company_id),
               crm_companies(name)
@@ -164,6 +166,7 @@ export default function QuotePage() {
         setEditTitle(d.title || '');
         setEditFormaPagamento(d.ficha_cliente?.formaPagamento || '');
 
+        if (d.orcafacil_id) setOrcafacilId(d.orcafacil_id);
         if (settingsRes.data) setOrgSettings(settingsRes.data);
         setOverrides(savedOverrides);
       } catch (e: any) {
@@ -258,6 +261,8 @@ export default function QuotePage() {
       } : prev);
       setEditItems(newItems);
       setEditSaved(true);
+      // Sincroniza com OrçaFácil após salvar
+      syncToOrcafacil();
       setTimeout(() => { setEditSaved(false); setIsEditing(false); }, 1500);
     } finally {
       setSavingEdit(false);
@@ -349,6 +354,45 @@ export default function QuotePage() {
     window.open(url, '_blank');
   };
 
+  const syncToOrcafacil = async (currentQuote = quote, currentOrcafacilId = orcafacilId) => {
+    if (!currentQuote || !dealId) return null;
+    setSyncing(true);
+    try {
+      const sub = currentQuote.items.reduce((s, i) => s + i.quantity * i.price, 0);
+      const res = await fetch('/api/orcafacil/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dealId,
+          clienteNome: currentQuote.fichaCliente?.nomeCompleto || currentQuote.contactName,
+          clienteCidade: currentQuote.fichaCliente?.instalacaoCidade ?? null,
+          clienteEnd: currentQuote.fichaCliente?.instalacaoEndereco ?? null,
+          telefone: currentQuote.contactPhone || null,
+          potenciaKwp: currentQuote.fichaCliente?.potenciaKwp ?? null,
+          painelW: currentQuote.fichaCliente?.potenciaPainelW ?? null,
+          numPaineis: currentQuote.fichaCliente?.numPaineis ?? null,
+          modeloPainel: currentQuote.fichaCliente?.modeloPainel ?? null,
+          modeloInversor: currentQuote.fichaCliente?.modeloInversor ?? null,
+          qtdInversores: currentQuote.fichaCliente?.qtdInversores ?? null,
+          tipoEstrutura: currentQuote.fichaCliente?.tipoEstrutura ?? null,
+          valorFinal: sub,
+          formaPagamento: currentQuote.fichaCliente?.formaPagamento ?? null,
+        }),
+      });
+      const json = await res.json();
+      if (json.orcafacilId && !currentOrcafacilId) {
+        setOrcafacilId(json.orcafacilId);
+        await supabase?.from('deals').update({ orcafacil_id: json.orcafacilId }).eq('id', dealId);
+      }
+      return json.orcafacilId;
+    } catch (e) {
+      console.error('Sync OrçaFácil failed', e);
+      return null;
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const hasOverride = Object.values(quote.quoteOverrides).some((v) => v && String(v).trim());
   const instCost = extras.installationCost ?? 0;
   const extrasCost = (extras.extraItems ?? []).reduce((s, e) => s + (e.value || 0), 0);
@@ -407,6 +451,26 @@ export default function QuotePage() {
                 <Pencil className="w-4 h-4" />
                 Editar orçamento
               </button>
+              {/* Botão OrçaFácil */}
+              {orcafacilId ? (
+                <button
+                  onClick={() => window.open(`https://app-eight-eta-92.vercel.app/orcamento/${orcafacilId}`, '_blank')}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-400 shadow-lg"
+                  title="Abrir no OrçaFácil para gerar PDF com o template completo"
+                >
+                  <ExternalLink className="w-4 h-4" />OrçaFácil
+                </button>
+              ) : (
+                <button
+                  onClick={() => syncToOrcafacil()}
+                  disabled={syncing}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 border border-orange-300 text-orange-700 rounded-xl text-sm font-semibold hover:bg-orange-200 shadow-lg disabled:opacity-60"
+                  title="Cria este orçamento no OrçaFácil e vincula"
+                >
+                  {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                  {syncing ? 'Vinculando…' : 'Vincular OrçaFácil'}
+                </button>
+              )}
               <button
                 onClick={() => window.history.length > 1 ? window.history.back() : window.close()}
                 className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-lg"
