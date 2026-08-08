@@ -586,333 +586,271 @@ export default function QuotePage() {
         </div>
       )}
 
-      {/* Documento imprimível */}
-      <div id="quote-print-target" className={`min-h-screen bg-white print:bg-white p-8 max-w-[860px] mx-auto font-sans text-slate-800 ${isEditing ? 'mt-10' : ''}`}>
+      {/* Documento — design OrçaFácil */}
+      <div id="quote-print-target" className={`mx-auto max-w-[860px] shadow-2xl ${isEditing ? 'mt-10' : 'mt-4 mb-8'}`} style={{ background: '#FAFAF8', color: '#171717', fontFamily: "'Archivo', sans-serif" }}>
 
-        {/* Cabeçalho */}
-        <div id="pdf-sec-header" className="flex items-center justify-between mb-8 pb-6 border-b-2 border-slate-200">
-          <div>
-            {eff.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={eff.logoUrl} alt="Logo" className="max-h-44 max-w-[400px] object-contain" />
-            ) : (
-              <div className="text-3xl font-bold text-slate-700">ORÇAMENTO</div>
-            )}
-            {eff.companyAddress && (
-              <p className="text-xs text-slate-500 mt-2">{eff.companyAddress}</p>
-            )}
-            {(eff.companyPhone || eff.companyEmail) && (
-              <p className="text-xs text-slate-500">
-                {[eff.companyPhone, eff.companyEmail].filter(Boolean).join(' · ')}
-              </p>
-            )}
-          </div>
-          <div className="text-right">
-            <div className="text-xs text-slate-400 uppercase tracking-wide font-semibold">Orçamento</div>
-            {isEditing ? (
-              <input
-                value={editTitle}
-                onChange={e => setEditTitle(e.target.value)}
-                className="mt-1 text-sm font-medium text-slate-700 border border-amber-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-400/40 w-64 text-right"
-                placeholder="Título do orçamento"
-              />
-            ) : (
-              <div className="text-lg font-bold text-slate-700 mt-0.5">#{dealId.slice(0, 8).toUpperCase()}</div>
-            )}
-            <div className="text-xs text-slate-500 mt-1">{formatDate(quote.createdAt)}</div>
+        {/* Fonts */}
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Archivo+Narrow:wght@500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
+          #quote-print-target { font-family: 'Archivo', sans-serif; }
+          .of-secao-titulo { font-family: 'Archivo Narrow', sans-serif; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: #B15A1E; margin-bottom: 18px; }
+          .of-mono { font-family: 'JetBrains Mono', monospace; }
+          .of-narrow { font-family: 'Archivo Narrow', sans-serif; }
+          @media print {
+            @page { margin: 0; size: A4 portrait; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            body * { visibility: hidden !important; }
+            #quote-print-target, #quote-print-target * { visibility: visible !important; }
+            #quote-print-target { position: fixed; inset: 0; width: 100%; max-width: 100%; box-shadow: none; margin: 0; }
+          }
+        `}</style>
+
+        {/* HERO */}
+        <div style={{ position: 'relative', height: '280px', overflow: 'hidden' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={eff.bannerImageUrl || 'https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?fm=jpg&q=80&w=1600&auto=format&fit=crop'}
+            alt="Instalação solar"
+            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 40%', display: 'block' }}
+            crossOrigin="anonymous"
+          />
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg,rgba(0,0,0,0.28) 0%,rgba(0,0,0,0.05) 50%,rgba(250,250,248,0.15) 80%,rgba(250,250,248,0.97) 100%)' }} />
+          {eff.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={eff.logoUrl} alt="Logo" crossOrigin="anonymous" style={{ position: 'absolute', top: 20, left: 30, height: 70, objectFit: 'contain', maxWidth: 280 }} />
+          ) : (
+            <span className="of-mono" style={{ position: 'absolute', top: 20, left: 30, fontSize: 11, letterSpacing: 2, color: 'rgba(255,255,255,0.9)', textTransform: 'uppercase' }}>PROPOSTA SOLAR</span>
+          )}
+          <div className="of-mono" style={{ position: 'absolute', top: 20, right: 30, textAlign: 'right', fontSize: 10, color: 'rgba(255,255,255,0.85)', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>
+            Nº <strong style={{ color: '#fff' }}>#{dealId.slice(0, 8).toUpperCase()}</strong><br />
+            Emissão: {formatDate(quote.createdAt)}<br />
+            Validade: 3 dias
           </div>
         </div>
 
-        {/* Banner da usina/instalação */}
-        {eff.bannerImageUrl && (
-          <div id="pdf-sec-banner" className="mb-8 rounded-2xl overflow-hidden" style={{ height: '220px' }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={eff.bannerImageUrl}
-              alt="Instalação solar"
-              className="w-full h-full object-cover"
-            />
-          </div>
-        )}
-
-        {/* Cliente */}
-        <div id="pdf-sec-client" className="mb-6 grid grid-cols-2 gap-6">
-          <div className="bg-slate-50 rounded-xl p-4">
-            <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-1">Cliente</div>
-            <div className="font-semibold text-slate-800">{quote.fichaCliente?.nomeCompleto || quote.contactName}</div>
-            {quote.companyName && <div className="text-sm text-slate-600">{quote.companyName}</div>}
-            {(quote.fichaCliente?.instalacaoEndereco || quote.fichaCliente?.instalacaoCidade) && (
-              <div className="text-xs text-slate-500 mt-1">
-                {[quote.fichaCliente.instalacaoEndereco, quote.fichaCliente.instalacaoCidade].filter(Boolean).join(' — ')}
-              </div>
-            )}
-            {quote.contactPhone && <div className="text-sm text-slate-500 mt-0.5">{quote.contactPhone}</div>}
-            {quote.contactEmail && <div className="text-sm text-slate-500">{quote.contactEmail}</div>}
-          </div>
-          <div className="bg-slate-50 rounded-xl p-4">
-            <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-1">Proposta Comercial</div>
-            <div className="font-semibold text-slate-800">{formatDate(quote.createdAt)}</div>
-            {quote.fichaCliente?.prazoEntrega && (
-              <div className="text-xs text-slate-500 mt-2 leading-relaxed">{quote.fichaCliente.prazoEntrega}</div>
-            )}
-            {quote.fichaCliente?.observacoes && (
-              <div className="text-xs text-slate-400 mt-1 italic">{quote.fichaCliente.observacoes}</div>
-            )}
-          </div>
+        {/* CABEÇALHO CLIENTE */}
+        <div style={{ padding: '20px 40px 0 40px' }}>
+          <div className="of-mono" style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', color: '#EA6A1E', marginBottom: 6 }}>Proposta Comercial · Energia Solar Fotovoltaica</div>
+          <h1 className="of-narrow" style={{ fontWeight: 700, fontSize: 26, color: '#171717' }}>Sistema de Energia Solar Fotovoltaica</h1>
+        </div>
+        <div style={{ display: 'flex', gap: 36, padding: '12px 40px 22px 40px', flexWrap: 'wrap' }}>
+          {[
+            { k: 'Cliente', v: quote.fichaCliente?.nomeCompleto || quote.contactName },
+            quote.fichaCliente?.instalacaoCidade ? { k: 'Local', v: quote.fichaCliente.instalacaoCidade } : null,
+            { k: 'Data', v: formatDate(quote.createdAt) },
+            quote.companyName ? { k: 'Empresa', v: quote.companyName } : null,
+          ].filter(Boolean).map((item) => item && (
+            <div key={item.k}>
+              <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: 1, color: '#9A9A96', marginBottom: 3 }}>{item.k}</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#171717' }}>{item.v}</div>
+            </div>
+          ))}
         </div>
 
-        {/* Especificações do Sistema Solar */}
+        {/* RESUMO DO SISTEMA */}
         {quote.fichaCliente?.potenciaKwp && (
-          <div className="mb-6 rounded-xl border border-slate-200 overflow-hidden">
-            <div className="bg-slate-800 text-white px-4 py-2.5 flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider">Especificações do Sistema Solar</span>
-              <span className="ml-auto text-sm font-bold text-yellow-400">{quote.fichaCliente.potenciaKwp} kWp</span>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y divide-slate-100 bg-white">
-              {quote.fichaCliente.numPaineis && (
-                <div className="px-4 py-3">
-                  <div className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Painéis</div>
-                  <div className="text-sm font-semibold text-slate-800">{quote.fichaCliente.numPaineis} un.</div>
-                  {quote.fichaCliente.modeloPainel && <div className="text-[11px] text-slate-500">{quote.fichaCliente.modeloPainel}</div>}
+          <div style={{ padding: '24px 40px', borderTop: '1px solid #E5E2DC' }}>
+            <div className="of-secao-titulo">Resumo do Sistema</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: '#E5E2DC', border: '1px solid #E5E2DC' }}>
+              {[
+                { k: 'Potência instalada', v: `${quote.fichaCliente.potenciaKwp} kWp`, sub: `${quote.fichaCliente.numPaineis ?? '—'} painéis de ${quote.fichaCliente.potenciaPainelW ?? '—'}W`, destaque: true },
+                { k: 'Inversor', v: quote.fichaCliente.modeloInversor ?? '—', sub: `${quote.fichaCliente.qtdInversores ?? 1}x unidade`, destaque: false },
+                { k: 'Investimento total', v: formatBRL(subtotal), sub: quote.fichaCliente.formaPagamento ?? '', destaque: false },
+              ].map((c) => (
+                <div key={c.k} style={{ background: c.destaque ? '#FFF7F0' : '#FFFFFF', borderLeft: c.destaque ? '4px solid #EA6A1E' : undefined, padding: '16px 14px' }}>
+                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8, color: c.destaque ? '#B15A1E' : '#6B6B68', marginBottom: 6, fontWeight: 500 }}>{c.k}</div>
+                  <div className="of-narrow" style={{ fontSize: c.destaque ? 28 : 22, fontWeight: 700, color: c.destaque ? '#B15A1E' : '#171717', lineHeight: 1.15 }}>{c.v}</div>
+                  {c.sub && <div style={{ fontSize: 11, color: '#9A9A96', marginTop: 3 }}>{c.sub}</div>}
                 </div>
-              )}
-              {quote.fichaCliente.modeloInversor && (
-                <div className="px-4 py-3">
-                  <div className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Inversor</div>
-                  <div className="text-sm font-semibold text-slate-800">{quote.fichaCliente.qtdInversores ?? 1} un.</div>
-                  <div className="text-[11px] text-slate-500">{quote.fichaCliente.modeloInversor}</div>
-                </div>
-              )}
-              {(quote.fichaCliente.tipoEstrutura || quote.fichaCliente.instalacaoTelhado) && (
-                <div className="px-4 py-3">
-                  <div className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Estrutura</div>
-                  <div className="text-sm font-semibold text-slate-800">{quote.fichaCliente.tipoEstrutura || quote.fichaCliente.instalacaoTelhado}</div>
-                </div>
-              )}
-              <div className="px-4 py-3">
-                <div className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Potência</div>
-                <div className="text-sm font-semibold text-slate-800">{quote.fichaCliente.potenciaKwp} kWp</div>
-                {quote.fichaCliente.potenciaPainelW && <div className="text-[11px] text-slate-500">{quote.fichaCliente.potenciaPainelW}W / painel</div>}
-              </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Tabela de itens */}
-        {isEditing ? (
-          /* Modo edição: inputs inline */
-          <div id="pdf-sec-items" className="mb-8 border border-amber-200 rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
+        {/* EQUIPAMENTOS */}
+        {quote.fichaCliente?.potenciaKwp && (
+          <div style={{ padding: '24px 40px', borderTop: '1px solid #E5E2DC' }}>
+            <div className="of-secao-titulo">Equipamentos</div>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr className="bg-amber-50 text-amber-800 border-b border-amber-200">
-                  <th className="text-left px-4 py-3 font-semibold">Descrição</th>
-                  <th className="text-center px-3 py-3 font-semibold w-20">Qtd</th>
-                  <th className="text-right px-3 py-3 font-semibold w-36">Preço Unit.</th>
-                  <th className="text-right px-3 py-3 font-semibold w-32">Total</th>
-                  <th className="w-8" />
+                <tr>
+                  <th style={{ textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8, color: '#6B6B68', paddingBottom: 10, borderBottom: '1.5px solid #171717' }}>Componente</th>
+                  <th style={{ textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8, color: '#6B6B68', paddingBottom: 10, borderBottom: '1.5px solid #171717' }}>Especificação</th>
                 </tr>
               </thead>
               <tbody>
-                {editItems.map((item, i) => (
-                  <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                    <td className="px-3 py-2">
-                      <input
-                        value={item.name}
-                        onChange={e => updateEditItem(i, 'name', e.target.value)}
-                        className="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
-                        placeholder="Descrição do item"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <input
-                        type="number" min="1"
-                        value={item.quantity}
-                        onChange={e => updateEditItem(i, 'quantity', Number(e.target.value) || 1)}
-                        className="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-sm text-center text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <input
-                        type="number" min="0" step="0.01"
-                        value={item.price}
-                        onChange={e => updateEditItem(i, 'price', Number(e.target.value) || 0)}
-                        className="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-sm text-right text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right text-sm font-semibold text-slate-700">
-                      {formatBRL(item.quantity * item.price)}
-                    </td>
-                    <td className="px-2 py-2">
-                      <button
-                        onClick={() => removeEditItem(i)}
-                        className="p-1 text-slate-300 hover:text-red-400 transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
+                {[
+                  quote.fichaCliente.modeloPainel ? { nome: 'Módulos fotovoltaicos', spec: `${quote.fichaCliente.potenciaPainelW}W · ${quote.fichaCliente.numPaineis} un. · ${quote.fichaCliente.modeloPainel}` } : null,
+                  quote.fichaCliente.modeloInversor ? { nome: 'Inversor', spec: `${quote.fichaCliente.modeloInversor} · ${quote.fichaCliente.qtdInversores ?? 1}x` } : null,
+                  quote.fichaCliente.tipoEstrutura ? { nome: 'Estrutura de fixação', spec: quote.fichaCliente.tipoEstrutura } : null,
+                  { nome: 'Cabeamento', spec: 'Solar 6mm² · Conectores MC4' },
+                ].filter(Boolean).map((row) => row && (
+                  <tr key={row.nome}>
+                    <td style={{ padding: '11px 14px 11px 0', borderBottom: '1px solid #E5E2DC', fontSize: 14, fontWeight: 600, color: '#171717', width: 230 }}>{row.nome}</td>
+                    <td style={{ padding: '11px 0', borderBottom: '1px solid #E5E2DC', fontSize: 13, color: '#4A4A48' }}>{row.spec}</td>
                   </tr>
                 ))}
               </tbody>
-              <tfoot>
+            </table>
+          </div>
+        )}
+
+        {/* ITENS DO ORÇAMENTO */}
+        <div id="pdf-sec-items" style={{ padding: '24px 40px', borderTop: '1px solid #E5E2DC' }}>
+          <div className="of-secao-titulo">Itens do Orçamento</div>
+          {isEditing ? (
+            <div style={{ border: '1px solid #fcd34d', borderRadius: 12, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                <thead>
+                  <tr style={{ background: '#fffbeb', color: '#92400e', borderBottom: '1px solid #fcd34d' }}>
+                    <th style={{ textAlign: 'left', padding: '10px 14px', fontWeight: 600 }}>Descrição</th>
+                    <th style={{ textAlign: 'center', padding: '10px 10px', fontWeight: 600, width: 70 }}>Qtd</th>
+                    <th style={{ textAlign: 'right', padding: '10px 10px', fontWeight: 600, width: 130 }}>Preço Unit.</th>
+                    <th style={{ textAlign: 'right', padding: '10px 14px', fontWeight: 600, width: 120 }}>Total</th>
+                    <th style={{ width: 32 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {editItems.map((item, i) => (
+                    <tr key={item.id} style={{ background: i % 2 === 0 ? '#fff' : '#fafaf8' }}>
+                      <td style={{ padding: '8px 10px' }}>
+                        <input value={item.name} onChange={e => updateEditItem(i, 'name', e.target.value)}
+                          className="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400/40" placeholder="Descrição" />
+                      </td>
+                      <td style={{ padding: '8px 6px' }}>
+                        <input type="number" min="1" value={item.quantity} onChange={e => updateEditItem(i, 'quantity', Number(e.target.value) || 1)}
+                          className="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-sm text-center text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400/40" />
+                      </td>
+                      <td style={{ padding: '8px 6px' }}>
+                        <input type="number" min="0" step="0.01" value={item.price} onChange={e => updateEditItem(i, 'price', Number(e.target.value) || 0)}
+                          className="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-sm text-right text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400/40" />
+                      </td>
+                      <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 600, color: '#171717' }}>{formatBRL(item.quantity * item.price)}</td>
+                      <td style={{ padding: '8px 6px' }}>
+                        <button onClick={() => removeEditItem(i)} className="p-1 text-slate-300 hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr><td colSpan={5} style={{ padding: '8px 10px' }}>
+                    <button onClick={addEditItem} className="inline-flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-900 font-medium"><Plus className="w-3.5 h-3.5" /> Adicionar item</button>
+                  </td></tr>
+                  <tr style={{ borderTop: '1px solid #fcd34d', background: '#fffbeb' }}>
+                    <td colSpan={2} /><td style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 700, color: '#92400e' }}>TOTAL</td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#78350f' }}>{formatBRL(editItems.reduce((s, i) => s + i.quantity * i.price, 0))}</td>
+                    <td />
+                  </tr>
+                  <tr style={{ background: '#fffbeb' }}>
+                    <td colSpan={5} style={{ padding: '8px 10px' }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: '#92400e', display: 'block', marginBottom: 4 }}>Forma de pagamento</label>
+                      <input value={editFormaPagamento} onChange={e => setEditFormaPagamento(e.target.value)}
+                        className="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+                        placeholder="Ex: À vista no PIX, Financiamento Santander 60x..." />
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
                 <tr>
-                  <td colSpan={5} className="px-3 py-2">
-                    <button
-                      onClick={addEditItem}
-                      className="inline-flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-900 font-medium"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Adicionar item
-                    </button>
-                  </td>
+                  {['Descrição', 'Qtd', 'Unitário', 'Total'].map((h, i) => (
+                    <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8, color: '#6B6B68', paddingBottom: 10, borderBottom: '1.5px solid #171717', width: i === 0 ? undefined : i === 1 ? 60 : 120 }}>
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-                <tr className="border-t border-amber-200 bg-amber-50">
+              </thead>
+              <tbody>
+                {quote.items.map((item) => (
+                  <tr key={item.id}>
+                    <td style={{ padding: '12px 14px 12px 0', borderBottom: '1px solid #E5E2DC', fontSize: 14, fontWeight: 600, color: '#171717', verticalAlign: 'top' }}>
+                      {item.name}
+                      {item.kitDescription && <div style={{ marginTop: 4, fontSize: 12, fontWeight: 400, color: '#4A4A48', whiteSpace: 'pre-line', lineHeight: 1.5 }}>{item.kitDescription}</div>}
+                    </td>
+                    <td style={{ padding: '12px 0', borderBottom: '1px solid #E5E2DC', fontSize: 14, color: '#4A4A48', textAlign: 'right', verticalAlign: 'top' }}>{item.quantity}</td>
+                    <td style={{ padding: '12px 0', borderBottom: '1px solid #E5E2DC', fontSize: 14, color: '#4A4A48', textAlign: 'right', verticalAlign: 'top' }}>{formatBRL(item.price)}</td>
+                    <td style={{ padding: '12px 0', borderBottom: '1px solid #E5E2DC', fontSize: 14, fontWeight: 700, color: '#171717', textAlign: 'right', verticalAlign: 'top' }}>{formatBRL(item.quantity * item.price)}</td>
+                  </tr>
+                ))}
+                {instCost > 0 && (
+                  <tr>
+                    <td style={{ padding: '12px 14px 12px 0', borderBottom: '1px solid #E5E2DC', fontSize: 14, color: '#171717' }}>Instalação</td>
+                    <td style={{ padding: '12px 0', borderBottom: '1px solid #E5E2DC', textAlign: 'right', color: '#4A4A48' }}>1</td>
+                    <td style={{ padding: '12px 0', borderBottom: '1px solid #E5E2DC', textAlign: 'right', color: '#4A4A48' }}>{formatBRL(instCost)}</td>
+                    <td style={{ padding: '12px 0', borderBottom: '1px solid #E5E2DC', textAlign: 'right', fontWeight: 700 }}>{formatBRL(instCost)}</td>
+                  </tr>
+                )}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: '#FDF3EA' }}>
                   <td colSpan={2} />
-                  <td className="px-3 py-3 text-right font-bold text-amber-800">TOTAL</td>
-                  <td className="px-3 py-3 text-right font-bold text-amber-900">
-                    {formatBRL(editItems.reduce((s, i) => s + i.quantity * i.price, 0))}
-                  </td>
-                  <td />
-                </tr>
-                <tr className="bg-amber-50/50">
-                  <td colSpan={5} className="px-3 py-2">
-                    <label className="text-xs font-semibold text-amber-700 block mb-1">Forma de pagamento</label>
-                    <input
-                      value={editFormaPagamento}
-                      onChange={e => setEditFormaPagamento(e.target.value)}
-                      className="w-full border border-amber-300 rounded-lg px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
-                      placeholder="Ex: À vista no PIX, Financiamento Santander 60x..."
-                    />
-                  </td>
+                  <td className="of-narrow" style={{ padding: '14px 0', textAlign: 'right', fontWeight: 700, color: '#B15A1E', fontSize: 13 }}>TOTAL</td>
+                  <td className="of-narrow" style={{ padding: '14px 0', textAlign: 'right', fontWeight: 700, color: '#B15A1E', fontSize: 22 }}>{formatBRL(subtotal)}</td>
                 </tr>
               </tfoot>
             </table>
-          </div>
-        ) : (
-        <table id="pdf-sec-items" className="w-full mb-8 text-sm">
-          <thead>
-            <tr className="bg-slate-800 text-white">
-              <th className="text-left px-4 py-3 rounded-tl-lg font-semibold">Descrição</th>
-              <th className="text-center px-4 py-3 font-semibold w-16">Qtd</th>
-              <th className="text-right px-4 py-3 font-semibold w-32">Preço Unit.</th>
-              <th className="text-right px-4 py-3 rounded-tr-lg font-semibold w-32">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {quote.items.map((item, i) => (
-              <tr key={item.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                <td className="px-4 py-4">
-                  <div className="text-slate-800 font-semibold text-base">{item.name}</div>
-                  {item.kitDescription && (
-                    <div className="mt-1 text-xs text-slate-500 whitespace-pre-line leading-relaxed">
-                      {item.kitDescription}
-                    </div>
-                  )}
-                  {item.kitImages && item.kitImages.length > 0 && (
-                    <div className="mt-4 flex flex-wrap gap-4">
-                      {item.kitImages.map((img, idx) => (
-                        <div key={idx} className="flex flex-col items-center gap-1.5" style={{ width: '120px' }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={img.url}
-                            alt={img.label}
-                            style={{ width: '120px', height: '120px', objectFit: 'contain' }}
-                            className="rounded-xl border border-slate-200 bg-white p-2"
-                          />
-                          <span className="text-[11px] text-slate-600 font-medium text-center leading-tight">{img.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {(!item.kitImages || item.kitImages.length === 0) && item.imageUrl && (
-                    <div className="mt-3">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={item.imageUrl} alt={item.name} className="w-24 h-24 object-contain rounded-xl border border-slate-200 bg-white p-1" />
-                    </div>
-                  )}
-                </td>
-                <td className="px-4 py-4 text-center text-slate-600 align-top">{item.quantity}</td>
-                <td className="px-4 py-4 text-right text-slate-600 align-top">{formatBRL(item.price)}</td>
-                <td className="px-4 py-4 text-right font-semibold text-slate-800 align-top">{formatBRL(item.quantity * item.price)}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tbody>
-            {instCost > 0 && (
-              <tr className="bg-slate-50/40">
-                <td className="px-4 py-3 text-slate-700 font-medium">Instalação</td>
-                <td className="px-4 py-3 text-center text-slate-500">1</td>
-                <td className="px-4 py-3 text-right text-slate-600">{formatBRL(instCost)}</td>
-                <td className="px-4 py-3 text-right font-semibold text-slate-800">{formatBRL(instCost)}</td>
-              </tr>
-            )}
-            {(extras.extraItems ?? []).filter(e => e.name && e.value > 0).map((e, i) => (
-              <tr key={`extra-${i}`} className="bg-slate-50/40">
-                <td className="px-4 py-3 text-slate-700 font-medium">{e.name}</td>
-                <td className="px-4 py-3 text-center text-slate-500">1</td>
-                <td className="px-4 py-3 text-right text-slate-600">{formatBRL(e.value)}</td>
-                <td className="px-4 py-3 text-right font-semibold text-slate-800">{formatBRL(e.value)}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-slate-200">
-              <td colSpan={2} />
-              <td className="px-4 py-3 text-right text-sm font-semibold text-slate-500">Subtotal</td>
-              <td className="px-4 py-3 text-right font-semibold text-slate-700">{formatBRL(subtotal)}</td>
-            </tr>
-            <tr className="bg-slate-800 text-white">
-              <td colSpan={2} />
-              <td className="px-4 py-3 text-right font-bold rounded-bl-lg">TOTAL</td>
-              <td className="px-4 py-3 text-right font-bold text-lg rounded-br-lg">{formatBRL(subtotal)}</td>
-            </tr>
-          </tfoot>
-        </table>
-        )}
+          )}
+        </div>
 
-        {/* Condições de Pagamento — usa dados reais do contrato */}
-        <div id="pdf-sec-financing" className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-px flex-1 bg-slate-200" />
-            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">Condições de Pagamento</h2>
-            <div className="h-px flex-1 bg-slate-200" />
-          </div>
-
-          {(quote.fichaCliente?.formaPagamento || quote.fichaCliente?.condicoesPagamento) ? (
-            <div className="rounded-2xl border border-slate-200 overflow-hidden">
-              <div className="bg-slate-800 text-white px-5 py-3 flex items-center justify-between">
-                <span className="font-bold text-sm">{quote.fichaCliente.formaPagamento || 'Forma de pagamento'}</span>
-                <span className="text-lg font-bold text-yellow-400">{formatBRL(subtotal)}</span>
-              </div>
-              {quote.fichaCliente.condicoesPagamento && (
-                <div className="px-5 py-4 bg-slate-50">
-                  <p className="text-slate-700 font-semibold text-base">{quote.fichaCliente.condicoesPagamento}</p>
-                  <p className="text-xs text-slate-400 mt-1">Conforme acordado em contrato</p>
-                </div>
-              )}
+        {/* INVESTIMENTO + PAGAMENTO */}
+        <div id="pdf-sec-financing" style={{ padding: '24px 40px', borderTop: '1px solid #E5E2DC' }}>
+          <div className="of-secao-titulo">Investimento</div>
+          <div style={{ background: '#FDF3EA', border: '2px solid #F6D9C2', borderRadius: 8, padding: '18px 22px', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: '#B15A1E', fontWeight: 600 }}>Investimento total</div>
+              {quote.fichaCliente?.formaPagamento && <div style={{ fontSize: 11, color: '#B15A1E', marginTop: 2 }}>{quote.fichaCliente.formaPagamento}</div>}
             </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-slate-300 px-5 py-4 text-center text-slate-400 text-sm">
-              Forma de pagamento não registrada no contrato.
+            <div className="of-narrow" style={{ fontSize: 32, fontWeight: 700, color: '#B15A1E' }}>{formatBRL(subtotal)}</div>
+          </div>
+          {quote.fichaCliente?.condicoesPagamento && (
+            <div style={{ background: '#FFF7F0', border: '1px solid #F6D9C2', borderRadius: 8, padding: '14px 18px' }}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#B15A1E', fontWeight: 600, marginBottom: 6 }}>Condições</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#171717' }}>{quote.fichaCliente.condicoesPagamento}</div>
+              <div style={{ fontSize: 11, color: '#9A9A96', marginTop: 3 }}>Conforme acordado em contrato</div>
+            </div>
+          )}
+          {quote.fichaCliente?.prazoEntrega && (
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#F5F5F3', borderRadius: 6 }}>
+              <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, color: '#6B6B68', fontWeight: 600 }}>Prazo de entrega</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#171717' }}>{quote.fichaCliente.prazoEntrega}</span>
             </div>
           )}
         </div>
 
-        {/* Rodapé personalizado */}
-        {eff.quoteFooter && (
-          <div id="pdf-sec-footer" className="mt-8 pt-6 border-t border-slate-200">
-            <p className="text-xs text-slate-400 whitespace-pre-wrap">{eff.quoteFooter}</p>
+        {/* OBSERVAÇÕES */}
+        {quote.fichaCliente?.observacoes && (
+          <div style={{ padding: '24px 40px', borderTop: '1px solid #E5E2DC' }}>
+            <div className="of-secao-titulo">Observações</div>
+            <p style={{ fontSize: 14, color: '#4A4A48', lineHeight: 1.7 }}>{quote.fichaCliente.observacoes}</p>
           </div>
         )}
-      </div>
 
-      <style>{`
-        @media print {
-          @page { margin: 1.5cm; size: A4; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          body * { visibility: hidden !important; }
-          #quote-print-target, #quote-print-target * { visibility: visible !important; }
-          #quote-print-target { position: fixed; inset: 0; width: 100%; background: white; overflow: visible; }
-        }
-      `}</style>
+        {/* CONDIÇÕES GERAIS */}
+        <div style={{ padding: '24px 40px', borderTop: '1px solid #E5E2DC' }}>
+          <div className="of-secao-titulo">Condições Gerais</div>
+          <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {['Instalação, homologação e ligação da rede inclusas', 'Proposta válida por 3 dias a partir da emissão', 'Garantia de 25 anos de performance dos módulos fotovoltaicos'].map((c) => (
+              <li key={c} style={{ fontSize: 13, color: '#4A4A48', paddingLeft: 16, position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 0, color: '#B15A1E', fontWeight: 700 }}>—</span>{c}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* RODAPÉ */}
+        <div id="pdf-sec-footer" style={{ padding: '20px 40px', borderTop: '1px solid #E5E2DC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 12, color: '#6B6B68', lineHeight: 1.6 }}>
+            {quote.companyName || 'Aureon Energix'}<br />
+            {eff.companyPhone && <span>{eff.companyPhone} · </span>}{eff.companyEmail}
+          </div>
+          <div style={{ fontSize: 12, color: '#6B6B68', lineHeight: 1.6, textAlign: 'right' }}>
+            Válida por 3 dias<br />Sujeita a vistoria técnica
+          </div>
+        </div>
+      </div>
     </>
   );
 }
