@@ -21,6 +21,26 @@ interface QuoteItem {
   kitImages?: { label: string; url: string }[];
 }
 
+interface FichaCliente {
+  nomeCompleto?: string;
+  potenciaKwp?: number;
+  numPaineis?: number;
+  modeloPainel?: string;
+  potenciaPainelW?: number;
+  modeloInversor?: string;
+  qtdInversores?: number;
+  tipoEstrutura?: string;
+  instalacaoTelhado?: string;
+  instalacaoEndereco?: string;
+  instalacaoCidade?: string;
+  formaPagamento?: string;
+  condicoesPagamento?: string;
+  prazoEntrega?: string;
+  observacoes?: string;
+  valorTotal?: number;
+  [key: string]: unknown;
+}
+
 interface QuoteData {
   dealTitle: string;
   dealValue: number;
@@ -31,6 +51,7 @@ interface QuoteData {
   createdAt: string;
   items: QuoteItem[];
   quoteOverrides: Partial<OrgQuoteSettings>;
+  fichaCliente?: FichaCliente;
 }
 
 function formatBRL(v: number) {
@@ -40,37 +61,6 @@ function formatBRL(v: number) {
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 }
-
-// Cálculo de parcela (Price/SAC simplificado)
-function pmt(pv: number, monthlyRate: number, nMonths: number): number {
-  if (monthlyRate === 0) return pv / nMonths;
-  return (pv * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -nMonths));
-}
-
-interface FinancingOption {
-  bank: string;
-  tagline: string;
-  color: string;
-  rate: number; // % a.m.
-  terms: number[];
-}
-
-const FINANCING_OPTIONS: FinancingOption[] = [
-  {
-    bank: 'Santander',
-    tagline: 'Crédito Solar',
-    color: '#EC0000',
-    rate: 1.09,
-    terms: [36, 60, 84],
-  },
-  {
-    bank: 'BV',
-    tagline: 'Financiamento Fotovoltaico',
-    color: '#004B87',
-    rate: 0.99,
-    terms: [36, 60, 72],
-  },
-];
 
 interface EditableItem {
   id: string;
@@ -155,13 +145,14 @@ export default function QuotePage() {
         const quoteData: QuoteData = {
           dealTitle: d.title,
           dealValue: Number(d.value ?? 0),
-          contactName: contact?.name ?? '—',
+          contactName: contact?.name ?? (d.ficha_cliente?.nomeCompleto ?? '—'),
           contactPhone: contact?.phone ?? '',
           contactEmail: contact?.email ?? '',
           companyName: crmCompany?.name ?? '',
           createdAt: d.created_at,
           items: effectiveItems,
           quoteOverrides: savedOverrides,
+          fichaCliente: d.ficha_cliente ?? undefined,
         };
         setQuote(quoteData);
 
@@ -699,20 +690,67 @@ export default function QuotePage() {
         )}
 
         {/* Cliente */}
-        <div id="pdf-sec-client" className="mb-8 grid grid-cols-2 gap-6">
+        <div id="pdf-sec-client" className="mb-6 grid grid-cols-2 gap-6">
           <div className="bg-slate-50 rounded-xl p-4">
             <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-1">Cliente</div>
-            <div className="font-semibold text-slate-800">{quote.contactName}</div>
+            <div className="font-semibold text-slate-800">{quote.fichaCliente?.nomeCompleto || quote.contactName}</div>
             {quote.companyName && <div className="text-sm text-slate-600">{quote.companyName}</div>}
-            {quote.contactPhone && <div className="text-sm text-slate-500">{quote.contactPhone}</div>}
+            {(quote.fichaCliente?.instalacaoEndereco || quote.fichaCliente?.instalacaoCidade) && (
+              <div className="text-xs text-slate-500 mt-1">
+                {[quote.fichaCliente.instalacaoEndereco, quote.fichaCliente.instalacaoCidade].filter(Boolean).join(' — ')}
+              </div>
+            )}
+            {quote.contactPhone && <div className="text-sm text-slate-500 mt-0.5">{quote.contactPhone}</div>}
             {quote.contactEmail && <div className="text-sm text-slate-500">{quote.contactEmail}</div>}
           </div>
           <div className="bg-slate-50 rounded-xl p-4">
-            <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-1">Proposta</div>
-            <div className="font-semibold text-slate-800">Proposta Comercial</div>
-            <div className="text-sm text-slate-500 mt-1">Data: {formatDate(quote.createdAt)}</div>
+            <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-400 mb-1">Proposta Comercial</div>
+            <div className="font-semibold text-slate-800">{formatDate(quote.createdAt)}</div>
+            {quote.fichaCliente?.prazoEntrega && (
+              <div className="text-xs text-slate-500 mt-2 leading-relaxed">{quote.fichaCliente.prazoEntrega}</div>
+            )}
+            {quote.fichaCliente?.observacoes && (
+              <div className="text-xs text-slate-400 mt-1 italic">{quote.fichaCliente.observacoes}</div>
+            )}
           </div>
         </div>
+
+        {/* Especificações do Sistema Solar */}
+        {quote.fichaCliente?.potenciaKwp && (
+          <div className="mb-6 rounded-xl border border-slate-200 overflow-hidden">
+            <div className="bg-slate-800 text-white px-4 py-2.5 flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider">Especificações do Sistema Solar</span>
+              <span className="ml-auto text-sm font-bold text-yellow-400">{quote.fichaCliente.potenciaKwp} kWp</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y divide-slate-100 bg-white">
+              {quote.fichaCliente.numPaineis && (
+                <div className="px-4 py-3">
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Painéis</div>
+                  <div className="text-sm font-semibold text-slate-800">{quote.fichaCliente.numPaineis} un.</div>
+                  {quote.fichaCliente.modeloPainel && <div className="text-[11px] text-slate-500">{quote.fichaCliente.modeloPainel}</div>}
+                </div>
+              )}
+              {quote.fichaCliente.modeloInversor && (
+                <div className="px-4 py-3">
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Inversor</div>
+                  <div className="text-sm font-semibold text-slate-800">{quote.fichaCliente.qtdInversores ?? 1} un.</div>
+                  <div className="text-[11px] text-slate-500">{quote.fichaCliente.modeloInversor}</div>
+                </div>
+              )}
+              {(quote.fichaCliente.tipoEstrutura || quote.fichaCliente.instalacaoTelhado) && (
+                <div className="px-4 py-3">
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Estrutura</div>
+                  <div className="text-sm font-semibold text-slate-800">{quote.fichaCliente.tipoEstrutura || quote.fichaCliente.instalacaoTelhado}</div>
+                </div>
+              )}
+              <div className="px-4 py-3">
+                <div className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Potência</div>
+                <div className="text-sm font-semibold text-slate-800">{quote.fichaCliente.potenciaKwp} kWp</div>
+                {quote.fichaCliente.potenciaPainelW && <div className="text-[11px] text-slate-500">{quote.fichaCliente.potenciaPainelW}W / painel</div>}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tabela de itens */}
         {isEditing ? (
@@ -884,61 +922,32 @@ export default function QuotePage() {
         </table>
         )}
 
-        {/* Opções de financiamento */}
+        {/* Condições de Pagamento — usa dados reais do contrato */}
         <div id="pdf-sec-financing" className="mb-8">
           <div className="flex items-center gap-3 mb-4">
             <div className="h-px flex-1 bg-slate-200" />
-            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">Opções de Pagamento</h2>
+            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">Condições de Pagamento</h2>
             <div className="h-px flex-1 bg-slate-200" />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            {/* Santander e BV */}
-            {FINANCING_OPTIONS.map((opt) => (
-              <div key={opt.bank} className="rounded-2xl border border-slate-200 overflow-hidden">
-                {/* Header colorido do banco */}
-                <div className="px-4 py-3 text-white font-bold text-sm" style={{ backgroundColor: opt.color }}>
-                  {opt.bank}
-                  <div className="text-[11px] font-normal opacity-90">{opt.tagline}</div>
-                </div>
-                <div className="p-3 space-y-2 bg-slate-50/60">
-                  <div className="text-[11px] text-slate-500 font-medium">
-                    Taxa a partir de <span className="font-bold text-slate-700">{opt.rate.toFixed(2).replace('.', ',')}% a.m.</span>
-                  </div>
-                  {opt.terms.map((n) => {
-                    const monthly = pmt(subtotal, opt.rate / 100, n);
-                    return (
-                      <div key={n} className="flex items-center justify-between py-1.5 border-t border-slate-200 first:border-0">
-                        <span className="text-xs text-slate-600 font-semibold">{n}x</span>
-                        <span className="text-sm font-bold text-slate-800">{formatBRL(monthly)}<span className="text-[10px] text-slate-400 font-normal">/mês</span></span>
-                      </div>
-                    );
-                  })}
-                  <p className="text-[10px] text-slate-400 pt-1">Sujeito à análise de crédito</p>
-                </div>
-              </div>
-            ))}
-
-            {/* Cartão de crédito */}
+          {(quote.fichaCliente?.formaPagamento || quote.fichaCliente?.condicoesPagamento) ? (
             <div className="rounded-2xl border border-slate-200 overflow-hidden">
-              <div className="px-4 py-3 text-white font-bold text-sm" style={{ backgroundColor: '#1a1a2e' }}>
-                Cartão de Crédito
-                <div className="text-[11px] font-normal opacity-90">Parcelado sem juros</div>
+              <div className="bg-slate-800 text-white px-5 py-3 flex items-center justify-between">
+                <span className="font-bold text-sm">{quote.fichaCliente.formaPagamento || 'Forma de pagamento'}</span>
+                <span className="text-lg font-bold text-yellow-400">{formatBRL(subtotal)}</span>
               </div>
-              <div className="p-3 space-y-2 bg-slate-50/60">
-                <div className="text-[11px] text-slate-500 font-medium">
-                  Parcelamento em até <span className="font-bold text-slate-700">12x sem juros</span>
+              {quote.fichaCliente.condicoesPagamento && (
+                <div className="px-5 py-4 bg-slate-50">
+                  <p className="text-slate-700 font-semibold text-base">{quote.fichaCliente.condicoesPagamento}</p>
+                  <p className="text-xs text-slate-400 mt-1">Conforme acordado em contrato</p>
                 </div>
-                {[3, 6, 12].map((n) => (
-                  <div key={n} className="flex items-center justify-between py-1.5 border-t border-slate-200 first:border-0">
-                    <span className="text-xs text-slate-600 font-semibold">{n}x</span>
-                    <span className="text-sm font-bold text-slate-800">{formatBRL(subtotal / n)}<span className="text-[10px] text-slate-400 font-normal">/mês</span></span>
-                  </div>
-                ))}
-                <p className="text-[10px] text-slate-400 pt-1">Principais bandeiras aceitas</p>
-              </div>
+              )}
             </div>
-          </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-300 px-5 py-4 text-center text-slate-400 text-sm">
+              Forma de pagamento não registrada no contrato.
+            </div>
+          )}
         </div>
 
         {/* Rodapé personalizado */}
