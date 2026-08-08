@@ -87,6 +87,11 @@ export default function QuotePage() {
   const [orcafacilId, setOrcafacilId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
+  // Picker de vinculação
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerList, setPickerList] = useState<any[]>([]);
+  const [loadingPicker, setLoadingPicker] = useState(false);
+
   // Modo de edição
   const [isEditing, setIsEditing] = useState(() => searchParams?.get('edit') === '1');
   const [editItems, setEditItems] = useState<EditableItem[]>([]);
@@ -261,8 +266,6 @@ export default function QuotePage() {
       } : prev);
       setEditItems(newItems);
       setEditSaved(true);
-      // Sincroniza com OrçaFácil após salvar
-      syncToOrcafacil();
       setTimeout(() => { setEditSaved(false); setIsEditing(false); }, 1500);
     } finally {
       setSavingEdit(false);
@@ -354,43 +357,25 @@ export default function QuotePage() {
     window.open(url, '_blank');
   };
 
-  const syncToOrcafacil = async (currentQuote = quote, currentOrcafacilId = orcafacilId) => {
-    if (!currentQuote || !dealId) return null;
-    setSyncing(true);
+  const openPicker = async () => {
+    setShowPicker(true);
+    setLoadingPicker(true);
     try {
-      const sub = currentQuote.items.reduce((s, i) => s + i.quantity * i.price, 0);
-      const res = await fetch('/api/orcafacil/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dealId,
-          clienteNome: currentQuote.fichaCliente?.nomeCompleto || currentQuote.contactName,
-          clienteCidade: currentQuote.fichaCliente?.instalacaoCidade ?? null,
-          clienteEnd: currentQuote.fichaCliente?.instalacaoEndereco ?? null,
-          telefone: currentQuote.contactPhone || null,
-          potenciaKwp: currentQuote.fichaCliente?.potenciaKwp ?? null,
-          painelW: currentQuote.fichaCliente?.potenciaPainelW ?? null,
-          numPaineis: currentQuote.fichaCliente?.numPaineis ?? null,
-          modeloPainel: currentQuote.fichaCliente?.modeloPainel ?? null,
-          modeloInversor: currentQuote.fichaCliente?.modeloInversor ?? null,
-          qtdInversores: currentQuote.fichaCliente?.qtdInversores ?? null,
-          tipoEstrutura: currentQuote.fichaCliente?.tipoEstrutura ?? null,
-          valorFinal: sub,
-          formaPagamento: currentQuote.fichaCliente?.formaPagamento ?? null,
-        }),
-      });
+      const res = await fetch('/api/orcafacil/list');
       const json = await res.json();
-      if (json.orcafacilId && !currentOrcafacilId) {
-        setOrcafacilId(json.orcafacilId);
-        await supabase?.from('deals').update({ orcafacil_id: json.orcafacilId }).eq('id', dealId);
-      }
-      return json.orcafacilId;
-    } catch (e) {
-      console.error('Sync OrçaFácil failed', e);
-      return null;
+      setPickerList(json.orcamentos ?? []);
+    } catch {
+      setPickerList([]);
     } finally {
-      setSyncing(false);
+      setLoadingPicker(false);
     }
+  };
+
+  const linkOrcafacil = async (selectedId: string) => {
+    if (!supabase || !dealId) return;
+    await supabase.from('deals').update({ orcafacil_id: selectedId }).eq('id', dealId);
+    setOrcafacilId(selectedId);
+    setShowPicker(false);
   };
 
   const hasOverride = Object.values(quote.quoteOverrides).some((v) => v && String(v).trim());
@@ -413,8 +398,62 @@ export default function QuotePage() {
     { key: 'quoteFooter', label: 'Rodapé', isTextarea: true },
   ];
 
+  const formatBRLPicker = (v: number | null) =>
+    v != null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v) : '—';
+
   return (
     <>
+      {/* Modal de vinculação OrçaFácil */}
+      {showPicker && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+              <h2 className="text-sm font-semibold text-slate-800">Selecionar orçamento no OrçaFácil</h2>
+              <button onClick={() => setShowPicker(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-3">
+              {loadingPicker ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
+                </div>
+              ) : pickerList.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-8">Nenhum orçamento encontrado no OrçaFácil.</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {pickerList.map((o) => (
+                    <button
+                      key={o.id}
+                      onClick={() => linkOrcafacil(o.id)}
+                      className={`w-full text-left rounded-xl border px-4 py-3 hover:border-orange-400 hover:bg-orange-50 transition-colors ${
+                        o.id === orcafacilId ? 'border-orange-400 bg-orange-50' : 'border-slate-200 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-slate-800">{o.cliente_nome || '—'}</span>
+                        <span className="text-sm font-bold text-orange-600">{formatBRLPicker(o.valor_final)}</span>
+                      </div>
+                      <div className="flex gap-3 mt-1 flex-wrap">
+                        {o.cliente_cidade && <span className="text-xs text-slate-500">{o.cliente_cidade}</span>}
+                        {o.potencia_kwp && <span className="text-xs text-slate-500">{o.potencia_kwp} kWp</span>}
+                        {o.forma_pag && <span className="text-xs text-slate-400">{o.forma_pag}</span>}
+                        <span className="text-xs text-slate-400 ml-auto">
+                          {o.updated_at ? new Date(o.updated_at).toLocaleDateString('pt-BR') : new Date(o.created_at).toLocaleDateString('pt-BR')}
+                        </span>
+                      </div>
+                      {o.id === orcafacilId && (
+                        <div className="mt-1 text-xs text-orange-600 font-medium">✓ Vinculado atualmente</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toolbar — oculta na impressão */}
       <div id="quote-toolbar" className="print:hidden fixed top-4 right-4 z-50 flex flex-col items-end gap-2">
         <div className="flex gap-2 flex-wrap justify-end">
@@ -453,22 +492,29 @@ export default function QuotePage() {
               </button>
               {/* Botão OrçaFácil */}
               {orcafacilId ? (
-                <button
-                  onClick={() => window.open(`https://app-eight-eta-92.vercel.app/orcamento/${orcafacilId}`, '_blank')}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-400 shadow-lg"
-                  title="Abrir no OrçaFácil para gerar PDF com o template completo"
-                >
-                  <ExternalLink className="w-4 h-4" />OrçaFácil
-                </button>
+                <>
+                  <button
+                    onClick={() => window.open(`https://app-eight-eta-92.vercel.app/orcamento/${orcafacilId}`, '_blank')}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-400 shadow-lg"
+                    title="Abrir no OrçaFácil"
+                  >
+                    <ExternalLink className="w-4 h-4" />Abrir no OrçaFácil
+                  </button>
+                  <button
+                    onClick={openPicker}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 border border-orange-300 text-orange-700 rounded-xl text-sm font-medium hover:bg-orange-200 shadow-lg"
+                    title="Trocar vinculação"
+                  >
+                    <Link2 className="w-4 h-4" />Trocar vínculo
+                  </button>
+                </>
               ) : (
                 <button
-                  onClick={() => syncToOrcafacil()}
-                  disabled={syncing}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 border border-orange-300 text-orange-700 rounded-xl text-sm font-semibold hover:bg-orange-200 shadow-lg disabled:opacity-60"
-                  title="Cria este orçamento no OrçaFácil e vincula"
+                  onClick={openPicker}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 border border-orange-300 text-orange-700 rounded-xl text-sm font-semibold hover:bg-orange-200 shadow-lg"
+                  title="Vincular a um orçamento existente no OrçaFácil"
                 >
-                  {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
-                  {syncing ? 'Vinculando…' : 'Vincular OrçaFácil'}
+                  <Link2 className="w-4 h-4" />Vincular OrçaFácil
                 </button>
               )}
               <button
