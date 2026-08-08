@@ -437,7 +437,7 @@ export default function QuotePage() {
                       <div className="flex gap-3 mt-1 flex-wrap">
                         {o.cliente_cidade && <span className="text-xs text-slate-500">{o.cliente_cidade}</span>}
                         {o.potencia_kwp && <span className="text-xs text-slate-500">{o.potencia_kwp} kWp</span>}
-                        {o.forma_pag && <span className="text-xs text-slate-400">{o.forma_pag}</span>}
+                        {o.forma_pagamento && <span className="text-xs text-slate-400">{o.forma_pagamento}</span>}
                         <span className="text-xs text-slate-400 ml-auto">
                           {o.updated_at ? new Date(o.updated_at).toLocaleDateString('pt-BR') : new Date(o.created_at).toLocaleDateString('pt-BR')}
                         </span>
