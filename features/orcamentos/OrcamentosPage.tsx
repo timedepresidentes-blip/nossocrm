@@ -1,12 +1,21 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { useDeals } from '@/lib/query/hooks/useDealsQuery';
-import { FileText, ExternalLink, Pencil, Search, Trophy, XCircle, Clock, ChevronRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useMemo } from 'react';
+import { FileText, ExternalLink, Search, Loader2, RefreshCw, Zap } from 'lucide-react';
 
-function fmtBRL(v: number) {
+interface OrcafacilProposal {
+  id: string;
+  cliente_nome: string;
+  cliente_cidade: string | null;
+  potencia_kwp: number | null;
+  valor_final: number | null;
+  forma_pagamento: string | null;
+  crm_deal_id: string | null;
+  created_at: string;
+}
+
+function fmtBRL(v: number | null) {
+  if (v == null) return '—';
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
@@ -14,62 +23,39 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
 }
 
-function StatusChip({ deal }: { deal: { isWon: boolean; isLost: boolean } }) {
-  if (deal.isWon) return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
-      <Trophy className="h-2.5 w-2.5" /> Ganho
-    </span>
-  );
-  if (deal.isLost) return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/20">
-      <XCircle className="h-2.5 w-2.5" /> Perdido
-    </span>
-  );
-  return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20">
-      <Clock className="h-2.5 w-2.5" /> Em aberto
-    </span>
-  );
-}
+const ORCAFACIL_BASE = 'https://app-eight-eta-92.vercel.app';
 
 export function OrcamentosPage() {
-  const { data: deals = [], isLoading } = useDeals();
-  const router = useRouter();
+  const [proposals, setProposals] = useState<OrcafacilProposal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [filtro, setFiltro] = useState<'todos' | 'abertos' | 'ganhos' | 'perdidos'>('todos');
+
+  const fetchProposals = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/orcafacil/list');
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setProposals(json.orcamentos ?? []);
+    } catch (e: any) {
+      setError(e.message || 'Erro ao carregar orçamentos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchProposals(); }, []);
 
   const filtered = useMemo(() => {
-    let list = [...deals].sort((a, b) =>
-      new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    if (!search.trim()) return proposals;
+    const q = search.toLowerCase();
+    return proposals.filter(p =>
+      (p.cliente_nome || '').toLowerCase().includes(q) ||
+      (p.cliente_cidade || '').toLowerCase().includes(q)
     );
-    if (filtro === 'abertos') list = list.filter(d => !d.isWon && !d.isLost);
-    if (filtro === 'ganhos') list = list.filter(d => d.isWon);
-    if (filtro === 'perdidos') list = list.filter(d => d.isLost);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(d =>
-        (d.title || '').toLowerCase().includes(q) ||
-        (d.fichaCliente?.nomeCompleto || '').toLowerCase().includes(q) ||
-        (d.contactName || '').toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [deals, search, filtro]);
-
-  const handleVer = (dealId: string) => {
-    window.open(`/deals/${dealId}/quote`, '_blank');
-  };
-
-  const handleEditar = (dealId: string) => {
-    router.push(`/deals/${dealId}/quote?edit=1`);
-  };
-
-  const FILTROS = [
-    { id: 'todos', label: 'Todos' },
-    { id: 'abertos', label: 'Em aberto' },
-    { id: 'ganhos', label: 'Ganhos' },
-    { id: 'perdidos', label: 'Perdidos' },
-  ] as const;
+  }, [proposals, search]);
 
   return (
     <div className="min-h-screen bg-dark text-white">
@@ -81,25 +67,29 @@ export function OrcamentosPage() {
               <FileText className="h-5 w-5 text-primary-400" />
               Orçamentos
             </h1>
-            <p className="text-xs text-slate-400 mt-0.5">Todos os orçamentos gerados pelo CRM</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Orçamentos do OrçaFácil · Edite e gere PDF diretamente lá
+            </p>
           </div>
 
-          {/* Filtros */}
-          <div className="flex items-center gap-1 bg-white/5 rounded-xl p-1">
-            {FILTROS.map(f => (
-              <button
-                key={f.id}
-                onClick={() => setFiltro(f.id)}
-                className={cn(
-                  'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-                  filtro === f.id
-                    ? 'bg-primary-600 text-white'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
-                )}
-              >
-                {f.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchProposals}
+              disabled={loading}
+              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-40"
+              title="Atualizar lista"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <a
+              href={`${ORCAFACIL_BASE}/dashboard`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-3 py-2 bg-orange-500 hover:bg-orange-400 text-white rounded-xl text-sm font-semibold transition-colors"
+            >
+              <Zap className="h-4 w-4" />
+              Novo no OrçaFácil
+            </a>
           </div>
         </div>
 
@@ -110,7 +100,7 @@ export function OrcamentosPage() {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar por cliente ou título..."
+              placeholder="Buscar por cliente ou cidade..."
               className="w-full pl-9 pr-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
             />
           </div>
@@ -118,74 +108,75 @@ export function OrcamentosPage() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-6">
-        {isLoading ? (
-          <div className="py-20 text-center text-slate-400 text-sm">Carregando orçamentos...</div>
+        {loading ? (
+          <div className="py-20 flex flex-col items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+            <p className="text-slate-400 text-sm">Carregando orçamentos do OrçaFácil...</p>
+          </div>
+        ) : error ? (
+          <div className="py-20 text-center">
+            <p className="text-red-400 text-sm mb-3">{error}</p>
+            <button onClick={fetchProposals} className="text-xs text-slate-400 hover:text-white underline">Tentar novamente</button>
+          </div>
         ) : filtered.length === 0 ? (
           <div className="py-20 text-center">
             <FileText className="h-10 w-10 text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400 text-sm">Nenhum orçamento encontrado.</p>
+            <p className="text-slate-400 text-sm">
+              {search ? 'Nenhum resultado para a busca.' : 'Nenhum orçamento encontrado no OrçaFácil.'}
+            </p>
           </div>
         ) : (
           <div className="bg-dark-card rounded-2xl border border-white/10 overflow-hidden">
-            <div className="px-4 py-3 border-b border-white/10">
+            <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
               <span className="text-xs text-slate-400">{filtered.length} orçamento{filtered.length !== 1 ? 's' : ''}</span>
+              <span className="text-xs text-slate-500">Fonte: OrçaFácil</span>
             </div>
             <div className="divide-y divide-white/5">
-              {filtered.map(deal => {
-                const nomeCliente = deal.fichaCliente?.nomeCompleto || deal.contactName || deal.title;
-                const titulo = deal.title;
-                const data = deal.createdAt ? fmtDate(deal.createdAt) : '—';
+              {filtered.map(p => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-3 px-4 py-3.5 hover:bg-white/5 transition-colors group"
+                >
+                  {/* Ícone */}
+                  <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0">
+                    <FileText className="h-4 w-4 text-orange-400" />
+                  </div>
 
-                return (
-                  <div
-                    key={deal.id}
-                    className="flex items-center gap-3 px-4 py-3.5 hover:bg-white/5 transition-colors group"
-                  >
-                    {/* Ícone */}
-                    <div className="w-9 h-9 rounded-xl bg-primary-500/10 border border-primary-500/20 flex items-center justify-center shrink-0">
-                      <FileText className="h-4 w-4 text-primary-400" />
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">{nomeCliente}</p>
-                      <p className="text-xs text-slate-400 truncate">{titulo}</p>
-                    </div>
-
-                    {/* Status */}
-                    <div className="hidden sm:block shrink-0">
-                      <StatusChip deal={deal} />
-                    </div>
-
-                    {/* Valor */}
-                    <div className="text-right shrink-0 hidden sm:block">
-                      <p className="text-sm font-mono font-medium text-white">
-                        {deal.value ? fmtBRL(deal.value) : '—'}
-                      </p>
-                      <p className="text-[11px] text-slate-500">{data}</p>
-                    </div>
-
-                    {/* Ações */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => handleEditar(deal.id)}
-                        title="Editar orçamento"
-                        className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleVer(deal.id)}
-                        title="Ver orçamento"
-                        className="p-2 rounded-lg text-slate-400 hover:text-primary-400 hover:bg-primary-500/10 transition-colors"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </button>
-                      <ChevronRight className="h-4 w-4 text-slate-600 group-hover:text-primary-400 transition-colors ml-1" />
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{p.cliente_nome || '—'}</p>
+                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                      {p.cliente_cidade && (
+                        <span className="text-xs text-slate-400">{p.cliente_cidade}</span>
+                      )}
+                      {p.potencia_kwp != null && p.potencia_kwp > 0 && (
+                        <span className="text-xs text-slate-500">{p.potencia_kwp} kWp</span>
+                      )}
+                      {p.forma_pagamento && (
+                        <span className="text-xs text-slate-500 truncate max-w-[160px]">{p.forma_pagamento}</span>
+                      )}
                     </div>
                   </div>
-                );
-              })}
+
+                  {/* Valor + Data */}
+                  <div className="text-right shrink-0 hidden sm:block">
+                    <p className="text-sm font-mono font-medium text-white">{fmtBRL(p.valor_final)}</p>
+                    <p className="text-[11px] text-slate-500">{fmtDate(p.created_at)}</p>
+                  </div>
+
+                  {/* Ação */}
+                  <a
+                    href={`${ORCAFACIL_BASE}/orcamento/${p.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Abrir e editar no OrçaFácil"
+                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 border border-orange-500/20 text-orange-400 rounded-lg text-xs font-medium hover:bg-orange-500/20 hover:text-orange-300 transition-colors"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Abrir
+                  </a>
+                </div>
+              ))}
             </div>
           </div>
         )}
