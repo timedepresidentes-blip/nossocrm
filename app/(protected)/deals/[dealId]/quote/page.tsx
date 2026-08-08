@@ -2,11 +2,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { toPng } from 'html-to-image';
-import { jsPDF } from 'jspdf';
 import { supabase } from '@/lib/supabase/client';
+import { gerarPropostaHtmlCRM } from '@/lib/gerarPropostaHtmlCRM';
 import { orgSettingsService, OrgQuoteSettings } from '@/lib/supabase/orgSettings';
 import { ChevronDown, ChevronUp, Download, Loader2, Pencil, Save, X, Upload, Plus, Trash2, Check } from 'lucide-react';
+// Loader2 mantido para o loading de dados
 
 interface ExtraItem { name: string; value: number }
 interface QuoteExtras { installationCost?: number; extraItems?: ExtraItem[] }
@@ -78,8 +78,6 @@ export default function QuotePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [pdfError, setPdfError] = useState('');
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [overrides, setOverrides] = useState<Partial<OrgQuoteSettings>>({});
   const [savingOverride, setSavingOverride] = useState(false);
@@ -322,83 +320,33 @@ export default function QuotePage() {
     bannerImageUrl: quote.quoteOverrides.bannerImageUrl ?? orgSettings?.bannerImageUrl ?? '',
   };
 
-  const handleDownloadPDF = async () => {
-    const root = document.getElementById('quote-print-target');
-    if (!root) return;
-    setIsDownloading(true);
-    setPdfError('');
-    const toolbar = document.getElementById('quote-toolbar');
-    if (toolbar) toolbar.style.visibility = 'hidden';
-    try {
-      // Coleta Y de cada seção (CSS px relativos ao topo do root) como pontos de quebra naturais
-      const rootRect = root.getBoundingClientRect();
-      const sectionBreaksCssPx: number[] = [
-        'pdf-sec-header', 'pdf-sec-banner', 'pdf-sec-client',
-        'pdf-sec-items', 'pdf-sec-financing', 'pdf-sec-footer',
-      ]
-        .map(id => document.getElementById(id))
-        .filter((el): el is HTMLElement => !!el)
-        .map(el => el.getBoundingClientRect().top - rootRect.top);
-
-      // Captura todo o conteúdo em alta resolução
-      const dataUrl = await toPng(root, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true });
-
-      const img = await new Promise<HTMLImageElement>((resolve) => {
-        const i = new Image();
-        i.onload = () => resolve(i);
-        i.src = dataUrl;
-      });
-
-      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-      const pdfW = pdf.internal.pageSize.getWidth();  // 210mm
-      const pdfH = pdf.internal.pageSize.getHeight(); // 297mm
-      const imgW = img.naturalWidth;
-      const imgH = img.naturalHeight;
-
-      // pixelRatio=2: 1 CSS px = 2 imagem px → converter posição DOM para mm na imagem
-      const mmPerPx = pdfW / imgW;
-      const totalMm = imgH * mmPerPx;
-      const breaksMm = sectionBreaksCssPx.map(cssPx => cssPx * 2 * mmPerPx);
-
-      // Gera páginas com quebra inteligente: prefere quebrar no início de uma seção
-      let posMm = 0;
-      let pageIdx = 0;
-      while (posMm < totalMm - 0.5) {
-        if (pageIdx > 0) pdf.addPage();
-
-        const idealEndMm = posMm + pdfH;
-        // Procura a última quebra de seção que cai nos 35% finais desta página
-        const threshold = posMm + pdfH * 0.65;
-        const naturalBreak = breaksMm
-          .filter(b => b > threshold && b <= idealEndMm)
-          .sort((a, b) => b - a)[0];
-
-        const pageEndMm = Math.min(naturalBreak ?? idealEndMm, totalMm);
-        const sliceHMm = pageEndMm - posMm;
-
-        // Extrai o slice via canvas sem re-renderizar o DOM
-        const srcYPx = Math.round(posMm / mmPerPx);
-        const srcHPx = Math.round(sliceHMm / mmPerPx);
-        const canvas = document.createElement('canvas');
-        canvas.width = imgW;
-        canvas.height = srcHPx;
-        const ctx = canvas.getContext('2d')!;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, imgW, srcHPx);
-        ctx.drawImage(img, 0, srcYPx, imgW, srcHPx, 0, 0, imgW, srcHPx);
-
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdfW, sliceHMm);
-        posMm = pageEndMm;
-        pageIdx++;
-      }
-
-      pdf.save(`orcamento-${dealId.slice(0, 8).toUpperCase()}.pdf`);
-    } catch (e: any) {
-      setPdfError(e?.message || 'Erro ao gerar PDF');
-    } finally {
-      if (toolbar) toolbar.style.visibility = '';
-      setIsDownloading(false);
-    }
+  const handleDownloadPDF = () => {
+    if (!quote) return;
+    const subtotalCalc = quote.items.reduce((sum, i) => sum + i.quantity * i.price, 0);
+    const html = gerarPropostaHtmlCRM({
+      clienteNome: quote.contactName,
+      clienteCidade: quote.fichaCliente?.instalacaoCidade ?? null,
+      dataEmissao: new Date(quote.createdAt).toLocaleDateString('pt-BR'),
+      potenciaKwp: quote.fichaCliente?.potenciaKwp ?? null,
+      numPaineis: quote.fichaCliente?.numPaineis ?? null,
+      painelW: quote.fichaCliente?.potenciaPainelW ?? null,
+      modeloPainel: quote.fichaCliente?.modeloPainel ?? null,
+      modeloInversor: quote.fichaCliente?.modeloInversor ?? null,
+      qtdInversores: quote.fichaCliente?.qtdInversores ?? null,
+      tipoEstrutura: quote.fichaCliente?.tipoEstrutura ?? null,
+      valorFinal: subtotalCalc,
+      formaPagamento: quote.fichaCliente?.formaPagamento ?? null,
+      condicoesPagamento: quote.fichaCliente?.condicoesPagamento ?? null,
+      prazoEntrega: quote.fichaCliente?.prazoEntrega ?? null,
+      observacoes: quote.fichaCliente?.observacoes ?? null,
+      items: quote.items,
+      logoUrl: eff.logoUrl || null,
+      imagemFundoUrl: eff.bannerImageUrl || null,
+      empresa: quote.companyName || 'Aureon Energix',
+    });
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
   };
 
   const hasOverride = Object.values(quote.quoteOverrides).some((v) => v && String(v).trim());
@@ -448,12 +396,10 @@ export default function QuotePage() {
             <>
               <button
                 onClick={handleDownloadPDF}
-                disabled={isDownloading}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-500 shadow-lg disabled:opacity-60"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-500 shadow-lg"
               >
-                {isDownloading ? <><Loader2 className="w-4 h-4 animate-spin" />Gerando…</> : <><Download className="w-4 h-4" />Baixar PDF</>}
+                <Download className="w-4 h-4" />Gerar Proposta
               </button>
-              {pdfError && <p className="text-xs text-red-500 bg-white rounded-lg px-3 py-1.5 shadow">{pdfError}</p>}
               <button
                 onClick={() => setIsEditing(true)}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-lg"
