@@ -851,25 +851,8 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
 
 </div>
 <div id="toolbar" style="position:fixed;top:14px;right:18px;z-index:9999;display:flex;gap:8px">
-  <button id="btnPdf" style="background:#1d6fdb;color:#fff;border:none;padding:8px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25)">⬇ Baixar PDF</button>
-  <button onclick="document.getElementById('toolbar').style.display='none';window.print();setTimeout(()=>{document.getElementById('toolbar').style.display='flex'},500)" style="background:#555;color:#fff;border:none;padding:8px 14px;border-radius:6px;font-size:13px;cursor:pointer">🖨 Imprimir</button>
+  <button onclick="var t=document.getElementById('toolbar');t.style.display='none';window.print();setTimeout(()=>{t.style.display='flex'},800)" style="background:#1d6fdb;color:#fff;border:none;padding:9px 20px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)">⬇ Salvar como PDF</button>
 </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script>
-document.getElementById('btnPdf').addEventListener('click',function(){
-  var btn=this;btn.disabled=true;btn.textContent='Gerando…';
-  var nomeCliente=${JSON.stringify(f.nomeCompleto ?? 'cliente')};
-  var ref=${JSON.stringify(ref)};
-  var sheet=document.querySelector('.sheet');
-  html2pdf().set({
-    margin:0,
-    filename:'Contrato-'+ref+'-'+nomeCliente.replace(/\\s+/g,'-')+'.pdf',
-    image:{type:'jpeg',quality:0.98},
-    html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false},
-    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
-  }).from(sheet).save().then(function(){btn.disabled=false;btn.textContent='⬇ Baixar PDF'});
-});
-</script>
 </body></html>`;
     janela.document.write(html);
     janela.document.close();
