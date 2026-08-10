@@ -841,7 +841,7 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
 <h3>4. Esclarecimentos sobre os Tipos de Garantia</h3>
 <p><strong>Garantia de Produto:</strong> cobre defeitos de fabricação e materiais dos módulos fotovoltaicos.</p>
 <p><strong>Garantia de Desempenho (linear):</strong> garante uma potência mínima de saída ao longo dos anos, tipicamente entre 80% e 87% da potência nominal ao final do prazo.</p>
-<p style="font-size:11px;color:#555">Os prazos de garantia informados neste Anexo correspondem ao termo de garantia oficial do fabricante vigente na data de emissão da nota fiscal, podendo variar conforme a linha/modelo específico do equipamento. Confirmar o prazo de garantia diretamente no termo oficial do fabricante, no datasheet técnico ou junto ao distribuidor autorizado antes de preencher.</p>
+<p style="font-size:9.5pt;color:#444">Os prazos informados correspondem aos termos oficiais do fabricante vigentes na data de emissão da nota fiscal.</p>
 
 <p>Local e data: Araraquara/SP, ${hoje}.</p>
 <div class="assin">
