@@ -36,14 +36,14 @@ export function DailyConversationsChart({ data }: DailyConversationsChartProps) 
         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148,163,184,0.15)" />
         <XAxis
           dataKey="label"
-          tick={{ fill: 'var(--chart-text, #94a3b8)', fontSize: 11 }}
+          tick={{ fill: 'var(--chart-text, #94a3b8)', fontSize: 13 }}
           axisLine={false}
           tickLine={false}
           interval="preserveStartEnd"
         />
         <YAxis
           allowDecimals={false}
-          tick={{ fill: 'var(--chart-text, #94a3b8)', fontSize: 11 }}
+          tick={{ fill: 'var(--chart-text, #94a3b8)', fontSize: 13 }}
           axisLine={false}
           tickLine={false}
         />

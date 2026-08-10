@@ -44,7 +44,7 @@ export const FunnelChart: React.FC<FunnelChartProps> = ({ data }) => {
           dataKey="name"
           type="category"
           width={100}
-          tick={{ fill: 'var(--chart-text)', fontSize: 12, fontWeight: 500 }}
+          tick={{ fill: 'var(--chart-text)', fontSize: 13, fontWeight: 500 }}
           axisLine={false}
           tickLine={false}
         />
@@ -72,8 +72,8 @@ export const FunnelChart: React.FC<FunnelChartProps> = ({ data }) => {
             dataKey="count"
             position="right"
             fill="var(--chart-text)"
-            fontSize={12}
-            fontWeight={600}
+            fontSize={14}
+            fontWeight={700}
             formatter={(val) => (typeof val === 'number' && val !== 0) ? val : ''}
           />
         </Bar>

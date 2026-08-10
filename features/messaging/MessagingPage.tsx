@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, CalendarClock, ArrowLeftRight, X, BotMessageSquare } from 'lucide-react';
+import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, CalendarClock, ArrowLeftRight, X, BotMessageSquare, ArrowLeft, ChevronRight } from 'lucide-react';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
@@ -87,6 +87,22 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
     contactName: string;
     reason?: string;
   } | null>(null);
+
+  // Detecção de mobile
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState<'list' | 'thread' | 'contact'>('list');
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  // Ao selecionar conversa no mobile, vai para thread
+  useEffect(() => {
+    if (isMobile && selectedConversationId) setMobilePanel('thread');
+  }, [isMobile, selectedConversationId]);
 
   // Larguras e estados de colapso das colunas (persistidos no localStorage)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -348,6 +364,187 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
     }
     return data.conversation?.id as string | undefined;
   }, [queryClient, handleSelectConversation]);
+
+  // ─── Layout Mobile ────────────────────────────────────────────
+  if (isMobile) {
+    const modals = (
+      <>
+        <NewConversationModal
+          isOpen={isNewConversationOpen}
+          onClose={() => { setIsNewConversationOpen(false); setNewConversationDefaults(undefined); }}
+          onCreateConversation={handleCreateConversation}
+          defaultContactId={newConversationDefaults?.contactId}
+          defaultContactName={newConversationDefaults?.contactName}
+          defaultContactPhone={newConversationDefaults?.contactPhone}
+        />
+        <ContactLinkModal
+          isOpen={isLinkModalOpen}
+          onClose={() => setIsLinkModalOpen(false)}
+          onLinkContact={handleLinkContact}
+          onCreateContact={handleCreateContact}
+          currentContactId={selectedConversation?.contactId}
+          suggestedPhone={selectedConversation?.contactPhone || undefined}
+          suggestedName={selectedConversation?.externalContactName || undefined}
+        />
+        <Modal isOpen={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} title="Excluir conversa" size="sm">
+          <div className="space-y-4">
+            <p className="text-slate-600 dark:text-slate-300">
+              Tem certeza que deseja excluir esta conversa? Todas as mensagens serão perdidas permanentemente.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button type="button" onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors" disabled={isDeleting}>Cancelar</button>
+              <button type="button" onClick={handleDeleteConversation} disabled={isDeleting} className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50">{isDeleting ? 'Excluindo...' : 'Excluir'}</button>
+            </div>
+          </div>
+        </Modal>
+      </>
+    );
+
+    // Lista de conversas
+    if (mobilePanel === 'list') {
+      return (
+        <div className="h-[calc(100dvh-4rem)] flex flex-col overflow-hidden">
+          <ConversationList
+            selectedId={selectedConversationId}
+            onSelect={(id) => { handleSelectConversation(id); setMobilePanel('thread'); }}
+            onNewConversation={() => { setNewConversationDefaults(undefined); setIsNewConversationOpen(true); }}
+            onStartConversationWithContact={handleStartConversationWithContact}
+            getPresence={getPresence}
+          />
+          {modals}
+        </div>
+      );
+    }
+
+    // Thread de mensagens
+    if (mobilePanel === 'thread') {
+      return (
+        <div className="h-[calc(100dvh-4rem)] flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900/50">
+          {/* Header mobile */}
+          <div className="h-14 px-2 flex items-center gap-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-white/10 shrink-0">
+            <button
+              type="button"
+              onClick={() => { setMobilePanel('list'); setSelectedConversationId(undefined); }}
+              className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            {selectedConversation && (
+              <>
+                <div className="relative shrink-0">
+                  {sanitizeUrl(selectedConversation.externalContactAvatar) ? (
+                    <img src={sanitizeUrl(selectedConversation.externalContactAvatar)} alt="" className="w-9 h-9 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+                      <User className="w-4 h-4 text-slate-400" />
+                    </div>
+                  )}
+                  <div className="absolute -bottom-0.5 -right-0.5">
+                    <ChannelIndicator type={selectedConversation.channelType} size="sm" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                    {selectedConversation.contactName || selectedConversation.externalContactName || 'Contato'}
+                  </p>
+                  <p className="text-xs text-slate-400 truncate">{selectedConversation.channelName}</p>
+                </div>
+                {/* Botão para painel do contato */}
+                <button
+                  type="button"
+                  onClick={() => setMobilePanel('contact')}
+                  className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 flex items-center gap-0.5"
+                >
+                  <User className="w-5 h-5" />
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+                {/* Resolver / reabrir */}
+                {selectedConversation.status === 'open' && (
+                  <button type="button" onClick={() => resolveConversation(selectedConversation.id)} className="p-2 rounded-lg text-slate-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-500/10">
+                    <CheckCircle className="w-5 h-5" />
+                  </button>
+                )}
+                {/* Menu de mais ações */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg">
+                      <MoreVertical className="w-5 h-5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {selectedConversation.status === 'resolved' && (
+                      <DropdownMenuItem onClick={() => reopenConversation(selectedConversation.id)} className="gap-2">
+                        <RotateCcw className="w-4 h-4" /> Reabrir conversa
+                      </DropdownMenuItem>
+                    )}
+                    {!selectedConversation.contactId && (
+                      <DropdownMenuItem onClick={() => setIsLinkModalOpen(true)} className="gap-2">
+                        <LinkIcon className="w-4 h-4" /> Vincular contato
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="gap-2 text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-500/10">
+                      <Trash2 className="w-4 h-4" /> Excluir conversa
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
+          </div>
+
+          {selectedConversation ? (
+            <>
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <MessageThread
+                  conversationId={selectedConversation.id}
+                  presenceStatus={selectedConversation.contactId ? getPresence(selectedConversation.contactId) : undefined}
+                  onReply={setReplyToMessage}
+                  labelColor={selectedLabelColor}
+                />
+              </div>
+              <MessageInput
+                conversation={selectedConversation}
+                replyTo={replyToMessage}
+                onCancelReply={() => setReplyToMessage(null)}
+              />
+            </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-slate-400">
+              <p className="text-sm">Selecione uma conversa</p>
+            </div>
+          )}
+          {modals}
+        </div>
+      );
+    }
+
+    // Painel do contato
+    return (
+      <div className="h-[calc(100dvh-4rem)] flex flex-col overflow-hidden bg-white dark:bg-slate-900">
+        <div className="h-14 px-2 flex items-center gap-3 border-b border-slate-200 dark:border-white/10 shrink-0">
+          <button
+            type="button"
+            onClick={() => setMobilePanel('thread')}
+            className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <span className="text-sm font-semibold text-slate-800 dark:text-white">Detalhes do contato</span>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          <ContactPanel
+            conversation={selectedConversation}
+            isLoading={isConversationLoading && !!selectedConversationId}
+            onLinkContact={() => setIsLinkModalOpen(true)}
+            onViewContact={handleViewContact}
+            onViewDeals={handleViewDeals}
+          />
+        </div>
+        {modals}
+      </div>
+    );
+  }
+  // ─── Fim layout Mobile ─────────────────────────────────────────
 
   return (
     <div className="h-[calc(100vh-4rem)] flex overflow-hidden">

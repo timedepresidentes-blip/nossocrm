@@ -33,13 +33,13 @@ export const RevenueTrendChart: React.FC<RevenueTrendChartProps> = ({ data }) =>
         dataKey="month"
         axisLine={false}
         tickLine={false}
-        tick={{ fill: 'var(--chart-text)', fontSize: 12 }}
+        tick={{ fill: 'var(--chart-text)', fontSize: 13 }}
         dy={10}
       />
       <YAxis
         axisLine={false}
         tickLine={false}
-        tick={{ fill: 'var(--chart-text)', fontSize: 12 }}
+        tick={{ fill: 'var(--chart-text)', fontSize: 13 }}
         tickFormatter={value => `$${value / 1000}k`}
       />
       <Tooltip

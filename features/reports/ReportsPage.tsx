@@ -3,13 +3,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { TrendingUp, Clock, Target, DollarSign, Trophy, Users, Download, Settings } from 'lucide-react';
+import { TrendingUp, Clock, Target, DollarSign, Trophy, Users, Download, Settings, BarChart2 } from 'lucide-react';
 import { useDashboardMetrics, PeriodFilter, COMPARISON_LABELS } from '../dashboard/hooks/useDashboardMetrics';
 import { PeriodFilterSelect } from '@/components/filters/PeriodFilterSelect';
 import { LazyRevenueTrendChart, ChartWrapper } from '@/components/charts';
 import { generateReportPDF } from './utils/generateReportPDF';
 import { useBoards } from '@/lib/query/hooks';
 import { useAuth } from '@/context/AuthContext';
+import { FinancialTab } from './components/FinancialTab';
 
 /**
  * Componente React `ReportsPage`.
@@ -21,6 +22,7 @@ const ReportsPage: React.FC = () => {
   const { profile } = useAuth();
   const [period, setPeriod] = useState<PeriodFilter>('this_month');
   const [selectedBoardId, setSelectedBoardId] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'performance' | 'financeiro'>('performance');
 
   // Performance: avoid recomputing the "default board id" logic inside the effect.
   const defaultBoardId = useMemo(() => {
@@ -180,11 +182,28 @@ const ReportsPage: React.FC = () => {
       <div className="flex justify-between items-center shrink-0">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white font-display tracking-tight">
-            Relatórios de Performance
+            Relatórios
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-            Análise detalhada de vendas e tendências.
-          </p>
+          <div className="flex items-center gap-1 mt-2">
+            <button
+              onClick={() => setActiveTab('performance')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'performance'
+                ? 'bg-primary-500 text-white shadow-sm'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'}`}
+            >
+              <TrendingUp className="w-3.5 h-3.5" />
+              Performance
+            </button>
+            <button
+              onClick={() => setActiveTab('financeiro')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'financeiro'
+                ? 'bg-primary-500 text-white shadow-sm'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'}`}
+            >
+              <BarChart2 className="w-3.5 h-3.5" />
+              Financeiro
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -212,7 +231,15 @@ const ReportsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Forecast Bar - FEATURE #1 (80/20) */}
+      {/* Aba Financeiro */}
+      {activeTab === 'financeiro' && (
+        <div className="flex-1 overflow-y-auto min-h-0 pb-4">
+          <FinancialTab period={period} boardId={selectedBoardId || undefined} />
+        </div>
+      )}
+
+      {/* Aba Performance */}
+      {activeTab === 'performance' && (<>
       {hasGoal ? (
         <div className="glass p-4 rounded-xl border border-slate-200 dark:border-white/5 shadow-sm shrink-0">
           <div className="flex items-center justify-between mb-2">
@@ -410,6 +437,7 @@ const ReportsPage: React.FC = () => {
           </div>
         </div>
       </div>
+      </>)}
     </div>
   );
 };

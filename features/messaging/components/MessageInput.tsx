@@ -712,7 +712,8 @@ export function MessageInput({ conversation, replyTo, onCancelReply }: MessageIn
   return (
     <form
       onSubmit={handleSubmit}
-      className="border-t border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900"
+      className="border-t border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shrink-0"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       {/* Reply preview bar */}
       {replyTo && (
