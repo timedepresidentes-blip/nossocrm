@@ -856,9 +856,68 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
 </div>
 
 </div>
-<div id="toolbar" style="position:fixed;top:14px;right:18px;z-index:9999;display:flex;gap:8px">
-  <button onclick="var t=document.getElementById('toolbar');t.style.display='none';window.print();setTimeout(()=>{t.style.display='flex'},800)" style="background:#1d6fdb;color:#fff;border:none;padding:9px 20px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)">⬇ Salvar como PDF</button>
+<div id="toolbar" style="position:fixed;top:14px;right:18px;z-index:9999;display:flex;gap:8px;font-family:Arial,sans-serif">
+  <button onclick="var t=document.getElementById('toolbar');t.style.display='none';window.print();setTimeout(()=>{t.style.display='flex'},800)" style="background:#374151;color:#fff;border:none;padding:9px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)">⬇ Salvar como PDF</button>
+  <button id="btnSign" style="background:#7c3aed;color:#fff;border:none;padding:9px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)">✉ Enviar p/ Assinatura</button>
 </div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script>
+(function(){
+  var btn = document.getElementById('btnSign');
+  var signerName  = ${JSON.stringify(f.nomeCompleto ?? 'Cliente')};
+  var signerEmail = ${JSON.stringify(f.email ?? '')};
+  var signerPhone = ${JSON.stringify(f.telefone ?? '')};
+  var dealId      = ${JSON.stringify(dealId ?? 'doc-avulso')};
+  var filename    = 'Contrato-${ref}-' + signerName.replace(/\\s+/g,'-') + '.pdf';
+
+  btn.addEventListener('click', function(){
+    if (!signerEmail) { alert('E-mail do cliente não preenchido na ficha.'); return; }
+    btn.disabled = true;
+    btn.textContent = 'Gerando PDF…';
+    var sheet = document.querySelector('.sheet');
+    html2pdf().set({
+      margin: 0,
+      image: {type:'jpeg',quality:0.98},
+      html2canvas: {scale:2,useCORS:true,allowTaint:true,logging:false},
+      jsPDF: {unit:'mm',format:'a4',orientation:'portrait'}
+    }).from(sheet).toPdf().get('pdf').then(function(pdf){
+      btn.textContent = 'Enviando…';
+      var base64 = pdf.output('datauristring').split(',')[1];
+      return fetch('/api/clicksign/send', {
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body: JSON.stringify({
+          dealId: dealId,
+          pdfBase64: base64,
+          filename: filename,
+          signerName: signerName,
+          signerEmail: signerEmail,
+          signerPhone: signerPhone || undefined,
+          companySignerName: 'F.R.C Cintra',
+          companySignerEmail: 'fcintra4@hotmail.com'
+        })
+      });
+    }).then(function(resp){
+      return resp.json().then(function(d){ return {ok:resp.ok, d:d}; });
+    }).then(function(r){
+      if(r.ok){
+        btn.style.background='#16a34a';
+        btn.textContent='✓ Enviado! Ambos receberão e-mail da ClickSign.';
+      } else {
+        btn.disabled=false;
+        btn.style.background='#dc2626';
+        btn.textContent='✗ ' + (r.d.error||'Erro ao enviar');
+        setTimeout(function(){ btn.style.background='#7c3aed'; btn.textContent='✉ Enviar p/ Assinatura'; },4000);
+      }
+    }).catch(function(e){
+      btn.disabled=false;
+      btn.style.background='#dc2626';
+      btn.textContent='✗ Erro: ' + e.message;
+      setTimeout(function(){ btn.style.background='#7c3aed'; btn.textContent='✉ Enviar p/ Assinatura'; },4000);
+    });
+  });
+})();
+</script>
 </body></html>`;
     janela.document.write(html);
     janela.document.close();
