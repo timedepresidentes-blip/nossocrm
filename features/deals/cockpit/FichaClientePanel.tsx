@@ -554,7 +554,7 @@ export const FichaClientePanel: React.FC<Props> = ({
   }
 </style></head><body><div class="sheet">
 
-${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" alt="Aureon Energix" style="height:62px;width:auto"></div>` : ''}
+${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" alt="Aureon Energix" style="height:90px;width:auto"></div>` : ''}
 <h1>Contrato de Compra, Venda e Instalação<br>de Sistema de Geração Fotovoltaica</h1>
 <p class="sub">Nº de Referência: ${ref} &nbsp;|&nbsp; Data: ${hoje}</p>
 
