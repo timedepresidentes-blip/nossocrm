@@ -544,11 +544,11 @@ export const FichaClientePanel: React.FC<Props> = ({
   .at{text-align:center;font-size:13pt;font-weight:bold;margin:0 0 8px;text-transform:uppercase;letter-spacing:.03em}
   .ck{display:inline-block;width:12px;height:12px;border:1px solid #333;margin-right:4px;vertical-align:middle}
   ul{margin:4px 0 4px 20px}li{margin:2px 0}
-  /* IMPRESSÃO: sheet vira a própria página com margens embutidas */
+  /* IMPRESSÃO */
   @media print{
     #toolbar{display:none!important}
-    body{background:#fff;padding:0;margin:0}
-    .sheet{max-width:none;width:100%;margin:0;padding:20mm 18mm;box-shadow:none}
+    html,body{width:210mm;margin:0;padding:0;background:#fff}
+    .sheet{width:210mm;max-width:none;margin:0;padding:20mm 18mm;box-shadow:none;background:#fff}
     .quebra{height:0;border:none;break-before:page;page-break-before:always;display:block}
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   }
