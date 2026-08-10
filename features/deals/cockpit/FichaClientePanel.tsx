@@ -519,7 +519,7 @@ export const FichaClientePanel: React.FC<Props> = ({
     const html = `<!DOCTYPE html><html><head>
 <title>Contrato – ${f.nomeCompleto ?? 'Cliente'}</title><meta charset="utf-8">
 <style>
-  @page{size:A4;margin:20mm 18mm}
+  @page{size:A4;margin:0}
   *{box-sizing:border-box}
   /* TELA */
   body{font-family:Arial,sans-serif;color:#1a1a1a;font-size:10.5pt;line-height:1.65;margin:0;padding:24px 0;background:#c8c8c8}
@@ -543,11 +543,12 @@ export const FichaClientePanel: React.FC<Props> = ({
   .at{text-align:center;font-size:13pt;font-weight:bold;margin:0 0 8px;text-transform:uppercase;letter-spacing:.03em}
   .ck{display:inline-block;width:12px;height:12px;border:1px solid #333;margin-right:4px;vertical-align:middle}
   ul{margin:4px 0 4px 20px}li{margin:2px 0}
-  /* IMPRESSÃO — margens pelo @page, sheet só reseta estilos de tela */
+  /* IMPRESSÃO — @page margin:0, padding no sheet garante margens independente do dialogo */
   @media print{
     #toolbar{display:none!important}
-    html,body{margin:0;padding:0;background:#fff;width:auto}
-    .sheet{max-width:none;width:auto;margin:0;padding:0;box-shadow:none;background:#fff}
+    html{width:210mm}
+    body{margin:0;padding:0;background:#fff;width:210mm}
+    .sheet{width:210mm;max-width:none;margin:0;padding:20mm 18mm;box-shadow:none;background:#fff}
     .quebra{height:0;border:none;break-before:page;page-break-before:always;display:block}
     h2,h3{break-after:avoid;page-break-after:avoid;orphans:3;widows:3}
     p{orphans:3;widows:3}
