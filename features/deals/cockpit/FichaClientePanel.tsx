@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { autoFillDealCosts } from '@/lib/supabase/autoFillDealCosts';
+import { detectModulo, detectInversor } from '@/features/documents/templates/fabricantes';
 
 export interface FichaClienteData {
   nomeCompleto: string | null; cpfCnpj: string | null; rg: string | null;
@@ -499,6 +500,17 @@ export const FichaClientePanel: React.FC<Props> = ({
     if (!janela) return;
     const logo = await fetchLogoBase64();
     const ref = (dealId ?? 'N/D').slice(0, 8).toUpperCase();
+    const modfab = detectModulo(f.modeloPainel ?? '');
+    const invfab = detectInversor(f.modeloInversor ?? '');
+    const rawValor = f.valorTotal ?? dealValue;
+    const valorContrato = rawValor != null
+      ? (() => {
+          const n = typeof rawValor === 'number'
+            ? rawValor
+            : Number(String(rawValor).replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, ''));
+          return isNaN(n) ? String(rawValor) : BRL.format(n);
+        })()
+      : '___________';
     const endComp = [f.enderecoRua, f.enderecoBairro, f.enderecoCidade, f.enderecoEstado]
       .filter(Boolean).join(', ') + (f.enderecoCep ? ` — CEP ${f.enderecoCep}` : '');
     const endInst = [f.instalacaoEndereco || f.enderecoRua, f.instalacaoCidade || f.enderecoCidade]
@@ -507,29 +519,50 @@ export const FichaClientePanel: React.FC<Props> = ({
     const html = `<!DOCTYPE html><html><head>
 <title>Contrato – ${f.nomeCompleto ?? 'Cliente'}</title><meta charset="utf-8">
 <style>
-  body{font-family:Arial,sans-serif;color:#1a1a1a;padding:40px;font-size:12px;line-height:1.6;max-width:780px;margin:0 auto}
-  h1{text-align:center;font-size:15px;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em}
-  .sub{text-align:center;font-size:11px;color:#555;margin-bottom:16px}
-  h2{font-size:12px;font-weight:bold;margin:18px 0 5px;text-transform:uppercase;border-bottom:1px solid #ccc;padding-bottom:3px}
-  h3{font-size:12px;font-weight:bold;margin:12px 0 4px}
-  p{margin:5px 0;text-align:justify}
-  .pb{background:#f9f9f9;border:1px solid #ddd;padding:10px 14px;margin:10px 0;border-radius:3px}
-  .pb-t{font-size:10px;text-transform:uppercase;font-weight:bold;color:#666;margin-bottom:5px}
-  .cl{margin-bottom:10px}
-  table{border-collapse:collapse;width:100%;margin:8px 0;font-size:11px}
-  th,td{border:1px solid #ccc;padding:5px 8px}
+  @page{size:A4;margin:20mm 18mm}
+  *{box-sizing:border-box;margin:0;padding:0}
+  /* TELA: folha branca sobre fundo cinza */
+  body{font-family:Arial,sans-serif;color:#1a1a1a;font-size:10.5pt;line-height:1.65;background:#d0d0d0;min-height:100vh}
+  .sheet{background:#fff;width:210mm;margin:24px auto;padding:20mm 18mm;box-shadow:0 2px 12px rgba(0,0,0,.35)}
+  /* TIPOGRAFIA */
+  h1{text-align:center;font-size:14pt;margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em}
+  .sub{text-align:center;font-size:9pt;color:#555;margin-bottom:16px}
+  h2{font-size:10.5pt;font-weight:bold;margin:16px 0 5px;text-transform:uppercase;border-bottom:1px solid #bbb;padding-bottom:3px;page-break-after:avoid;break-after:avoid}
+  h3{font-size:10.5pt;font-weight:bold;margin:12px 0 4px;page-break-after:avoid;break-after:avoid}
+  p{margin:4px 0;text-align:justify}
+  /* CAIXAS */
+  .pb{background:#f8f8f8;border:1px solid #ddd;padding:8px 12px;margin:8px 0;border-radius:3px;page-break-inside:avoid;break-inside:avoid}
+  .pb-t{font-size:8.5pt;text-transform:uppercase;font-weight:bold;color:#666;margin-bottom:4px}
+  .cl{margin-bottom:8px}
+  /* TABELAS */
+  table{border-collapse:collapse;width:100%;margin:6px 0;font-size:9.5pt;page-break-inside:avoid;break-inside:avoid}
+  th,td{border:1px solid #ccc;padding:4px 8px}
   th{background:#f0f0f0;font-weight:bold;text-align:left}
-  .assin{margin-top:50px;display:flex;justify-content:space-between}
-  .ab{text-align:center;width:44%;font-size:11px}
-  .al{border-top:1px solid #333;padding-top:6px;margin-top:28px}
-  .pb2{page-break-before:always;padding-top:30px}
-  .at{text-align:center;font-size:14px;font-weight:bold;margin-bottom:6px;text-transform:uppercase}
-  .ck{display:inline-block;width:14px;height:14px;border:1px solid #333;margin-right:5px;vertical-align:middle}
-  ul{margin:5px 0;padding-left:22px}li{margin:3px 0}
-  @media print{body{padding:20px}.pb2{page-break-before:always}}
-</style></head><body>
+  tr{page-break-inside:avoid;break-inside:avoid}
+  /* ASSINATURAS */
+  .assin{margin-top:44px;display:flex;justify-content:space-between;page-break-inside:avoid;break-inside:avoid}
+  .ab{text-align:center;width:44%;font-size:9.5pt}
+  .al{border-top:1px solid #333;padding-top:6px;margin-top:26px}
+  /* QUEBRAS DE PÁGINA */
+  .quebra{display:block;height:0;margin:0;padding:0;border:none;break-before:page;page-break-before:always}
+  .at{text-align:center;font-size:13pt;font-weight:bold;margin-bottom:8px;text-transform:uppercase;letter-spacing:.03em}
+  .ck{display:inline-block;width:12px;height:12px;border:1px solid #333;margin-right:4px;vertical-align:middle}
+  ul{margin:4px 0 4px 20px}li{margin:2px 0}
+  /* TELA: separador visual de seção */
+  @media screen{
+    .quebra{height:0;border-top:none;margin:0}
+    .sheet+.sheet,.quebra+*{/* próxima folha simulada visualmente */}
+  }
+  /* IMPRESSÃO */
+  @media print{
+    body{background:#fff}
+    .sheet{width:auto;margin:0;padding:0;box-shadow:none}
+    .quebra{break-before:page;page-break-before:always;height:0;display:block}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+</style></head><body><div class="sheet">
 
-${logo ? `<div style="text-align:center;margin-bottom:12px"><img src="${logo}" alt="Aureon Energix" style="height:60px;width:auto"></div>` : ''}
+${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" alt="Aureon Energix" style="height:62px;width:auto"></div>` : ''}
 <h1>Contrato de Compra, Venda e Instalação<br>de Sistema de Geração Fotovoltaica</h1>
 <p class="sub">Nº de Referência: ${ref} &nbsp;|&nbsp; Data: ${hoje}</p>
 
@@ -565,7 +598,7 @@ ${logo ? `<div style="text-align:center;margin-bottom:12px"><img src="${logo}" a
 </table>
 <p style="font-size:11px;color:#555">Ressalva-se que marcas, modelos e potências específicas dos equipamentos poderão variar conforme disponibilidade de estoque, mantendo-se a potência nominal total contratada, sendo certo que todos os equipamentos utilizados possuirão garantia do respectivo fabricante.</p>
 <table>
-  <tr><td style="width:50%">Valor total do contrato:</td><td><strong>${valorFmt}</strong></td></tr>
+  <tr><td style="width:50%">Valor total do contrato:</td><td><strong>${valorContrato}</strong></td></tr>
   <tr><td>Forma de pagamento:</td><td>${f.formaPagamento ?? '___________________________'}</td></tr>
   ${f.condicoesPagamento ? `<tr><td>Condições:</td><td>${f.condicoesPagamento}</td></tr>` : ''}
 </table>
@@ -719,7 +752,7 @@ ${logo ? `<div style="text-align:center;margin-bottom:12px"><img src="${logo}" a
 <p>Local e data: Araraquara/SP, ${hoje}.</p>
 <div class="assin">
   <div class="ab"><div class="al"></div><p><strong>VENDEDORA</strong><br>F. R. C. CINTRA<br>CNPJ: 33.071.872/0001-08</p></div>
-  <div class="ab"><div class="al"></div><p><strong>COMPRADOR(A)</strong><br>${f.nomeCompleto ?? '___________________________'}</p></div>
+  <div class="ab"><div class="al"></div><p><strong>COMPRADOR(A)</strong><br>${f.nomeCompleto ?? '___________________________'}<br>CPF/CNPJ: ${f.cpfCnpj ?? '___________________________'}</p></div>
 </div>
 <div style="margin-top:36px;font-size:11px">
   <p><strong>Testemunha 1:</strong> ___________________________ &nbsp; CPF: ______________</p>
@@ -727,7 +760,7 @@ ${logo ? `<div style="text-align:center;margin-bottom:12px"><img src="${logo}" a
 </div>
 
 <!-- ANEXO I -->
-<div class="pb2">
+<div class="quebra"></div>
 <div class="at">Termo de Ciência Técnica</div>
 <p style="text-align:center;font-size:11px;color:#555">Anexo I ao Contrato de Compra, Venda e Instalação de Sistema de Geração Fotovoltaica</p>
 <p>Este Termo tem por finalidade registrar, de forma clara, específica e destacada, informações técnicas essenciais sobre o Sistema de Geração Fotovoltaica objeto do contrato principal, das quais o COMPRADOR declara ter pleno conhecimento antes da assinatura do referido contrato, nos termos dos artigos 6º, III, e 46 do Código de Defesa do Consumidor.</p>
@@ -770,37 +803,42 @@ ${logo ? `<div style="text-align:center;margin-bottom:12px"><img src="${logo}" a
 <p>Declaro ter lido e compreendido integralmente as informações técnicas descritas neste Termo, tendo tido a oportunidade de esclarecer todas as dúvidas junto à VENDEDORA antes da assinatura do contrato principal. Este Termo é parte integrante e inseparável do contrato de compra, venda e instalação de sistema de geração fotovoltaica firmado entre as partes.</p>
 <p>Local e data: Araraquara/SP, ${hoje}.</p>
 <div class="assin">
-  <div class="ab"><div class="al"></div><p>COMPRADOR(A)<br>${f.nomeCompleto ?? '___________________________'}</p></div>
+  <div class="ab"><div class="al"></div><p>COMPRADOR(A)<br>${f.nomeCompleto ?? '___________________________'}<br>CPF/CNPJ: ${f.cpfCnpj ?? '___________________________'}</p></div>
   <div class="ab"><div class="al"></div><p>VENDEDORA (representante)<br>F. R. C. CINTRA — CNPJ 33.071.872/0001-08</p></div>
-</div>
 </div>
 
 <!-- ANEXO II -->
-<div class="pb2">
+<div class="quebra"></div>
 <div class="at">Anexo II — Quadro de Garantia dos Equipamentos</div>
 <p style="text-align:center;font-size:11px;color:#555">Anexo ao Contrato de Compra, Venda e Instalação de Sistema de Geração Fotovoltaica</p>
 <p>Este Anexo é parte integrante do contrato de compra, venda e instalação de sistema de geração fotovoltaica firmado entre as PARTES, nos termos da Cláusula 11.2 e da Cláusula 15ª do contrato principal. Ele deve ser preenchido, a cada venda, com os dados específicos dos equipamentos efetivamente fornecidos ao COMPRADOR, com base no termo de garantia oficial do fabricante vigente na data da venda.</p>
 <p><strong>Contrato vinculado:</strong> ${ref} &nbsp;|&nbsp; <strong>COMPRADOR(A):</strong> ${f.nomeCompleto ?? '___________________________'}</p>
 
 <h3>1. Inversor / Microinversor</h3>
-<table>
-  <tr><th>Marca</th><th>Modelo</th><th>Prazo de Garantia</th><th>Data de Verificação</th><th>Fonte</th></tr>
+<table style="font-size:10px">
+  <colgroup><col style="width:18%"><col style="width:36%"><col style="width:23%"><col style="width:23%"></colgroup>
+  <tr><th>Marca</th><th>Modelo</th><th>Garantia Fornecedor</th><th>Garantia Fábrica</th></tr>
   <tr>
     <td>${f.modeloInversor ? f.modeloInversor.split(' ')[0] : '___'}</td>
     <td>${f.modeloInversor ?? '___________________________'}</td>
-    <td>_____ anos</td><td>${hoje}</td><td>NF / termo fabricante</td>
+    <td>${invfab?.garantiaFornecedor ?? '—'}</td>
+    <td>${invfab?.garantiaFabrica ?? '5 anos'}</td>
   </tr>
 </table>
 
 <h3>2. Módulos Fotovoltaicos</h3>
-<table>
-  <tr><th>Marca</th><th>Modelo</th><th>Garantia de Produto</th><th>Garantia de Desempenho</th><th>Data de Verificação</th><th>Fonte</th></tr>
+<table style="font-size:10px">
+  <colgroup><col style="width:16%"><col style="width:32%"><col style="width:18%"><col style="width:18%"><col style="width:16%"></colgroup>
+  <tr><th>Marca</th><th>Modelo</th><th>Gar. Fornecedor</th><th>Gar. Fábrica</th><th>Gar. Desempenho</th></tr>
   <tr>
     <td>${f.modeloPainel ? f.modeloPainel.split(' ')[0] : '___'}</td>
     <td>${f.modeloPainel ?? '___________________________'}</td>
-    <td>_____ anos</td><td>_____ anos</td><td>${hoje}</td><td>NF / termo</td>
+    <td>${modfab?.garantiaFornecedor ?? '—'}</td>
+    <td>${modfab?.garantiaFabrica ?? '12 anos'}</td>
+    <td>${modfab?.garantiaDesempenho ?? '25 anos'}</td>
   </tr>
 </table>
+<p style="font-size:9px;color:#666;margin-top:4px">Data de verificação: ${hoje} &nbsp;|&nbsp; Fonte: NF e termo oficial do fabricante</p>
 
 <h3>3. Estrutura de Fixação e Demais Componentes</h3>
 <table>
@@ -815,12 +853,11 @@ ${logo ? `<div style="text-align:center;margin-bottom:12px"><img src="${logo}" a
 
 <p>Local e data: Araraquara/SP, ${hoje}.</p>
 <div class="assin">
-  <div class="ab"><div class="al"></div><p>COMPRADOR(A)<br>${f.nomeCompleto ?? '___________________________'}</p></div>
+  <div class="ab"><div class="al"></div><p>COMPRADOR(A)<br>${f.nomeCompleto ?? '___________________________'}<br>CPF/CNPJ: ${f.cpfCnpj ?? '___________________________'}</p></div>
   <div class="ab"><div class="al"></div><p>VENDEDORA (representante)<br>F. R. C. CINTRA — CNPJ 33.071.872/0001-08</p></div>
 </div>
-</div>
 
-</body></html>`;
+</div></body></html>`;
     janela.document.write(html);
     janela.document.close();
     setTimeout(() => { janela.print(); }, 500);
