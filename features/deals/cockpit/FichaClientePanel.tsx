@@ -520,44 +520,32 @@ export const FichaClientePanel: React.FC<Props> = ({
 <title>Contrato – ${f.nomeCompleto ?? 'Cliente'}</title><meta charset="utf-8">
 <style>
   @page{size:A4;margin:20mm 18mm}
-  *{box-sizing:border-box;margin:0;padding:0}
-  /* TELA: folha branca sobre fundo cinza */
-  body{font-family:Arial,sans-serif;color:#1a1a1a;font-size:10.5pt;line-height:1.65;background:#d0d0d0;min-height:100vh}
-  .sheet{background:#fff;width:210mm;margin:24px auto;padding:20mm 18mm;box-shadow:0 2px 12px rgba(0,0,0,.35)}
-  /* TIPOGRAFIA */
-  h1{text-align:center;font-size:14pt;margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em}
-  .sub{text-align:center;font-size:9pt;color:#555;margin-bottom:16px}
-  h2{font-size:10.5pt;font-weight:bold;margin:16px 0 5px;text-transform:uppercase;border-bottom:1px solid #bbb;padding-bottom:3px;page-break-after:avoid;break-after:avoid}
+  *{box-sizing:border-box}
+  body{font-family:Arial,sans-serif;color:#1a1a1a;font-size:10.5pt;line-height:1.65;margin:0;padding:24px 0;background:#c8c8c8}
+  .sheet{background:#fff;max-width:800px;margin:0 auto;padding:28px 36px;box-shadow:0 3px 14px rgba(0,0,0,.3)}
+  h1{text-align:center;font-size:14pt;margin:0 0 5px;text-transform:uppercase;letter-spacing:.05em}
+  .sub{text-align:center;font-size:9pt;color:#555;margin:0 0 16px}
+  h2{font-size:10.5pt;font-weight:bold;margin:16px 0 5px;text-transform:uppercase;border-bottom:1.5px solid #aaa;padding-bottom:3px;page-break-after:avoid;break-after:avoid}
   h3{font-size:10.5pt;font-weight:bold;margin:12px 0 4px;page-break-after:avoid;break-after:avoid}
   p{margin:4px 0;text-align:justify}
-  /* CAIXAS */
   .pb{background:#f8f8f8;border:1px solid #ddd;padding:8px 12px;margin:8px 0;border-radius:3px;page-break-inside:avoid;break-inside:avoid}
   .pb-t{font-size:8.5pt;text-transform:uppercase;font-weight:bold;color:#666;margin-bottom:4px}
   .cl{margin-bottom:8px}
-  /* TABELAS */
   table{border-collapse:collapse;width:100%;margin:6px 0;font-size:9.5pt;page-break-inside:avoid;break-inside:avoid}
-  th,td{border:1px solid #ccc;padding:4px 8px}
-  th{background:#f0f0f0;font-weight:bold;text-align:left}
+  th,td{border:1px solid #ccc;padding:5px 8px}
+  th{background:#efefef;font-weight:bold;text-align:left}
   tr{page-break-inside:avoid;break-inside:avoid}
-  /* ASSINATURAS */
   .assin{margin-top:44px;display:flex;justify-content:space-between;page-break-inside:avoid;break-inside:avoid}
   .ab{text-align:center;width:44%;font-size:9.5pt}
   .al{border-top:1px solid #333;padding-top:6px;margin-top:26px}
-  /* QUEBRAS DE PÁGINA */
-  .quebra{display:block;height:0;margin:0;padding:0;border:none;break-before:page;page-break-before:always}
-  .at{text-align:center;font-size:13pt;font-weight:bold;margin-bottom:8px;text-transform:uppercase;letter-spacing:.03em}
+  .quebra{display:block;height:32px;margin:0;padding:0;border-top:2px dashed #ccc}
+  .at{text-align:center;font-size:13pt;font-weight:bold;margin:0 0 8px;text-transform:uppercase;letter-spacing:.03em}
   .ck{display:inline-block;width:12px;height:12px;border:1px solid #333;margin-right:4px;vertical-align:middle}
   ul{margin:4px 0 4px 20px}li{margin:2px 0}
-  /* TELA: separador visual de seção */
-  @media screen{
-    .quebra{height:0;border-top:none;margin:0}
-    .sheet+.sheet,.quebra+*{/* próxima folha simulada visualmente */}
-  }
-  /* IMPRESSÃO */
   @media print{
-    body{background:#fff}
-    .sheet{width:auto;margin:0;padding:0;box-shadow:none}
-    .quebra{break-before:page;page-break-before:always;height:0;display:block}
+    body{background:#fff;padding:0}
+    .sheet{max-width:none;margin:0;padding:0;box-shadow:none}
+    .quebra{height:0;border:none;break-before:page;page-break-before:always;display:block}
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   }
 </style></head><body><div class="sheet">
