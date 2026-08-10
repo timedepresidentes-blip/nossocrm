@@ -803,7 +803,7 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
 <div class="quebra"></div>
 <div class="at">Anexo II — Quadro de Garantia dos Equipamentos</div>
 <p style="text-align:center;font-size:11px;color:#555">Anexo ao Contrato de Compra, Venda e Instalação de Sistema de Geração Fotovoltaica</p>
-<p>Este Anexo é parte integrante do contrato de compra, venda e instalação de sistema de geração fotovoltaica firmado entre as PARTES, nos termos da Cláusula 11.2 e da Cláusula 15ª do contrato principal. Ele deve ser preenchido, a cada venda, com os dados específicos dos equipamentos efetivamente fornecidos ao COMPRADOR, com base no termo de garantia oficial do fabricante vigente na data da venda.</p>
+<p>Os equipamentos listados abaixo são fornecidos com as garantias dos respectivos fabricantes, conforme termos oficiais vigentes na data da contratação.</p>
 <p><strong>Contrato vinculado:</strong> ${ref} &nbsp;|&nbsp; <strong>COMPRADOR(A):</strong> ${f.nomeCompleto ?? '___________________________'}</p>
 
 <h3>1. Inversor / Microinversor</h3>
