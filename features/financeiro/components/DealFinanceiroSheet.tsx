@@ -92,6 +92,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
   const [custoCorrugado, setCustoCorrugado] = useState<number | undefined>(undefined);
   const [custoEletroduto, setCustoEletroduto] = useState<number | undefined>(undefined);
   const [custoFornecedor, setCustoFornecedor] = useState<number | undefined>(undefined);
+  const [voucherBancoPct, setVoucherBancoPct] = useState<number | undefined>(undefined);
   const [custoArt, setCustoArt] = useState<number | undefined>(undefined);
   const [comissaoValor, setComissaoValor] = useState<number | undefined>(undefined);
   const [custosExtras, setCustosExtras] = useState<CustoExtra[]>([]);
@@ -105,6 +106,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
     setCustoCorrugado(deal.custoCorrugado);
     setCustoEletroduto(deal.custoEletroduto);
     setCustoFornecedor(deal.custoFornecedor);
+    setVoucherBancoPct(deal.voucherBancoPct);
     setCustoArt(deal.custoArt);
     setComissaoValor(deal.comissaoValor);
     setCustosExtras(deal.custosExtras || []);
@@ -117,12 +119,13 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
   const nomeCliente = deal.fichaCliente?.nomeCompleto || deal.title;
 
   const somaExtras = custosExtras.reduce((s, c) => s + (c.valor || 0), 0);
+  const custoFornecedorEfetivo = (custoFornecedor || 0) * (1 - (voucherBancoPct || 0) / 100);
   const custoTotalCalc =
     (custoNf || 0) +
     (custoEngenharia || 0) +
     (custoCorrugado || 0) +
     (custoEletroduto || 0) +
-    (custoFornecedor || 0) +
+    custoFornecedorEfetivo +
     (custoArt || 0) +
     (comissaoValor || 0) +
     somaExtras;
@@ -147,6 +150,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
           custoCorrugado,
           custoEletroduto,
           custoFornecedor,
+          voucherBancoPct,
           custoArt,
           comissaoValor,
           custosExtras,
@@ -246,6 +250,24 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
           </div>
 
           <FieldRow label="Fornecedor (equipamentos)" value={custoFornecedor} onChange={setCustoFornecedor} />
+          <div className="flex items-center justify-between py-2 border-b border-white/5">
+            <span className="text-xs text-slate-400">Voucher banco (%)</span>
+            <div className="flex items-center gap-1">
+              <input
+                type="number" min={0} max={100} step={0.1}
+                value={voucherBancoPct ?? ''}
+                onChange={e => setVoucherBancoPct(parseFloat(e.target.value) || 0)}
+                placeholder="0"
+                className="w-16 text-right text-xs bg-dark-card border border-white/10 rounded px-2 py-1 text-white focus:outline-none focus:ring-1 focus:ring-primary-500/30"
+              />
+              <span className="text-xs text-slate-500">%</span>
+              {(voucherBancoPct || 0) > 0 && (custoFornecedor || 0) > 0 && (
+                <span className="text-[10px] text-emerald-400 ml-1">
+                  − {((custoFornecedor || 0) * (voucherBancoPct || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
+              )}
+            </div>
+          </div>
           <FieldRow label="Engenharia / Projeto" value={custoEngenharia} onChange={setCustoEngenharia} />
           <FieldRow label="ART" value={custoArt} onChange={setCustoArt} />
           <FieldRow label="Corrugado" value={custoCorrugado} onChange={setCustoCorrugado} />

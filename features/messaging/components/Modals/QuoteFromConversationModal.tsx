@@ -122,6 +122,7 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
   const [custoCorrugado, setCustoCorrugado] = useState('');
   const [custoEletroduto, setCustoEletroduto] = useState('');
   const [custoFornecedor, setCustoFornecedor] = useState('');
+  const [voucherBancoPct, setVoucherBancoPct] = useState('');
   const [custoComissaoPct, setCustoComissaoPct] = useState('');
 
   // Custo instalação e extras nomeados
@@ -201,11 +202,13 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
     : valorBaseNum - descontoReaisNum;
 
   const custoFornecedorNum = parseFlt(custoFornecedor);
+  const voucherBancoPctNum = parseFlt(voucherBancoPct);
+  const custoFornecedorEfetivo = custoFornecedorNum * (1 - voucherBancoPctNum / 100);
   const custoInstalacaoNum = parseFlt(custoInstalacao);
   const custosAdicionaisTotal = custosAdicionais.reduce((s, e) => s + parseFlt(e.valor), 0);
-  const nfPreview = valorFinalVenda > 0 ? calcNfCost(valorFinalVenda, custoNfTipo, orgCfg, custoFornecedorNum) : 0;
+  const nfPreview = valorFinalVenda > 0 ? calcNfCost(valorFinalVenda, custoNfTipo, orgCfg, custoFornecedorEfetivo) : 0;
   const totalCustos = nfPreview + parseFlt(custoArt) + parseFlt(custoEngenharia) +
-    parseFlt(custoCorrugado) + parseFlt(custoEletroduto) + custoFornecedorNum +
+    parseFlt(custoCorrugado) + parseFlt(custoEletroduto) + custoFornecedorEfetivo +
     custoInstalacaoNum + custosAdicionaisTotal;
   const comissaoVal = valorFinalVenda * (comPct / 100);
   const lucro = valorFinalVenda - totalCustos - comissaoVal;
@@ -220,7 +223,7 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
     // Triangulação: custo + margem → valor de venda
     // Fórmula: V = custos_fixos / (1 - NF% - margem% - comissão%)
     const custosFixos = parseFlt(custoArt) + parseFlt(custoEngenharia) +
-      parseFlt(custoCorrugado) + parseFlt(custoEletroduto) + parseFlt(custoFornecedor) +
+      parseFlt(custoCorrugado) + parseFlt(custoEletroduto) + custoFornecedorEfetivo +
       parseFlt(custoInstalacao) + custosAdicionais.reduce((s, e) => s + parseFlt(e.valor), 0);
     if (custosFixos <= 0) return;
     const divisor = 1 - nfPct / 100 - m / 100 - comPct / 100;
@@ -335,7 +338,7 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
       }
 
       if (dealId) {
-        const nf = valorFinalVenda > 0 ? calcNfCost(valorFinalVenda, custoNfTipo, orgCfg, parseFlt(custoFornecedor)) : 0;
+        const nf = valorFinalVenda > 0 ? calcNfCost(valorFinalVenda, custoNfTipo, orgCfg, custoFornecedorEfetivo) : 0;
         const extrasParaSalvar: { descricao: string; valor: number }[] = [];
         if (custoInstalacaoNum > 0) extrasParaSalvar.push({ descricao: 'Instalação', valor: custoInstalacaoNum });
         custosAdicionais.filter(e => e.nome.trim()).forEach(e => extrasParaSalvar.push({ descricao: e.nome.trim(), valor: parseFlt(e.valor) }));
@@ -346,6 +349,7 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
           custoCorrugado: parseFlt(custoCorrugado),
           custoEletroduto: parseFlt(custoEletroduto),
           custoFornecedor: parseFlt(custoFornecedor),
+          voucherBancoPct: voucherBancoPctNum,
           custosExtras: extrasParaSalvar,
         });
       }
@@ -599,9 +603,21 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
                   Custo da fornecedora (kit)
                   {supplierData?.kitTotalPrice ? <span className="ml-1 text-[10px] text-amber-500 font-normal">← extraído do PDF</span> : null}
                 </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">R$</span>
-                  <input type="text" inputMode="decimal" value={custoFornecedor} onChange={e => setCustoFornecedor(e.target.value)} onFocus={e => e.target.select()} onBlur={e => blurFmt(e.target.value, setCustoFornecedor)} className={inpPre} placeholder="0,00" />
+                <div className="flex gap-2 items-start">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">R$</span>
+                    <input type="text" inputMode="decimal" value={custoFornecedor} onChange={e => setCustoFornecedor(e.target.value)} onFocus={e => e.target.select()} onBlur={e => blurFmt(e.target.value, setCustoFornecedor)} className={inpPre} placeholder="0,00" />
+                  </div>
+                  <div className="w-28 shrink-0">
+                    <label className="block text-[10px] text-slate-500 mb-1">Voucher banco</label>
+                    <div className="relative">
+                      <input type="number" min={0} max={100} step={0.1} value={voucherBancoPct} onChange={e => setVoucherBancoPct(e.target.value)} placeholder="0" className={inpPre + ' pr-6'} />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">%</span>
+                    </div>
+                    {voucherBancoPctNum > 0 && custoFornecedorNum > 0 && (
+                      <p className="text-[10px] text-emerald-500 mt-0.5">− R$ {(custoFornecedorNum * voucherBancoPctNum / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    )}
+                  </div>
                 </div>
               </div>
               {/* Custo de Instalação */}

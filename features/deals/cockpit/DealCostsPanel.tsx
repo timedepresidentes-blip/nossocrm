@@ -19,7 +19,7 @@ const inputCls = 'w-full rounded-lg border border-white/10 bg-white/3 px-2.5 py-
 
 const defaultCosts: DealCostData = {
   custoNf: 0, custoNfTipo: 'kit', custoArt: 0, custoEngenharia: 0,
-  custoCorrugado: 0, custoEletroduto: 0, custoFornecedor: 0,
+  custoCorrugado: 0, custoEletroduto: 0, custoFornecedor: 0, voucherBancoPct: 0,
   custosExtras: [], custoTotal: 0, comissaoValor: 0, lucroBruto: 0, margemPct: 0,
 };
 
@@ -34,7 +34,8 @@ export const DealCostsPanel: React.FC<Props> = ({ dealId, valorVenda, kwp }) => 
 
   const recalc = useCallback((base: DealCostData, cfg: OrgCostSettings | null): DealCostData => {
     if (!cfg) return base;
-    const nf = calcNfCost(valorVenda, base.custoNfTipo, cfg, base.custoFornecedor);
+    const custoFornecedorEfetivo = base.custoFornecedor * (1 - (base.voucherBancoPct ?? 0) / 100);
+    const nf = calcNfCost(valorVenda, base.custoNfTipo, cfg, custoFornecedorEfetivo);
     const totals = calcDealCosts({ ...base, custoNf: nf }, valorVenda, calcComissaoPct(kwp ?? 0, cfg));
     return { ...base, custoNf: nf, ...totals };
   }, [valorVenda, kwp]);
@@ -168,6 +169,25 @@ export const DealCostsPanel: React.FC<Props> = ({ dealId, valorVenda, kwp }) => 
             </div>
           </div>
         ))}
+        {/* Voucher banco */}
+        <div>
+          <div className="text-[10px] text-slate-500 mb-0.5">Voucher banco (%)</div>
+          <div className="relative">
+            <input
+              type="number" min={0} max={100} step={0.1}
+              value={costs.voucherBancoPct || ''}
+              onChange={e => setCosts(prev => recalc({ ...prev, voucherBancoPct: parseFloat(e.target.value) || 0 }, orgCfg))}
+              placeholder="0"
+              className={inputCls + ' pr-6'}
+            />
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">%</span>
+          </div>
+          {costs.voucherBancoPct > 0 && (
+            <div className="text-[10px] text-emerald-400 mt-0.5">
+              − {BRL.format(costs.custoFornecedor * costs.voucherBancoPct / 100)}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Extras */}

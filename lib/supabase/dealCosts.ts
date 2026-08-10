@@ -8,6 +8,7 @@ export interface DealCostData {
   custoCorrugado: number;
   custoEletroduto: number;
   custoFornecedor: number;
+  voucherBancoPct: number;
   custosExtras: { descricao: string; valor: number }[];
   custoTotal: number;
   comissaoValor: number;
@@ -22,14 +23,14 @@ export const dealCostsService = {
 
       const { data, error } = await supabase
         .from('deals')
-        .select('custo_nf, custo_nf_tipo, custo_art, custo_engenharia, custo_corrugado, custo_eletroduto, custo_fornecedor, custos_extras, custo_total, comissao_valor, lucro_bruto, margem_pct')
+        .select('custo_nf, custo_nf_tipo, custo_art, custo_engenharia, custo_corrugado, custo_eletroduto, custo_fornecedor, voucher_banco_pct, custos_extras, custo_total, comissao_valor, lucro_bruto, margem_pct')
         .eq('id', dealId)
         .maybeSingle();
 
       if (error) return { data: null, error };
       const defaults: DealCostData = {
         custoNf: 0, custoNfTipo: 'kit', custoArt: 0, custoEngenharia: 0,
-        custoCorrugado: 0, custoEletroduto: 0, custoFornecedor: 0,
+        custoCorrugado: 0, custoEletroduto: 0, custoFornecedor: 0, voucherBancoPct: 0,
         custosExtras: [], custoTotal: 0, comissaoValor: 0, lucroBruto: 0, margemPct: 0,
       };
       if (!data) return { data: defaults, error: null };
@@ -44,6 +45,7 @@ export const dealCostsService = {
           custoCorrugado: Number(row.custo_corrugado ?? 0),
           custoEletroduto: Number(row.custo_eletroduto ?? 0),
           custoFornecedor: Number(row.custo_fornecedor ?? 0),
+          voucherBancoPct: Number(row.voucher_banco_pct ?? 0),
           custosExtras: Array.isArray(row.custos_extras) ? row.custos_extras : [],
           custoTotal: Number(row.custo_total ?? 0),
           comissaoValor: Number(row.comissao_valor ?? 0),
@@ -69,6 +71,7 @@ export const dealCostsService = {
       if (updates.custoCorrugado !== undefined) payload.custo_corrugado = updates.custoCorrugado;
       if (updates.custoEletroduto !== undefined) payload.custo_eletroduto = updates.custoEletroduto;
       if (updates.custoFornecedor !== undefined) payload.custo_fornecedor = updates.custoFornecedor;
+      if (updates.voucherBancoPct !== undefined) payload.voucher_banco_pct = updates.voucherBancoPct;
       if (updates.custosExtras !== undefined) payload.custos_extras = updates.custosExtras;
       if (updates.custoTotal !== undefined) payload.custo_total = updates.custoTotal;
       if (updates.comissaoValor !== undefined) payload.comissao_valor = updates.comissaoValor;
@@ -125,7 +128,8 @@ export function calcDealCosts(
   comissaoPct: number
 ): Pick<DealCostData, 'custoTotal' | 'comissaoValor' | 'lucroBruto' | 'margemPct'> {
   const somaExtras = costs.custosExtras.reduce((acc, e) => acc + (e.valor ?? 0), 0);
-  const custoTotal = costs.custoNf + costs.custoArt + costs.custoEngenharia + costs.custoCorrugado + costs.custoEletroduto + costs.custoFornecedor + somaExtras;
+  const custoFornecedorEfetivo = costs.custoFornecedor * (1 - (costs.voucherBancoPct ?? 0) / 100);
+  const custoTotal = costs.custoNf + costs.custoArt + costs.custoEngenharia + costs.custoCorrugado + costs.custoEletroduto + custoFornecedorEfetivo + somaExtras;
   const comissaoValor = valorVenda * (comissaoPct / 100);
   const lucroBruto = valorVenda - custoTotal - comissaoValor;
   const margemPct = valorVenda > 0 ? (lucroBruto / valorVenda) * 100 : 0;

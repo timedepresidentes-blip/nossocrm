@@ -276,6 +276,7 @@ export interface Deal {
   custoCorrugado?: number;              // Custo de corrugado
   custoEletroduto?: number;             // Custo de eletroduto
   custoFornecedor?: number;             // Custo do fornecedor (equipamentos)
+  voucherBancoPct?: number;             // Percentual de voucher/cashback do banco sobre o fornecedor
   custoArt?: number;                    // Custo da ART
   custosExtras?: { descricao: string; valor: number }[]; // Custos imprevistos/adicionais
   custoTotal?: number;                  // Total de custos (calculado)
