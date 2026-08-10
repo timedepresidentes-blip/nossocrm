@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FileText, ExternalLink, Search, Loader2, RefreshCw, Zap } from 'lucide-react';
+import { FileText, Pencil, Search, Loader2, RefreshCw, Zap } from 'lucide-react';
 
 interface OrcafacilProposal {
   id: string;
@@ -169,11 +169,11 @@ export function OrcamentosPage() {
                     href={`${ORCAFACIL_BASE}/orcamento/${p.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    title="Abrir e editar no OrçaFácil"
+                    title="Editar no OrçaFácil"
                     className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 border border-orange-500/20 text-orange-400 rounded-lg text-xs font-medium hover:bg-orange-500/20 hover:text-orange-300 transition-colors"
                   >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    Abrir
+                    <Pencil className="h-3.5 w-3.5" />
+                    Editar
                   </a>
                 </div>
               ))}
