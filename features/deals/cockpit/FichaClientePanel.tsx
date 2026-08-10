@@ -519,8 +519,10 @@ export const FichaClientePanel: React.FC<Props> = ({
     const html = `<!DOCTYPE html><html><head>
 <title>Contrato – ${f.nomeCompleto ?? 'Cliente'}</title><meta charset="utf-8">
 <style>
-  @page{size:A4;margin:20mm 18mm}
+  /* margin:0 no @page — o padding do .sheet-print controla as margens no PDF */
+  @page{size:A4;margin:0}
   *{box-sizing:border-box}
+  /* TELA */
   body{font-family:Arial,sans-serif;color:#1a1a1a;font-size:10.5pt;line-height:1.65;margin:0;padding:24px 0;background:#c8c8c8}
   .sheet{background:#fff;max-width:800px;margin:0 auto;padding:28px 36px;box-shadow:0 3px 14px rgba(0,0,0,.3)}
   h1{text-align:center;font-size:14pt;margin:0 0 5px;text-transform:uppercase;letter-spacing:.05em}
@@ -542,9 +544,11 @@ export const FichaClientePanel: React.FC<Props> = ({
   .at{text-align:center;font-size:13pt;font-weight:bold;margin:0 0 8px;text-transform:uppercase;letter-spacing:.03em}
   .ck{display:inline-block;width:12px;height:12px;border:1px solid #333;margin-right:4px;vertical-align:middle}
   ul{margin:4px 0 4px 20px}li{margin:2px 0}
+  /* IMPRESSÃO: sheet vira a própria página com margens embutidas */
   @media print{
-    body{background:#fff;padding:0}
-    .sheet{max-width:none;margin:0;padding:0;box-shadow:none}
+    #toolbar{display:none!important}
+    body{background:#fff;padding:0;margin:0}
+    .sheet{max-width:none;width:100%;margin:0;padding:20mm 18mm;box-shadow:none}
     .quebra{height:0;border:none;break-before:page;page-break-before:always;display:block}
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   }
@@ -861,7 +865,7 @@ document.getElementById('btnPdf').addEventListener('click',function(){
     margin:0,
     filename:'Contrato-'+ref+'-'+nomeCliente.replace(/\\s+/g,'-')+'.pdf',
     image:{type:'jpeg',quality:0.98},
-    html2canvas:{scale:2,useCORS:true,logging:false},
+    html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false},
     jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}
   }).from(sheet).save().then(function(){btn.disabled=false;btn.textContent='⬇ Baixar PDF'});
 });
