@@ -522,6 +522,18 @@ export async function processIncomingMessage(
     recordRateCall(conversationId);
   }
 
+  // 9a. Transfer tool_call detectado — enviar msg de aviso e executar handoff
+  if (decision.action === 'handoff' && decision.response) {
+    // Envia a mensagem que a Julia escreveu ("Vou chamar a Flávia...") antes de transferir
+    await sendAIResponse({ supabase, conversationId, response: decision.response });
+  }
+  if (decision.action === 'handoff') {
+    return {
+      success: true,
+      decision: await handleHandoff(supabase, conversationId, organizationId, context, decision.reason ?? 'Transferência solicitada pela IA'),
+    };
+  }
+
   // 9b. Falha de geração: todos os providers AI falharam — notifica cliente
   // A janela de 24h já foi verificada acima (passo 5b) e retornou se expirada,
   // portanto aqui a janela está ABERTA → usar mensagem de texto, nunca template.
@@ -692,9 +704,21 @@ Responda de forma natural, seguindo as instruções do sistema.
       maxRetries: 2,
     });
 
+    const { text: cleanText, transferTo } = parseAIResponseText(result.text.trim());
+
+    // Se o prompt do estágio gerou um tool_call de transfer → handoff
+    if (transferTo) {
+      console.log('[AIAgent] transfer tool_call detectado, acionando handoff para:', transferTo);
+      return {
+        action: 'handoff',
+        reason: `Transferência solicitada para: ${transferTo}`,
+        response: cleanText || undefined,
+      };
+    }
+
     return {
       action: 'responded',
-      response: result.text.trim(),
+      response: cleanText,
       reason: 'Resposta gerada com sucesso',
       tokens_used: result.usage?.totalTokens,
       model_used: result.modelUsed || modelId,
@@ -706,6 +730,55 @@ Responda de forma natural, seguindo as instruções do sistema.
       action: 'generation_failed',
       reason: `Erro na geração: ${msg}`,
     };
+  }
+}
+
+/**
+ * Extrai texto limpo de respostas da IA que podem vir como JSON estruturado
+ * com { messages, tool_calls } — bug causado por system_prompts que instruem
+ * formato JSON em vez de texto puro.
+ */
+function parseAIResponseText(raw: string): { text: string; transferTo?: string } {
+  let jsonStr = raw;
+
+  // Remove cerca de código markdown (```json ... ```)
+  if (raw.startsWith('```')) {
+    jsonStr = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+  }
+
+  if (!jsonStr.startsWith('{')) {
+    return { text: raw };
+  }
+
+  try {
+    const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+
+    // Extrai texto da mensagem
+    let text = raw;
+    if (Array.isArray(parsed.messages)) {
+      const msg = (parsed.messages as Array<{ role: string; content: string }>)
+        .find(m => m.role === 'assistant');
+      if (msg?.content) text = msg.content;
+    } else if (typeof parsed.content === 'string') {
+      text = parsed.content;
+    } else if (typeof parsed.message === 'string') {
+      text = parsed.message;
+    } else if (typeof parsed.response === 'string') {
+      text = parsed.response;
+    }
+
+    // Detecta tool_call de transfer
+    let transferTo: string | undefined;
+    if (Array.isArray(parsed.tool_calls)) {
+      const tc = (parsed.tool_calls as Array<{ function: string; parameters?: Record<string, unknown> }>)
+        .find(t => t.function === 'transfer');
+      if (tc) transferTo = String(tc.parameters?.to ?? 'atendente');
+    }
+
+    console.log('[AIAgent] parseAIResponseText: JSON detectado, texto extraído, transferTo:', transferTo ?? 'nenhum');
+    return { text, transferTo };
+  } catch {
+    return { text: raw };
   }
 }
 
