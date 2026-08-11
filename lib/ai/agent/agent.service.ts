@@ -163,7 +163,7 @@ export async function getOrgAIConfig(
     learnedPatterns,
     templateId: orgSettings.ai_template_id || null,
     takeoverEnabled: orgSettings.ai_takeover_enabled === true,
-    takeoverMinutes: orgSettings.ai_takeover_minutes ?? 15,
+    takeoverMinutes: orgSettings.ai_takeover_minutes ?? 40,
     allKeys: {
       google: orgSettings.ai_google_key || process.env['GOOGLE_GENERATIVE_AI_API_KEY'] || null,
       openai: orgSettings.ai_openai_key || process.env['OPENAI_API_KEY'] || null,
@@ -1369,7 +1369,7 @@ export async function resumeByAI(
 
     // 6. Monta prompt especializado para retomada por SLA
     const systemPrompt = `Você é Júlia, assistente virtual da empresa.
-Um atendente humano estava cuidando dessa conversa, mas ficou ausente por mais de 15 minutos.
+Um atendente humano estava cuidando dessa conversa, mas ficou ausente por mais de 40 minutos.
 Sua missão AGORA é:
 1. Se apresentar de forma simpática e natural como assistente virtual
 2. Informar que o ${attendantName} vai retornar em breve e você vai ajudar no que puder enquanto isso

@@ -4,7 +4,7 @@ import { resumeByAI, processIncomingMessage } from '@/lib/ai/agent/agent.service
 export const maxDuration = 120;
 
 // Inatividade mínima para o Caso A (Julia pausada, atendente sumiu)
-const SLA_MINUTES = 15;
+const SLA_MINUTES = 40;
 
 function json<T>(body: T, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -98,8 +98,8 @@ export async function GET(req: Request) {
   // Conversas com assigned_user_id e ai_paused != true onde o atendente
   // não respondeu dentro do prazo configurado (ai_takeover_minutes).
   // =========================================================================
-  const TAKEOVER_DEFAULT_MINUTES = 30;
-  // Cutoff conservador: 30 min. Verificamos o prazo real por org abaixo.
+  const TAKEOVER_DEFAULT_MINUTES = 40;
+  // Cutoff conservador: 40 min. Verificamos o prazo real por org abaixo.
   const takeoverCutoff = new Date(Date.now() - TAKEOVER_DEFAULT_MINUTES * 60 * 1000).toISOString();
 
   const { data: takeoverCandidates, error: tkErr } = await supabase
