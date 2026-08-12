@@ -4,7 +4,8 @@ import { Deal } from '@/types';
 import { useUpdateDeal } from '@/lib/query/hooks/useDealsQuery';
 import { useToast } from '@/context/ToastContext';
 import { cn } from '@/lib/utils';
-import { X, Plus, Trash2, Save, TrendingUp, TrendingDown, DollarSign, Percent } from 'lucide-react';
+import { X, Plus, Trash2, Save, TrendingUp, TrendingDown, DollarSign, Percent, CheckCircle2, Circle, AlertTriangle } from 'lucide-react';
+import { CustosPagos } from '@/lib/supabase/dealCosts';
 
 interface Props {
   deal: Deal | null;
@@ -35,9 +36,11 @@ interface FieldRowProps {
   value: number | undefined;
   onChange: (v: number) => void;
   highlight?: 'green' | 'red';
+  pago?: boolean;
+  onTogglePago?: () => void;
 }
 
-function FieldRow({ label, value, onChange, highlight }: FieldRowProps) {
+function FieldRow({ label, value, onChange, highlight, pago, onTogglePago }: FieldRowProps) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState('');
 
@@ -50,14 +53,25 @@ function FieldRow({ label, value, onChange, highlight }: FieldRowProps) {
     setEditing(false);
   };
 
+  const temValor = value != null && value > 0;
+
   return (
     <div className={cn(
-      'flex items-center justify-between py-2 px-3 rounded-lg',
+      'flex items-center gap-2 py-2 px-3 rounded-lg',
       highlight === 'green' && 'bg-emerald-500/10 border border-emerald-500/20',
       highlight === 'red' && 'bg-rose-500/10 border border-rose-500/20',
       !highlight && 'hover:bg-white/5'
     )}>
-      <span className="text-sm text-slate-400">{label}</span>
+      {onTogglePago && temValor ? (
+        <button onClick={onTogglePago} className="shrink-0 transition-colors" title={pago ? 'Marcar como pendente' : 'Marcar como pago'}>
+          {pago
+            ? <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+            : <Circle className="h-4 w-4 text-slate-500 hover:text-slate-300" />}
+        </button>
+      ) : onTogglePago ? (
+        <div className="w-4 shrink-0" />
+      ) : null}
+      <span className={cn('text-sm flex-1', pago && temValor ? 'text-slate-500 line-through' : 'text-slate-400')}>{label}</span>
       {editing ? (
         <input
           autoFocus
@@ -96,6 +110,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
   const [custoArt, setCustoArt] = useState<number | undefined>(undefined);
   const [comissaoValor, setComissaoValor] = useState<number | undefined>(undefined);
   const [custosExtras, setCustosExtras] = useState<CustoExtra[]>([]);
+  const [custosPagos, setCustosPagos] = useState<CustosPagos>({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -110,6 +125,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
     setCustoArt(deal.custoArt);
     setComissaoValor(deal.comissaoValor);
     setCustosExtras(deal.custosExtras || []);
+    setCustosPagos(deal.custosPagos || {});
   }, [deal]);
 
   if (!isOpen || !deal) return null;
@@ -132,6 +148,44 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
 
   const lucroBruto = receita - custoTotalCalc;
   const margemPct = receita > 0 ? (lucroBruto / receita) * 100 : 0;
+
+  // Checklist de pagamentos
+  const camposComValor = [
+    { key: 'nf' as const,         val: custoNf },
+    { key: 'fornecedor' as const,  val: custoFornecedor },
+    { key: 'engenharia' as const,  val: custoEngenharia },
+    { key: 'art' as const,         val: custoArt },
+    { key: 'corrugado' as const,   val: custoCorrugado },
+    { key: 'eletroduto' as const,  val: custoEletroduto },
+    { key: 'comissao' as const,    val: comissaoValor },
+  ].filter(c => (c.val || 0) > 0);
+  const extrasComValor = custosExtras.filter(e => e.valor > 0);
+  const totalItens = camposComValor.length + extrasComValor.length;
+  const pagosCount = camposComValor.filter(c => custosPagos[c.key]).length
+    + extrasComValor.filter((_, i) => (custosPagos.extras || [])[i]).length;
+  const pendentes = totalItens - pagosCount;
+  const tudoPago = totalItens > 0 && pendentes === 0;
+
+  const savePagos = async (next: CustosPagos) => {
+    try {
+      await updateDeal.mutateAsync({ id: deal!.id, updates: { custosPagos: next } });
+    } catch { /* silencioso, estado local já atualizado */ }
+  };
+
+  const togglePago = (key: keyof Omit<CustosPagos, 'extras'>) =>
+    setCustosPagos(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      void savePagos(next);
+      return next;
+    });
+  const toggleExtraPago = (i: number) =>
+    setCustosPagos(prev => {
+      const extras = [...(prev.extras || [])];
+      extras[i] = !extras[i];
+      const next = { ...prev, extras };
+      void savePagos(next);
+      return next;
+    });
 
   const addExtra = () => setCustosExtras(prev => [...prev, { descricao: '', valor: 0 }]);
   const removeExtra = (i: number) => setCustosExtras(prev => prev.filter((_, idx) => idx !== i));
@@ -157,6 +211,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
           custoTotal: custoTotalCalc,
           lucroBruto,
           margemPct,
+          custosPagos,
         },
       });
       addToast('Financeiro salvo com sucesso.', 'success');
@@ -233,11 +288,27 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
 
         {/* Custos */}
         <div className="flex-1 overflow-y-auto p-4 space-y-1">
+
+          {/* Status de pagamentos */}
+          {totalItens > 0 && (
+            <div className={cn(
+              'flex items-center gap-2 px-3 py-2 rounded-xl mb-3 text-sm font-medium',
+              tudoPago
+                ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400'
+                : 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
+            )}>
+              {tudoPago
+                ? <><CheckCircle2 className="h-4 w-4" /> Todos os custos pagos</>
+                : <><AlertTriangle className="h-4 w-4" /> {pendentes} custo{pendentes !== 1 ? 's' : ''} pendente{pendentes !== 1 ? 's' : ''}</>}
+              <span className="ml-auto text-xs opacity-70">{pagosCount}/{totalItens}</span>
+            </div>
+          )}
+
           <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">Custos Fixos</p>
 
           <div className="flex items-center gap-2 mb-1">
             <div className="flex-1">
-              <FieldRow label="NF / Impostos" value={custoNf} onChange={setCustoNf} />
+              <FieldRow label="NF / Impostos" value={custoNf} onChange={setCustoNf} pago={custosPagos.nf} onTogglePago={() => togglePago('nf')} />
             </div>
             <select
               value={custoNfTipo}
@@ -249,7 +320,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
             </select>
           </div>
 
-          <FieldRow label="Fornecedor (equipamentos)" value={custoFornecedor} onChange={setCustoFornecedor} />
+          <FieldRow label="Fornecedor (equipamentos)" value={custoFornecedor} onChange={setCustoFornecedor} pago={custosPagos.fornecedor} onTogglePago={() => togglePago('fornecedor')} />
           <div className="flex items-center justify-between py-2 border-b border-white/5">
             <span className="text-xs text-slate-400">Voucher banco (%)</span>
             <div className="flex items-center gap-1">
@@ -268,11 +339,11 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
               )}
             </div>
           </div>
-          <FieldRow label="Engenharia / Projeto" value={custoEngenharia} onChange={setCustoEngenharia} />
-          <FieldRow label="ART" value={custoArt} onChange={setCustoArt} />
-          <FieldRow label="Corrugado" value={custoCorrugado} onChange={setCustoCorrugado} />
-          <FieldRow label="Eletroduto" value={custoEletroduto} onChange={setCustoEletroduto} />
-          <FieldRow label="Comissão" value={comissaoValor} onChange={setComissaoValor} />
+          <FieldRow label="Engenharia / Projeto" value={custoEngenharia} onChange={setCustoEngenharia} pago={custosPagos.engenharia} onTogglePago={() => togglePago('engenharia')} />
+          <FieldRow label="ART" value={custoArt} onChange={setCustoArt} pago={custosPagos.art} onTogglePago={() => togglePago('art')} />
+          <FieldRow label="Corrugado" value={custoCorrugado} onChange={setCustoCorrugado} pago={custosPagos.corrugado} onTogglePago={() => togglePago('corrugado')} />
+          <FieldRow label="Eletroduto" value={custoEletroduto} onChange={setCustoEletroduto} pago={custosPagos.eletroduto} onTogglePago={() => togglePago('eletroduto')} />
+          <FieldRow label="Comissão" value={comissaoValor} onChange={setComissaoValor} pago={custosPagos.comissao} onTogglePago={() => togglePago('comissao')} />
 
           {/* Custos Extras */}
           <div className="pt-3">
@@ -293,11 +364,19 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
 
             {custosExtras.map((extra, i) => (
               <div key={i} className="flex items-center gap-2 py-1.5 px-3 rounded-lg hover:bg-white/5">
+                {extra.valor > 0 ? (
+                  <button onClick={() => toggleExtraPago(i)} className="shrink-0 transition-colors" title={(custosPagos.extras || [])[i] ? 'Marcar como pendente' : 'Marcar como pago'}>
+                    {(custosPagos.extras || [])[i]
+                      ? <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      : <Circle className="h-4 w-4 text-slate-500 hover:text-slate-300" />}
+                  </button>
+                ) : <div className="w-4 shrink-0" />}
                 <input
                   placeholder="Descrição"
                   value={extra.descricao}
                   onChange={e => updateExtra(i, 'descricao', e.target.value)}
-                  className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 border-b border-white/10 focus:border-primary-500 focus:outline-none pb-0.5"
+                  className={cn('flex-1 bg-transparent text-sm placeholder-slate-500 border-b border-white/10 focus:border-primary-500 focus:outline-none pb-0.5',
+                    (custosPagos.extras || [])[i] && extra.valor > 0 ? 'text-slate-500 line-through' : 'text-white')}
                 />
                 <input
                   placeholder="0,00"

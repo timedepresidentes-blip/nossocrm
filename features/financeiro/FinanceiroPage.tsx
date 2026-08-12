@@ -6,7 +6,26 @@ import { DEALS_VIEW_KEY } from '@/lib/query/queryKeys';
 import { Deal } from '@/types';
 import { DealFinanceiroSheet } from './components/DealFinanceiroSheet';
 import { autoFillDealCosts } from '@/lib/supabase/autoFillDealCosts';
-import { TrendingUp, TrendingDown, DollarSign, Percent, BarChart3, ChevronRight, AlertTriangle, RefreshCw } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Percent, BarChart3, ChevronRight, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Deal } from '@/types';
+
+function calcPendentes(deal: Deal): { total: number; pagos: number } {
+  const pagos = deal.custosPagos ?? {};
+  const campos = [
+    { key: 'nf',         val: deal.custoNf },
+    { key: 'fornecedor', val: deal.custoFornecedor },
+    { key: 'engenharia', val: deal.custoEngenharia },
+    { key: 'art',        val: deal.custoArt },
+    { key: 'corrugado',  val: deal.custoCorrugado },
+    { key: 'eletroduto', val: deal.custoEletroduto },
+    { key: 'comissao',   val: deal.comissaoValor },
+  ].filter(c => (c.val || 0) > 0);
+  const extras = (deal.custosExtras || []).filter(e => e.valor > 0);
+  const total = campos.length + extras.length;
+  const pagosCount = campos.filter(c => (pagos as Record<string, boolean>)[c.key]).length
+    + extras.filter((_, i) => ((pagos.extras || []) as boolean[])[i]).length;
+  return { total, pagos: pagosCount };
+}
 import { cn } from '@/lib/utils';
 
 type Periodo = 'all' | 'this_month' | 'last_month' | 'last_3_months' | 'this_year';
@@ -212,6 +231,7 @@ export function FinanceiroPage() {
                     <th className="text-right px-4 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">Custo</th>
                     <th className="text-right px-4 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">Lucro</th>
                     <th className="text-right px-4 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">Margem</th>
+                    <th className="px-4 py-2.5 text-xs font-medium text-slate-400 uppercase tracking-wider">Pagamentos</th>
                     <th className="px-4 py-2.5" />
                   </tr>
                 </thead>
@@ -224,6 +244,9 @@ export function FinanceiroPage() {
                     const margem = deal.margemPct ?? (receita > 0 ? (lucro / receita) * 100 : undefined);
                     const nomeCliente = deal.fichaCliente?.nomeCompleto || deal.title;
                     const temFinanceiro = !!(deal.custoFornecedor || deal.custoNf || deal.custoTotal);
+                    const { total: pgTotal, pagos: pgPagos } = calcPendentes(deal);
+                    const pgPendentes = pgTotal - pgPagos;
+                    const tudoPago = pgTotal > 0 && pgPendentes === 0;
 
                     return (
                       <tr
@@ -260,6 +283,19 @@ export function FinanceiroPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <StatusMargem pct={custo > 0 ? margem : undefined} />
+                        </td>
+                        <td className="px-4 py-3">
+                          {pgTotal === 0 ? (
+                            <span className="text-slate-600 text-xs">—</span>
+                          ) : tudoPago ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                              <CheckCircle2 className="h-3 w-3" /> Tudo pago
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full">
+                              <AlertTriangle className="h-3 w-3" /> {pgPendentes} pendente{pgPendentes !== 1 ? 's' : ''}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <ChevronRight className="h-4 w-4 text-slate-500 group-hover:text-primary-400 transition-colors ml-auto" />
