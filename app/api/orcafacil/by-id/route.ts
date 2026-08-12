@@ -55,7 +55,8 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const orcamento = Array.isArray(data) ? data[0] ?? null : data
+  // Função retorna JSON scalar (pode vir como objeto direto ou null)
+  const orcamento = Array.isArray(data) ? (data[0] ?? null) : (data ?? null)
   if (!orcamento) return NextResponse.json({ error: 'Orçamento não encontrado' }, { status: 404 })
 
   return NextResponse.json({ orcamento })

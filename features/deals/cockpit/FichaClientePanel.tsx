@@ -106,6 +106,7 @@ export const FichaClientePanel: React.FC<Props> = ({
     modelo_painel?: string | null; modelo_inversor?: string | null;
     tipo_inversor?: string | null; qtd_inversores?: number | null;
     tipo_estrutura?: string | null; forma_pagamento?: string | null;
+    distribuidora_nome?: string | null;
   }
   const [orcList, setOrcList] = useState<OrcItem[]>([]);
   const [showOrcPicker, setShowOrcPicker] = useState(false);
@@ -223,28 +224,33 @@ export const FichaClientePanel: React.FC<Props> = ({
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
 
       const o = body.orcamento as OrcItem;
-      const numPaineis: number | null = o.num_paineis ?? null;
       const painelW: number | null = o.potencia_painel_w ?? null;
+      // num_paineis não é salvo pelo NovoOrcamento — calcula de kwp / W
+      const numPaineis: number | null =
+        o.num_paineis ??
+        (o.potencia_kwp && painelW ? Math.round(o.potencia_kwp * 1000 / painelW) : null);
       const potenciaKwp: number | null =
-        numPaineis && painelW ? Math.round(numPaineis * painelW / 1000 * 100) / 100
-        : o.potencia_kwp ?? null;
+        numPaineis && painelW
+          ? Math.round(numPaineis * painelW / 1000 * 100) / 100
+          : o.potencia_kwp ?? null;
 
       setFicha(prev => ({
         ...prev,
-        nomeCompleto:     o.cliente_nome        ?? prev.nomeCompleto,
-        telefone:         o.cliente_telefone    ?? prev.telefone,
-        enderecoCidade:   o.cliente_cidade      ?? prev.enderecoCidade,
-        instalacaoCidade: o.cliente_cidade      ?? prev.instalacaoCidade,
+        nomeCompleto:     o.cliente_nome          ?? prev.nomeCompleto,
+        telefone:         o.cliente_telefone      ?? prev.telefone,
+        enderecoCidade:   o.cliente_cidade        ?? prev.enderecoCidade,
+        instalacaoCidade: o.cliente_cidade        ?? prev.instalacaoCidade,
         potenciaKwp,
         numPaineis,
         potenciaPainelW:  painelW,
-        modeloPainel:     o.modelo_painel       ?? prev.modeloPainel,
-        modeloInversor:   o.modelo_inversor     ?? prev.modeloInversor,
-        tipoInversor:     o.tipo_inversor       ?? prev.tipoInversor,
-        qtdInversores:    o.qtd_inversores      ?? prev.qtdInversores,
-        tipoEstrutura:    o.tipo_estrutura      ?? prev.tipoEstrutura,
-        valorTotal:       o.valor_final         ?? prev.valorTotal,
-        formaPagamento:   o.forma_pagamento     ?? prev.formaPagamento,
+        modeloPainel:     o.modelo_painel         ?? prev.modeloPainel,
+        modeloInversor:   o.modelo_inversor       ?? prev.modeloInversor,
+        tipoInversor:     o.tipo_inversor         ?? prev.tipoInversor,
+        qtdInversores:    o.qtd_inversores        ?? prev.qtdInversores,
+        tipoEstrutura:    o.tipo_estrutura        ?? prev.tipoEstrutura,
+        valorTotal:       o.valor_final           ?? prev.valorTotal,
+        formaPagamento:   o.forma_pagamento       ?? prev.formaPagamento,
+        distribuidora:    o.distribuidora_nome    ?? prev.distribuidora,
       }));
       setOrcMsg('ok');
     } catch (e: unknown) {
