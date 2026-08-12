@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2, ChevronDown, ChevronUp, ClipboardList,
-  Download, FileText, Loader2, RefreshCw, Save, Send, ScanSearch, Upload, XCircle,
+  Download, FileSpreadsheet, FileText, Loader2, RefreshCw, Save, Send, ScanSearch, Upload, XCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { autoFillDealCosts } from '@/lib/supabase/autoFillDealCosts';
@@ -97,6 +97,23 @@ export const FichaClientePanel: React.FC<Props> = ({
   const [pdfExtractMsg, setPdfExtractMsg] = useState<'ok' | 'error' | null>(null);
   const [pdfExtractError, setPdfExtractError] = useState<string>('');
 
+  // Seletor de orçamento OrçaFácil
+  interface OrcItem {
+    id: string; cliente_nome: string; potencia_kwp: number; valor_final: number | null;
+    status: string; created_at: string;
+    cliente_cidade?: string | null; cliente_telefone?: string | null;
+    num_paineis?: number | null; potencia_painel_w?: number | null;
+    modelo_painel?: string | null; modelo_inversor?: string | null;
+    tipo_inversor?: string | null; qtd_inversores?: number | null;
+    tipo_estrutura?: string | null; forma_pagamento?: string | null;
+  }
+  const [orcList, setOrcList] = useState<OrcItem[]>([]);
+  const [showOrcPicker, setShowOrcPicker] = useState(false);
+  const [loadingOrcList, setLoadingOrcList] = useState(false);
+  const [extractingOrc, setExtractingOrc] = useState(false);
+  const [orcMsg, setOrcMsg] = useState<'ok' | 'error' | null>(null);
+  const [orcError, setOrcError] = useState('');
+
   // Carrega ficha salva no deal
   const load = useCallback(async () => {
     if (!supabase || !dealId) return;
@@ -158,6 +175,84 @@ export const FichaClientePanel: React.FC<Props> = ({
       setExtractingPdf(false);
       setTimeout(() => setPdfExtractMsg(null), 8000);
       if (pdfContratoRef.current) pdfContratoRef.current.value = '';
+    }
+  };
+
+  // Abre o seletor de orçamentos: busca a lista e exibe
+  const handleAbrirSeletorOrc = async () => {
+    if (showOrcPicker) { setShowOrcPicker(false); return; }
+    setLoadingOrcList(true);
+    setOrcMsg(null);
+    try {
+      const params = new URLSearchParams();
+      if (dealId) params.set('dealId', dealId);
+      if (contactId) params.set('contactId', contactId);
+      const res = await fetch(`/api/orcafacil/by-deal?${params}`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      const list = body.orcamentos ?? [];
+      if (list.length === 0) {
+        setOrcError('Nenhum orçamento encontrado para este contato.');
+        setOrcMsg('error');
+        setTimeout(() => setOrcMsg(null), 5000);
+      } else {
+        setOrcList(list);
+        setShowOrcPicker(true);
+      }
+    } catch (e: unknown) {
+      setOrcError(e instanceof Error ? e.message : 'Erro de rede');
+      setOrcMsg('error');
+      setTimeout(() => setOrcMsg(null), 5000);
+    } finally {
+      setLoadingOrcList(false);
+    }
+  };
+
+  // Extrai dados completos do orçamento via API by-id (usa SECURITY DEFINER RPC)
+  const handleExtrairOrcamento = async (orc: OrcItem) => {
+    setExtractingOrc(true);
+    setShowOrcPicker(false);
+    setOrcMsg(null);
+    try {
+      const params = new URLSearchParams({ id: orc.id });
+      if (contactId) params.set('contactId', contactId);
+      else if (dealId) params.set('dealId', dealId);
+
+      const res = await fetch(`/api/orcafacil/by-id?${params}`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+
+      const o = body.orcamento as OrcItem;
+      const numPaineis: number | null = o.num_paineis ?? null;
+      const painelW: number | null = o.potencia_painel_w ?? null;
+      const potenciaKwp: number | null =
+        numPaineis && painelW ? Math.round(numPaineis * painelW / 1000 * 100) / 100
+        : o.potencia_kwp ?? null;
+
+      setFicha(prev => ({
+        ...prev,
+        nomeCompleto:     o.cliente_nome        ?? prev.nomeCompleto,
+        telefone:         o.cliente_telefone    ?? prev.telefone,
+        enderecoCidade:   o.cliente_cidade      ?? prev.enderecoCidade,
+        instalacaoCidade: o.cliente_cidade      ?? prev.instalacaoCidade,
+        potenciaKwp,
+        numPaineis,
+        potenciaPainelW:  painelW,
+        modeloPainel:     o.modelo_painel       ?? prev.modeloPainel,
+        modeloInversor:   o.modelo_inversor     ?? prev.modeloInversor,
+        tipoInversor:     o.tipo_inversor       ?? prev.tipoInversor,
+        qtdInversores:    o.qtd_inversores      ?? prev.qtdInversores,
+        tipoEstrutura:    o.tipo_estrutura      ?? prev.tipoEstrutura,
+        valorTotal:       o.valor_final         ?? prev.valorTotal,
+        formaPagamento:   o.forma_pagamento     ?? prev.formaPagamento,
+      }));
+      setOrcMsg('ok');
+    } catch (e: unknown) {
+      setOrcError(e instanceof Error ? e.message : 'Erro inesperado');
+      setOrcMsg('error');
+    } finally {
+      setExtractingOrc(false);
+      setTimeout(() => setOrcMsg(null), 6000);
     }
   };
 
@@ -965,6 +1060,55 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
                   {extracting ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                   {extracting ? 'Extraindo...' : 'Extrair da conversa (IA)'}
                 </button>
+
+                <button
+                  type="button"
+                  onClick={handleAbrirSeletorOrc}
+                  disabled={extractingOrc || loadingOrcList || (!dealId && !contactId)}
+                  className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-50 ${showOrcPicker ? 'border-orange-400/50 bg-orange-500/20 text-orange-200' : 'border-orange-500/30 bg-orange-500/10 text-orange-300 hover:bg-orange-500/15'}`}
+                  title="Selecionar orçamento do OrçaFácil para importar dados"
+                >
+                  {loadingOrcList || extractingOrc ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileSpreadsheet className="h-3 w-3" />}
+                  {loadingOrcList ? 'Buscando...' : extractingOrc ? 'Importando...' : 'Extrair do Orçamento'}
+                </button>
+                {orcMsg === 'ok' && (
+                  <span className="flex items-center gap-1 text-[10px] text-emerald-400">
+                    <CheckCircle2 className="h-3 w-3" /> Dados importados!
+                  </span>
+                )}
+                {orcMsg === 'error' && (
+                  <span className="flex items-center gap-1 text-[10px] text-rose-400">
+                    <XCircle className="h-3 w-3 shrink-0" /> {orcError || 'Falha ao buscar orçamentos.'}
+                  </span>
+                )}
+                {/* Seletor de orçamentos */}
+                {showOrcPicker && orcList.length > 0 && (
+                  <div className="w-full mt-1 rounded-lg border border-orange-500/20 bg-[#0f1a24] overflow-hidden">
+                    <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-orange-400/70 border-b border-orange-500/15">
+                      Selecione o orçamento
+                    </div>
+                    {orcList.map(orc => {
+                      const statusColor = orc.status === 'fechado' ? 'text-emerald-400' : orc.status === 'enviado' ? 'text-amber-400' : 'text-slate-500';
+                      const statusLabel = orc.status === 'fechado' ? 'Fechado' : orc.status === 'enviado' ? 'Enviado' : 'Rascunho';
+                      const data = new Date(orc.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+                      const valor = orc.valor_final ? orc.valor_final.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—';
+                      return (
+                        <button
+                          key={orc.id}
+                          type="button"
+                          onClick={() => handleExtrairOrcamento(orc)}
+                          className="w-full flex items-center justify-between gap-2 px-2.5 py-2 hover:bg-orange-500/10 transition-colors border-b border-white/5 last:border-0 text-left"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-semibold text-slate-100 truncate">{orc.cliente_nome}</p>
+                            <p className="text-[10px] text-slate-400">{orc.potencia_kwp} kWp · {valor} · {data}</p>
+                          </div>
+                          <span className={`text-[10px] font-medium shrink-0 ${statusColor}`}>{statusLabel}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Extração via contrato PDF */}
                 <input
