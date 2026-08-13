@@ -15,6 +15,7 @@ export interface OrgCostSettings {
   custoEngAcima5kwp: number;        // ≥5 kWp
   custoCorrugado: number;
   custoEletroduto: number;
+  custoInstalacaoPorKwp: number;    // R$/kWp — custo de instalação
   custoComissaoPct: number;          // comissão padrão %
   custoComissaoAcima5kwpPct: number; // comissão para >5 kWp %
   custosAdicionaisFixos: CustoAdicionalFixo[];
@@ -115,7 +116,7 @@ export const orgSettingsService = {
 
       const { data, error } = await supabase
         .from('organization_settings')
-        .select('custo_art, custo_nf_kit_pct, custo_nf_servico_pct, custo_eng_ate5kwp, custo_eng_3a5kwp, custo_eng_acima5kwp, custo_corrugado, custo_eletroduto, custo_comissao_pct, custo_comissao_acima5kwp_pct, custos_adicionais_fixos')
+        .select('custo_art, custo_nf_kit_pct, custo_nf_servico_pct, custo_eng_ate5kwp, custo_eng_3a5kwp, custo_eng_acima5kwp, custo_corrugado, custo_eletroduto, custo_instalacao_por_kwp, custo_comissao_pct, custo_comissao_acima5kwp_pct, custos_adicionais_fixos')
         .eq('organization_id', orgId)
         .maybeSingle();
 
@@ -123,7 +124,7 @@ export const orgSettingsService = {
       const defaults: OrgCostSettings = {
         custoArt: 0, custoNfKitPct: 4, custoNfServicoPct: 6,
         custoEng1a3kwp: 350, custoEng3a5kwp: 450, custoEngAcima5kwp: 600,
-        custoCorrugado: 0, custoEletroduto: 0,
+        custoCorrugado: 0, custoEletroduto: 0, custoInstalacaoPorKwp: 190,
         custoComissaoPct: 5, custoComissaoAcima5kwpPct: 7,
         custosAdicionaisFixos: [],
       };
@@ -140,6 +141,7 @@ export const orgSettingsService = {
           custoEngAcima5kwp: Number(row.custo_eng_acima5kwp ?? 600),
           custoCorrugado: Number(row.custo_corrugado ?? 0),
           custoEletroduto: Number(row.custo_eletroduto ?? 0),
+          custoInstalacaoPorKwp: Number(row.custo_instalacao_por_kwp ?? 190),
           custoComissaoPct: Number(row.custo_comissao_pct ?? 5),
           custoComissaoAcima5kwpPct: Number(row.custo_comissao_acima5kwp_pct ?? 7),
           custosAdicionaisFixos: Array.isArray(row.custos_adicionais_fixos) ? row.custos_adicionais_fixos : [],
@@ -166,6 +168,7 @@ export const orgSettingsService = {
       if (updates.custoEngAcima5kwp !== undefined) payload.custo_eng_acima5kwp = updates.custoEngAcima5kwp;
       if (updates.custoCorrugado !== undefined) payload.custo_corrugado = updates.custoCorrugado;
       if (updates.custoEletroduto !== undefined) payload.custo_eletroduto = updates.custoEletroduto;
+      if (updates.custoInstalacaoPorKwp !== undefined) payload.custo_instalacao_por_kwp = updates.custoInstalacaoPorKwp;
       if (updates.custoComissaoPct !== undefined) payload.custo_comissao_pct = updates.custoComissaoPct;
       if (updates.custoComissaoAcima5kwpPct !== undefined) payload.custo_comissao_acima5kwp_pct = updates.custoComissaoAcima5kwpPct;
       if (updates.custosAdicionaisFixos !== undefined) payload.custos_adicionais_fixos = updates.custosAdicionaisFixos;
