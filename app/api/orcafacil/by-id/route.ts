@@ -48,16 +48,30 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Telefone do contato não encontrado' }, { status: 400 })
   }
 
-  const { data, error } = await ofClient.rpc('get_orcamento_by_id', {
+  // Tenta primeiro a função nova (retorna JSON com distribuidora_nome via JOIN)
+  // Se não existir ainda (404), cai na função antiga (setof orcamentos)
+  let orcamento: Record<string, unknown> | null = null
+
+  const { data: dataJson, error: errJson } = await ofClient.rpc('get_orcamento_by_id_json', {
     p_id: id,
     p_telefone: phone,
   })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!errJson) {
+    orcamento = (dataJson as Record<string, unknown>) ?? null
+  } else if (errJson.code === 'PGRST202' || errJson.message?.includes('does not exist')) {
+    // Função nova ainda não existe — usa a antiga como fallback
+    const { data: dataOld, error: errOld } = await ofClient.rpc('get_orcamento_by_id', {
+      p_id: id,
+      p_telefone: phone,
+    })
+    if (errOld) return NextResponse.json({ error: errOld.message }, { status: 500 })
+    orcamento = Array.isArray(dataOld) ? (dataOld[0] ?? null) : (dataOld ?? null)
+  } else {
+    return NextResponse.json({ error: errJson.message }, { status: 500 })
+  }
 
-  // Função retorna JSON scalar (pode vir como objeto direto ou null)
-  const orcamento = Array.isArray(data) ? (data[0] ?? null) : (data ?? null)
   if (!orcamento) return NextResponse.json({ error: 'Orçamento não encontrado' }, { status: 404 })
 
-  return NextResponse.json({ orcamento })
+  return NextResponse.json({ orcamento: orcamento as Record<string, unknown> })
 }

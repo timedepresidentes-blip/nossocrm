@@ -323,7 +323,8 @@ function ContratoTab() {
           </Select>
           {moduloSelecionado && (
             <div className="mt-1 flex gap-1 flex-wrap">
-              <GarantiaBadge label={`Produto: ${moduloSelecionado.garantiaProduto}`} />
+              {moduloSelecionado.garantiaFornecedor && <GarantiaBadge label={`Fornecedor: ${moduloSelecionado.garantiaFornecedor}`} />}
+              <GarantiaBadge label={`Fábrica: ${moduloSelecionado.garantiaFabrica}`} />
               <GarantiaBadge label={`Desempenho: ${moduloSelecionado.garantiaDesempenho}`} />
             </div>
           )}
@@ -339,7 +340,7 @@ function ContratoTab() {
           />
           {form.moduloFabricanteData && !moduloSelecionado && (
             <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-              ✓ Fabricante detectado: <strong>{form.moduloFabricanteData.nome}</strong> — Garantia: {form.moduloFabricanteData.garantiaProduto} produto / {form.moduloFabricanteData.garantiaDesempenho}
+              ✓ Fabricante detectado: <strong>{form.moduloFabricanteData.nome}</strong> — Fábrica: {form.moduloFabricanteData.garantiaFabrica} / Desempenho: {form.moduloFabricanteData.garantiaDesempenho}
             </p>
           )}
         </Field>
@@ -353,7 +354,8 @@ function ContratoTab() {
           </Select>
           {inversorSelecionado && (
             <div className="mt-1">
-              <GarantiaBadge label={`Garantia: ${inversorSelecionado.garantia}`} />
+              {inversorSelecionado.garantiaFornecedor && <GarantiaBadge label={`Fornecedor: ${inversorSelecionado.garantiaFornecedor}`} />}
+              <GarantiaBadge label={`Fábrica: ${inversorSelecionado.garantiaFabrica}`} />
             </div>
           )}
         </Field>
@@ -368,7 +370,7 @@ function ContratoTab() {
           />
           {form.inversorFabricanteData && !inversorSelecionado && (
             <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-              ✓ Fabricante detectado: <strong>{form.inversorFabricanteData.nome}</strong> — Garantia: {form.inversorFabricanteData.garantia}
+              ✓ Fabricante detectado: <strong>{form.inversorFabricanteData.nome}</strong> — Fábrica: {form.inversorFabricanteData.garantiaFabrica}{form.inversorFabricanteData.garantiaFornecedor ? ` / Fornecedor: ${form.inversorFabricanteData.garantiaFornecedor}` : ''}
             </p>
           )}
         </Field>

@@ -17,9 +17,17 @@ function json(body: unknown, status = 200) {
   });
 }
 
-// Contrato: assinaturas lado a lado na página 2
-const DEFAULT_COMPANY_POSITION: SignaturePosition = { page: 2, x: 0.05, y: 0.78, width: 0.38, height: 0.08 };
-const DEFAULT_CLIENT_POSITION: SignaturePosition  = { page: 2, x: 0.57, y: 0.78, width: 0.38, height: 0.08 };
+// Pág 9 — Cláusula 18ª/DO FORO: Empresa esq, Cliente dir (y≈0.240, acima dos labels em 0.314)
+const CONTRACT_COMPANY_POSITION: SignaturePosition = { page: 9,  x: 0.05, y: 0.240, width: 0.40, height: 0.07 };
+const CONTRACT_CLIENT_POSITION:  SignaturePosition = { page: 9,  x: 0.50, y: 0.240, width: 0.40, height: 0.07 };
+
+// Pág 11 — Termo de Ciência Técnica (Anexo I): Cliente esq, Empresa dir (y≈0.348, labels em 0.428)
+const ANNEXO1_CLIENT_POSITION:   SignaturePosition = { page: 11, x: 0.05, y: 0.348, width: 0.40, height: 0.07 };
+const ANNEXO1_COMPANY_POSITION:  SignaturePosition = { page: 11, x: 0.50, y: 0.348, width: 0.40, height: 0.07 };
+
+// Pág 12 — Anexo II (Quadro de Garantia): Cliente esq, Empresa dir (y≈0.628, labels em 0.709)
+const ANNEXO2_CLIENT_POSITION:   SignaturePosition = { page: 12, x: 0.05, y: 0.628, width: 0.40, height: 0.07 };
+const ANNEXO2_COMPANY_POSITION:  SignaturePosition = { page: 12, x: 0.50, y: 0.628, width: 0.40, height: 0.07 };
 
 // Procuração: assinatura centralizada na página 1 (abaixo da linha de assinatura)
 const PROC_CLIENT_POSITION: SignaturePosition = { page: 1, x: 0.15, y: 0.72, width: 0.70, height: 0.08 };
@@ -64,13 +72,17 @@ export async function POST(req: Request) {
     // 3. Adicionar signatário(s)
     const clientSigner = await addSigner(envelope.id, signerName, signerEmail, signerPhone);
 
-    // Posição do cliente no contrato
-    await addRequirement(envelope.id, document.id, clientSigner.id, DEFAULT_CLIENT_POSITION);
+    // Cliente assina nas 3 páginas: contrato principal, Anexo I e Anexo II
+    await addRequirement(envelope.id, document.id, clientSigner.id, CONTRACT_CLIENT_POSITION);
+    await addRequirement(envelope.id, document.id, clientSigner.id, ANNEXO1_CLIENT_POSITION);
+    await addRequirement(envelope.id, document.id, clientSigner.id, ANNEXO2_CLIENT_POSITION);
 
-    // Signatário da empresa (opcional)
+    // Signatário da empresa assina nas mesmas 3 páginas (opcional)
     if (companySignerEmail && companySignerName) {
       const companySigner = await addSigner(envelope.id, companySignerName, companySignerEmail);
-      await addRequirement(envelope.id, document.id, companySigner.id, DEFAULT_COMPANY_POSITION);
+      await addRequirement(envelope.id, document.id, companySigner.id, CONTRACT_COMPANY_POSITION);
+      await addRequirement(envelope.id, document.id, companySigner.id, ANNEXO1_COMPANY_POSITION);
+      await addRequirement(envelope.id, document.id, companySigner.id, ANNEXO2_COMPANY_POSITION);
     }
 
     // 3b. Procuração no mesmo envelope (opcional)

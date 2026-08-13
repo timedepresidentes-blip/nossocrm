@@ -1,5 +1,16 @@
 import { supabase } from './client';
 
+export type CustosPagos = {
+  nf?: boolean;
+  fornecedor?: boolean;
+  engenharia?: boolean;
+  art?: boolean;
+  corrugado?: boolean;
+  eletroduto?: boolean;
+  comissao?: boolean;
+  extras?: boolean[];
+};
+
 export interface DealCostData {
   custoNf: number;
   custoNfTipo: 'kit' | 'servico';
@@ -14,6 +25,7 @@ export interface DealCostData {
   comissaoValor: number;
   lucroBruto: number;
   margemPct: number;
+  custosPagos: CustosPagos;
 }
 
 export const dealCostsService = {
@@ -23,7 +35,7 @@ export const dealCostsService = {
 
       const { data, error } = await supabase
         .from('deals')
-        .select('custo_nf, custo_nf_tipo, custo_art, custo_engenharia, custo_corrugado, custo_eletroduto, custo_fornecedor, voucher_banco_pct, custos_extras, custo_total, comissao_valor, lucro_bruto, margem_pct')
+        .select('custo_nf, custo_nf_tipo, custo_art, custo_engenharia, custo_corrugado, custo_eletroduto, custo_fornecedor, voucher_banco_pct, custos_extras, custo_total, comissao_valor, lucro_bruto, margem_pct, custos_pagos')
         .eq('id', dealId)
         .maybeSingle();
 
@@ -32,6 +44,7 @@ export const dealCostsService = {
         custoNf: 0, custoNfTipo: 'kit', custoArt: 0, custoEngenharia: 0,
         custoCorrugado: 0, custoEletroduto: 0, custoFornecedor: 0, voucherBancoPct: 0,
         custosExtras: [], custoTotal: 0, comissaoValor: 0, lucroBruto: 0, margemPct: 0,
+        custosPagos: {},
       };
       if (!data) return { data: defaults, error: null };
 
@@ -47,6 +60,7 @@ export const dealCostsService = {
           custoFornecedor: Number(row.custo_fornecedor ?? 0),
           voucherBancoPct: Number(row.voucher_banco_pct ?? 0),
           custosExtras: Array.isArray(row.custos_extras) ? row.custos_extras : [],
+          custosPagos: (row.custos_pagos && typeof row.custos_pagos === 'object') ? row.custos_pagos : {},
           custoTotal: Number(row.custo_total ?? 0),
           comissaoValor: Number(row.comissao_valor ?? 0),
           lucroBruto: Number(row.lucro_bruto ?? 0),
@@ -72,6 +86,7 @@ export const dealCostsService = {
       if (updates.custoEletroduto !== undefined) payload.custo_eletroduto = updates.custoEletroduto;
       if (updates.custoFornecedor !== undefined) payload.custo_fornecedor = updates.custoFornecedor;
       if (updates.voucherBancoPct !== undefined) payload.voucher_banco_pct = updates.voucherBancoPct;
+      if (updates.custosPagos !== undefined) payload.custos_pagos = updates.custosPagos;
       if (updates.custosExtras !== undefined) payload.custos_extras = updates.custosExtras;
       if (updates.custoTotal !== undefined) payload.custo_total = updates.custoTotal;
       if (updates.comissaoValor !== undefined) payload.comissao_valor = updates.comissaoValor;

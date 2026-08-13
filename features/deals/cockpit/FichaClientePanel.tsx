@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2, ChevronDown, ChevronUp, ClipboardList,
-  Download, FileSpreadsheet, FileText, Loader2, RefreshCw, Save, Send, ScanSearch, Upload, XCircle,
+  Download, ExternalLink, FileSpreadsheet, FileText, Loader2, RefreshCw, Save, Send, ScanSearch, Upload, XCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { autoFillDealCosts } from '@/lib/supabase/autoFillDealCosts';
@@ -76,6 +76,7 @@ export const FichaClientePanel: React.FC<Props> = ({
   const [saved, setSaved] = useState(false);
   const [contratoAssinado, setContratoAssinado] = useState(false);
   const [marcandoContrato, setMarcandoContrato] = useState(false);
+  const [csEnvelopeKey, setCsEnvelopeKey] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
   // ClickSign — contrato
@@ -93,6 +94,7 @@ export const FichaClientePanel: React.FC<Props> = ({
 
   // Extração via contrato PDF
   const pdfContratoRef = useRef<HTMLInputElement>(null);
+  const pdfOrcRef      = useRef<HTMLInputElement>(null);
   const [extractingPdf, setExtractingPdf] = useState(false);
   const [pdfExtractMsg, setPdfExtractMsg] = useState<'ok' | 'error' | null>(null);
   const [pdfExtractError, setPdfExtractError] = useState<string>('');
@@ -121,11 +123,13 @@ export const FichaClientePanel: React.FC<Props> = ({
     setLoading(true);
     const { data } = await supabase
       .from('deals')
-      .select('ficha_cliente, contrato_assinado')
+      .select('ficha_cliente, contrato_assinado, custom_fields')
       .eq('id', dealId)
       .maybeSingle();
     if (data?.ficha_cliente) setFicha(data.ficha_cliente as FichaClienteData);
     if (data?.contrato_assinado) setContratoAssinado(true);
+    const envKey = (data?.custom_fields as Record<string, any>)?.clicksign?.envelopeKey;
+    if (envKey) setCsEnvelopeKey(envKey);
     setLoading(false);
   }, [dealId]);
 
@@ -573,6 +577,7 @@ export const FichaClientePanel: React.FC<Props> = ({
       if (!resp.ok) throw new Error(data.error ?? 'Erro ao enviar.');
 
       setSendResultCs('ok');
+      if (data.envelopeKey) setCsEnvelopeKey(data.envelopeKey);
       setPdfFileCs(null);  setPdfFileProc(null);
       if (pdfRefCs.current)   pdfRefCs.current.value   = '';
       if (pdfRefProc.current) pdfRefProc.current.value = '';
@@ -1088,12 +1093,12 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
                   </span>
                 )}
                 {/* Seletor de orçamentos */}
-                {showOrcPicker && orcList.length > 0 && (
+                {showOrcPicker && (
                   <div className="w-full mt-1 rounded-lg border border-orange-500/20 bg-[#0f1a24] overflow-hidden">
                     <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-orange-400/70 border-b border-orange-500/15">
                       Selecione o orçamento
                     </div>
-                    {orcList.map(orc => {
+                    {orcList.length > 0 ? orcList.map(orc => {
                       const statusColor = orc.status === 'fechado' ? 'text-emerald-400' : orc.status === 'enviado' ? 'text-amber-400' : 'text-slate-500';
                       const statusLabel = orc.status === 'fechado' ? 'Fechado' : orc.status === 'enviado' ? 'Enviado' : 'Rascunho';
                       const data = new Date(orc.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
@@ -1112,7 +1117,35 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
                           <span className={`text-[10px] font-medium shrink-0 ${statusColor}`}>{statusLabel}</span>
                         </button>
                       );
-                    })}
+                    }) : (
+                      <p className="px-2.5 py-2 text-[11px] text-slate-500">Nenhum orçamento encontrado para este contato.</p>
+                    )}
+                    {/* Opção de anexar PDF do orçamento */}
+                    <div className="border-t border-white/8 px-2.5 py-2 flex items-center gap-1.5">
+                      <span className="text-[10px] text-slate-600 mr-0.5">ou</span>
+                      <input
+                        ref={pdfOrcRef}
+                        type="file"
+                        accept=".pdf,application/pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setShowOrcPicker(false);
+                            void handleExtrairContrato(file);
+                          }
+                          e.target.value = '';
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => pdfOrcRef.current?.click()}
+                        className="flex items-center gap-1 text-[11px] text-orange-300/80 hover:text-orange-300 transition-colors"
+                      >
+                        <Upload className="h-3 w-3" />
+                        Anexar PDF do orçamento
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1247,10 +1280,20 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
                   </div>
 
                   {sendResultCs === 'ok' && (
-                    <p className="text-[10px] text-emerald-400 flex items-center gap-1">
-                      <CheckCircle2 className="h-3 w-3" />
+                    <p className="text-[10px] text-emerald-400 flex items-center gap-1 flex-wrap">
+                      <CheckCircle2 className="h-3 w-3 shrink-0" />
                       Enviado! {ficha.nomeCompleto} e você receberão e-mail da ClickSign.
                       {inclProc && procAvulsa && ' (Procuração em envelope separado.)'}
+                      {csEnvelopeKey && (
+                        <a
+                          href={`https://app.clicksign.com/sign/${csEnvelopeKey}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-1 underline text-emerald-300 hover:text-emerald-200"
+                        >
+                          Ver contrato →
+                        </a>
+                      )}
                     </p>
                   )}
                   {sendResultCs === 'error' && (
@@ -1276,6 +1319,16 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
                     <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-300">
                       <CheckCircle2 className="h-3 w-3" /> Contrato assinado
                     </div>
+                    {csEnvelopeKey && (
+                      <a
+                        href={`https://app.clicksign.com/sign/${csEnvelopeKey}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 rounded-lg border border-slate-600/40 bg-slate-700/30 px-2.5 py-1.5 text-[11px] font-semibold text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors"
+                      >
+                        <ExternalLink className="h-3 w-3" /> Ver contrato
+                      </a>
+                    )}
                     <button
                       type="button"
                       onClick={handleGerarOS}

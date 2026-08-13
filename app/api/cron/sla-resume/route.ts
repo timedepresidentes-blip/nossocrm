@@ -25,7 +25,7 @@ function createAdminClient() {
  *
  * Roda a cada 5 minutos. Cobre dois cenários:
  *
- * CASO A — Julia estava pausada (ai_paused=true) e atendente sumiu por 15+ min:
+ * CASO A — Julia estava pausada (ai_paused=true) e atendente sumiu por 40+ min:
  *   → Julia envia mensagem intermediária informando que o atendente vai retornar.
  *
  * CASO B — Atendente designado ficou inativo por takeoverMinutes (padrão 30 min):

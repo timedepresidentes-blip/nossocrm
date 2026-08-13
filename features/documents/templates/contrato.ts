@@ -59,18 +59,20 @@ const estiloBase = `
   p { text-align: justify; line-height: 1.7; margin-bottom: 8px; font-size: 11pt; }
   .clausula { margin-bottom: 12px; }
   .clausula-titulo { font-weight: bold; }
-  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; page-break-inside: avoid; }
   th { background: #1a1a2e; color: #fff; padding: 6px 8px; text-align: left; font-size: 10pt; }
   td { border: 1px solid #ccc; padding: 5px 8px; }
+  tr { page-break-inside: avoid; }
   tr:nth-child(even) td { background: #f7f7f7; }
-  .assinaturas { display: flex; justify-content: space-between; margin-top: 50px; gap: 40px; }
+  h2 { font-size: 11pt; font-weight: bold; text-transform: uppercase; margin: 18px 0 8px; color: #1a1a2e; border-bottom: 1px solid #ccc; padding-bottom: 3px; page-break-after: avoid; }
+  .assinaturas { display: flex; justify-content: space-between; margin-top: 50px; gap: 40px; page-break-inside: avoid; }
   .ass-block { flex: 1; text-align: center; }
   .ass-line { border-top: 1px solid #000; margin-bottom: 6px; }
   .ass-nome { font-size: 10pt; font-weight: bold; }
   .ass-cpf { font-size: 9pt; color: #555; }
   .ass-papel { font-size: 9pt; }
   .num-contrato { text-align: right; font-size: 9pt; color: #666; margin-bottom: 6px; }
-  @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+  @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } table { page-break-inside: avoid; } tr { page-break-inside: avoid; } .assinaturas { page-break-inside: avoid; } }
 `;
 
 const cabecalho = (numContrato: string) => `
@@ -140,22 +142,23 @@ d) Manter a estrutura de instalação em boas condições de conservação.</p>
 
 <h2>Garantias dos Equipamentos</h2>
 <table>
-  <tr><th>Equipamento</th><th>Modelo</th><th>Garantia Produto</th><th>Garantia Desempenho</th><th>Fabricante</th></tr>
+  <colgroup><col style="width:20%"><col style="width:30%"><col style="width:18%"><col style="width:17%"><col style="width:15%"></colgroup>
+  <tr><th>Equipamento</th><th>Modelo</th><th>Gar. Fornecedor</th><th>Gar. Fábrica</th><th>Gar. Desempenho</th></tr>
   <tr>
     <td>Inversor</td>
     <td>${d.inversorModelo} (${d.inversorQtd} un.)</td>
-    <td>${d.inversorFabricanteData?.garantia ?? '5 anos'}</td>
+    <td>${d.inversorFabricanteData?.garantiaFornecedor ?? '—'}</td>
+    <td>${d.inversorFabricanteData?.garantiaFabrica ?? '5 anos'}</td>
     <td>—</td>
-    <td>${d.inversorFabricanteData?.nome ?? '—'}</td>
   </tr>
   <tr>
     <td>Módulos Fotovoltaicos</td>
     <td>${d.moduloModelo} (${d.moduloQtd} un.)</td>
-    <td>${d.moduloFabricanteData?.garantiaProduto ?? '12 anos'}</td>
-    <td>${d.moduloFabricanteData?.garantiaDesempenho ?? '25 anos (80% potência linear)'}</td>
-    <td>${d.moduloFabricanteData?.nome ?? '—'}</td>
+    <td>${d.moduloFabricanteData?.garantiaFornecedor ?? '—'}</td>
+    <td>${d.moduloFabricanteData?.garantiaFabrica ?? '12 anos'}</td>
+    <td>${d.moduloFabricanteData?.garantiaDesempenho ?? '25 anos'}</td>
   </tr>
-  <tr><td>Instalação e Mão de Obra</td><td>—</td><td>1 ano</td><td>—</td><td>Aureon Energix</td></tr>
+  <tr><td>Instalação / Mão de Obra</td><td>—</td><td>—</td><td>1 ano</td><td>—</td></tr>
 </table>
 
 <p style="margin-top: 24px;">${d.cidade}, ${d.data}.</p>
@@ -196,47 +199,48 @@ ${cabecalho(d.numContrato)}
 <p class="subtitle">Referente ao Contrato Nº ${d.numContrato} – ${d.compradorNome}</p>
 
 <table style="margin-top: 20px; font-size: 9.5pt;">
+  <colgroup><col style="width:20%"><col style="width:30%"><col style="width:17%"><col style="width:17%"><col style="width:16%"></colgroup>
   <tr>
     <th>Equipamento</th>
     <th>Modelo</th>
-    <th>Garantia Produto</th>
-    <th>Garantia Desempenho</th>
-    <th>Responsável</th>
-    <th>Termo de Garantia</th>
+    <th>Gar. Fornecedor</th>
+    <th>Gar. Fábrica</th>
+    <th>Gar. Desempenho</th>
   </tr>
   <tr>
     <td>Inversor Solar</td>
     <td>${d.inversorModelo} (${d.inversorQtd} un.)</td>
-    <td>${d.inversorFabricanteData?.garantia ?? '5 anos'}</td>
+    <td>${d.inversorFabricanteData?.garantiaFornecedor ?? '—'}</td>
+    <td>${d.inversorFabricanteData?.garantiaFabrica ?? '5 anos'}</td>
     <td>—</td>
-    <td>Fabricante</td>
-    <td style="font-size:7.5pt; word-break:break-all;">${d.inversorFabricanteData?.linkGarantia ? `<a href="${d.inversorFabricanteData.linkGarantia}">${d.inversorFabricanteData.linkGarantia}</a>` : '—'}</td>
   </tr>
   <tr>
     <td>Módulos Fotovoltaicos</td>
     <td>${d.moduloModelo} (${d.moduloQtd} un.)</td>
-    <td>${d.moduloFabricanteData?.garantiaProduto ?? '12 anos'}</td>
-    <td>${d.moduloFabricanteData?.garantiaDesempenho ?? '25 anos (80% potência linear)'}</td>
-    <td>Fabricante</td>
-    <td style="font-size:7.5pt; word-break:break-all;">${d.moduloFabricanteData?.linkGarantia ? `<a href="${d.moduloFabricanteData.linkGarantia}">${d.moduloFabricanteData.linkGarantia}</a>` : '—'}</td>
+    <td>${d.moduloFabricanteData?.garantiaFornecedor ?? '—'}</td>
+    <td>${d.moduloFabricanteData?.garantiaFabrica ?? '12 anos'}</td>
+    <td>${d.moduloFabricanteData?.garantiaDesempenho ?? '25 anos'}</td>
   </tr>
   <tr>
     <td>Estrutura de Fixação</td>
-    <td>${d.estruturaTipo}</td>
-    <td>5 anos</td>
+    <td>${d.estruturaTipo} (${d.estruturaQtd} un.)</td>
     <td>—</td>
-    <td>Fabricante</td>
+    <td>5 anos</td>
     <td>—</td>
   </tr>
   <tr>
     <td>Instalação e Mão de Obra</td>
     <td>—</td>
-    <td>1 ano</td>
     <td>—</td>
-    <td>${fantasia}</td>
+    <td>1 ano</td>
     <td>—</td>
   </tr>
 </table>
+<p style="font-size:8pt;color:#555;margin-top:8px">
+  <strong>Termos de garantia dos fabricantes:</strong><br>
+  Inversor (${d.inversorFabricanteData?.nome ?? '—'}): ${d.inversorFabricanteData?.linkGarantia ?? '—'}<br>
+  Módulos (${d.moduloFabricanteData?.nome ?? '—'}): ${d.moduloFabricanteData?.linkGarantia ?? '—'}
+</p>
 
 <h2 style="margin-top: 24px;">Condições Gerais de Garantia</h2>
 <p>a) A garantia cobre defeitos de fabricação e falhas de instalação comprovadas;</p>
