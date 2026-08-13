@@ -694,6 +694,68 @@ function detectLeadSource(messageText: string): string {
   return "whatsapp";
 }
 
+const META_GRAPH_URL = "https://graph.facebook.com/v25.0";
+const MEDIA_TYPES = ["image", "video", "audio", "document", "sticker"];
+
+function mimeToExt(mimeType: string): string {
+  const map: Record<string, string> = {
+    "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+    "video/mp4": "mp4", "video/3gpp": "3gp",
+    "audio/ogg": "ogg", "audio/aac": "aac", "audio/mpeg": "mp3", "audio/amr": "amr", "audio/mp4": "m4a",
+    "application/pdf": "pdf",
+  };
+  return map[mimeType] ?? "bin";
+}
+
+async function downloadAndStoreMedia(
+  supabase: ReturnType<typeof createClient>,
+  mediaId: string,
+  mimeType: string,
+  accessToken: string,
+  orgId: string,
+  convId: string,
+  msgId: string,
+): Promise<string | null> {
+  try {
+    const infoRes = await fetch(`${META_GRAPH_URL}/${mediaId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!infoRes.ok) {
+      console.error(`[media-store] Meta info error: ${infoRes.status}`);
+      return null;
+    }
+    const info = await infoRes.json() as { url?: string };
+    if (!info.url) return null;
+
+    const mediaRes = await fetch(info.url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!mediaRes.ok) return null;
+
+    const buffer = await mediaRes.arrayBuffer();
+    const ext = mimeToExt(mimeType);
+    const path = `${orgId}/${convId}/${msgId}.${ext}`;
+
+    const { error } = await supabase.storage
+      .from("messaging-media")
+      .upload(path, buffer, { contentType: mimeType, upsert: true });
+
+    if (error) {
+      console.error("[media-store] Upload error:", error.message);
+      return null;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from("messaging-media")
+      .getPublicUrl(path);
+
+    return publicUrl;
+  } catch (err) {
+    console.error("[media-store] Unexpected error:", err);
+    return null;
+  }
+}
+
 async function handleInboundMessage(
   supabase: ReturnType<typeof createClient>,
   channel: {
@@ -701,6 +763,7 @@ async function handleInboundMessage(
     organization_id: string;
     business_unit_id: string;
     external_identifier: string;
+    credentials?: Record<string, unknown>;
     business_unit?: {
       id: string;
       name: string;
@@ -909,6 +972,24 @@ async function handleInboundMessage(
           businessUnitName: channel.business_unit?.name || "Sem unidade",
           source: leadSource,
         });
+      }
+    }
+  }
+
+  // Para mídias do Meta, baixa e armazena no Supabase Storage antes de inserir
+  if (MEDIA_TYPES.includes(content.type) && content.mediaUrl?.startsWith("meta:")) {
+    const mediaId = content.mediaUrl.slice(5);
+    const accessToken = (channel.credentials?.accessToken ?? channel.credentials?.access_token) as string | undefined;
+    if (accessToken && mediaId) {
+      const storedUrl = await downloadAndStoreMedia(
+        supabase, mediaId, content.mimeType ?? "application/octet-stream",
+        accessToken, channel.organization_id, conversationId, externalMessageId,
+      );
+      if (storedUrl) {
+        content.mediaUrl = storedUrl;
+        console.log(`[media-store] Mídia salva: ${storedUrl}`);
+      } else {
+        console.warn(`[media-store] Falha ao salvar mídia ${mediaId} — mantendo meta:ID como fallback`);
       }
     }
   }
