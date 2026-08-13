@@ -148,6 +148,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
   const [comissaoValor, setComissaoValor] = useState<number | undefined>(undefined);
   const [custosExtras, setCustosExtras] = useState<CustoExtra[]>([]);
   const [custosPagos, setCustosPagos] = useState<CustosPagos>({});
+  const [receita, setReceita] = useState<number>(0);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -163,11 +164,13 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
     setComissaoValor(deal.comissaoValor);
     setCustosExtras(deal.custosExtras || []);
     setCustosPagos(deal.custosPagos || {});
+    // Usa deal.value; se for 0, tenta fichaCliente.valorTotal como fallback
+    const v = Number(deal.value) || Number(deal.fichaCliente?.valorTotal) || 0;
+    setReceita(v);
   }, [deal]);
 
   if (!isOpen || !deal) return null;
 
-  const receita = Number(deal.value) || 0;
   const kwp = deal.fichaCliente?.potenciaKwp != null ? Number(deal.fichaCliente.potenciaKwp) : null;
   const nomeCliente = deal.fichaCliente?.nomeCompleto || deal.title;
 
@@ -248,6 +251,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
       await updateDeal.mutateAsync({
         id: deal.id,
         updates: {
+          value: receita,
           custoNf,
           custoNfTipo,
           custoEngenharia,
@@ -305,7 +309,12 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
               <DollarSign className="h-3.5 w-3.5 text-primary-400" />
               <span className="text-xs text-slate-400">Receita</span>
             </div>
-            <p className="text-base font-semibold text-white">{fmtBRL(receita)}</p>
+            <FieldRow
+              label=""
+              value={receita}
+              onChange={setReceita}
+              onLiveChange={setReceita}
+            />
           </div>
           <div className="bg-white/5 rounded-xl p-3">
             <div className="flex items-center gap-1.5 mb-1">

@@ -135,7 +135,7 @@ function FinanceiroPageContent() {
   const totais = useMemo(() => {
     let receita = 0, custos = 0, lucro = 0, kwpTotal = 0, comDetalhe = 0;
     for (const d of wonDeals) {
-      receita += d.value || 0;
+      receita += Number(d.value) || Number(d.fichaCliente?.valorTotal) || 0;
       const c = d.custoTotal || 0;
       custos += c;
       lucro += d.lucroBruto ?? (d.value - c);
@@ -275,7 +275,7 @@ function FinanceiroPageContent() {
                 <tbody className="divide-y divide-white/5">
                   {wonDeals.map(deal => {
                     const kwp = deal.fichaCliente?.potenciaKwp != null ? Number(deal.fichaCliente.potenciaKwp) : null;
-                    const receita = Number(deal.value) || 0;
+                    const receita = Number(deal.value) || Number(deal.fichaCliente?.valorTotal) || 0;
                     const custo = Number(deal.custoTotal) || 0;
                     const lucro = deal.lucroBruto != null ? Number(deal.lucroBruto) : (receita - custo);
                     const margem = deal.margemPct != null ? Number(deal.margemPct) : (receita > 0 ? (lucro / receita) * 100 : undefined);
