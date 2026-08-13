@@ -91,9 +91,11 @@ function fmtBRL(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-function fmtKwp(v: number | null | undefined) {
+function fmtKwp(v: number | string | null | undefined) {
   if (v == null) return '—';
-  return `${v.toFixed(2)} kWp`;
+  const n = Number(v);
+  if (isNaN(n)) return '—';
+  return `${n.toFixed(2)} kWp`;
 }
 
 function StatusMargem({ pct }: { pct: number | undefined }) {
@@ -137,7 +139,7 @@ function FinanceiroPageContent() {
       const c = d.custoTotal || 0;
       custos += c;
       lucro += d.lucroBruto ?? (d.value - c);
-      kwpTotal += d.fichaCliente?.potenciaKwp || 0;
+      kwpTotal += Number(d.fichaCliente?.potenciaKwp) || 0;
       if (d.custoFornecedor || d.custoNf || d.custoEngenharia) comDetalhe++;
     }
     const margem = receita > 0 ? (lucro / receita) * 100 : 0;
@@ -272,11 +274,11 @@ function FinanceiroPageContent() {
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {wonDeals.map(deal => {
-                    const kwp = deal.fichaCliente?.potenciaKwp ?? null;
-                    const receita = deal.value || 0;
-                    const custo = deal.custoTotal || 0;
-                    const lucro = deal.lucroBruto ?? (receita - custo);
-                    const margem = deal.margemPct ?? (receita > 0 ? (lucro / receita) * 100 : undefined);
+                    const kwp = deal.fichaCliente?.potenciaKwp != null ? Number(deal.fichaCliente.potenciaKwp) : null;
+                    const receita = Number(deal.value) || 0;
+                    const custo = Number(deal.custoTotal) || 0;
+                    const lucro = deal.lucroBruto != null ? Number(deal.lucroBruto) : (receita - custo);
+                    const margem = deal.margemPct != null ? Number(deal.margemPct) : (receita > 0 ? (lucro / receita) * 100 : undefined);
                     const nomeCliente = deal.fichaCliente?.nomeCompleto || deal.title;
                     const temFinanceiro = !!(deal.custoFornecedor || deal.custoNf || deal.custoTotal);
                     const { total: pgTotal, pagos: pgPagos } = calcPendentes(deal);
