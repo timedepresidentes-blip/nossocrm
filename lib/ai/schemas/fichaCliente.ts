@@ -1,5 +1,16 @@
 import { z } from 'zod';
 
+// Converte string de moeda BR ("R$ 8.000,00" ou "8000.00") ou número para número JS
+function parseBRNum(v: unknown): number | null {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') return isNaN(v) ? null : v;
+  const s = String(v).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+const brNum = z.preprocess(parseBRNum, z.number().nullable());
+
 export const FichaClienteSchema = z.object({
   // Dados pessoais
   nomeCompleto:    z.string().nullable().describe('Nome completo do cliente.'),
@@ -22,22 +33,22 @@ export const FichaClienteSchema = z.object({
   instalacaoFases:      z.string().nullable().describe('Fases elétricas: Monofásico, Bifásico, Trifásico.'),
   instalacaoDisjuntor:  z.string().nullable().describe('Amperagem do disjuntor principal se mencionado.'),
   // Dados do sistema solar acordado
-  potenciaKwp:     z.number().nullable().describe('Potência total do sistema em kWp.'),
-  numPaineis:      z.number().nullable().describe('Quantidade de painéis solares.'),
+  potenciaKwp:     brNum.describe('Potência total do sistema em kWp.'),
+  numPaineis:      brNum.describe('Quantidade de painéis solares.'),
   modeloPainel:    z.string().nullable().describe('Marca e modelo do painel solar.'),
-  potenciaPainelW: z.number().nullable().describe('Potência unitária do painel em Watts.'),
+  potenciaPainelW: brNum.describe('Potência unitária do painel em Watts.'),
   modeloInversor:  z.string().nullable().describe('Marca e modelo do inversor.'),
   tipoInversor:    z.string().nullable().describe('Tipo: Microinversor ou Inversor String.'),
-  qtdInversores:   z.number().nullable().describe('Quantidade de inversores.'),
+  qtdInversores:   brNum.describe('Quantidade de inversores.'),
   tipoEstrutura:   z.string().nullable().describe('Tipo de estrutura de fixação.'),
   // Dados financeiros e condições comerciais
-  valorTotal:         z.number().nullable().describe('Valor total da venda acordado em R$.'),
+  valorTotal:         brNum.describe('Valor total da venda acordado em R$. IMPORTANTE: extraia o número puro, ex: 8000.00'),
   formaPagamento:     z.string().nullable().describe('Forma de pagamento combinada (ex: Financiado, À vista, Parcelado).'),
   condicoesPagamento: z.string().nullable().describe('Detalhes das condições: prazo, parcelas, entrada etc.'),
   prazoEntrega:       z.string().nullable().describe('Prazo de entrega ou instalação combinado.'),
   // Dados de consumo/distribuidora
-  consumoMensalKwh: z.number().nullable().describe('Consumo médio mensal em kWh.'),
-  valorContaAtual:  z.number().nullable().describe('Valor atual da conta de energia em R$.'),
+  consumoMensalKwh: brNum.describe('Consumo médio mensal em kWh.'),
+  valorContaAtual:  brNum.describe('Valor atual da conta de energia em R$.'),
   distribuidora:    z.string().nullable().describe('Nome da distribuidora de energia.'),
   // Observações gerais
   observacoes: z.string().nullable().describe('Qualquer outra informação relevante mencionada.'),
