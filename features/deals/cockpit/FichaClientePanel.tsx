@@ -270,10 +270,25 @@ export const FichaClientePanel: React.FC<Props> = ({
   const handleSalvar = async () => {
     if (!supabase || !dealId) return;
     setSaving(true);
-    await supabase.from('deals').update({ ficha_cliente: ficha, updated_at: new Date().toISOString() }).eq('id', dealId);
+
+    const updates: Record<string, unknown> = { ficha_cliente: ficha, updated_at: new Date().toISOString() };
+
+    // Se ficha tem valorTotal e deal.value está zerado, grava o valor da venda também
+    if (ficha.valorTotal != null) {
+      const raw = String(ficha.valorTotal).replace(/[R$\s.]/g, '').replace(',', '.');
+      const n = parseFloat(raw);
+      if (!isNaN(n) && n > 0 && (!dealValue || dealValue === 0)) {
+        updates.value = n;
+      }
+    }
+
+    await supabase.from('deals').update(updates).eq('id', dealId);
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+
+    // Sincroniza custos financeiros com padrões da org
+    autoFillDealCosts(dealId).catch(console.warn);
   };
 
   const setField = (key: keyof FichaClienteData, val: string) => {
