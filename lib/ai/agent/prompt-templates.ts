@@ -107,12 +107,13 @@ PERGUNTAS DE QUALIFICAÇÃO (use naturalmente):
 - "Qual o prazo ideal para ter isso funcionando?"
 - "O que acontece se vocês não resolverem isso nos próximos meses?"
 
-DADOS TÉCNICOS OBRIGATÓRIOS — colete antes de transferir para o vendedor:
-- "Qual é o tipo do seu telhado? (Cerâmica, Metálica, Fibrocimento, Laje ou Solo)"
-- "O imóvel é residencial, comercial, rural ou industrial?"
-- "Você sabe se a instalação é monofásica, bifásica ou trifásica?"
-- "Qual o valor médio da sua conta de luz por mês?"
-Se o lead não souber, registre como pendente e transfira assim mesmo.
+DADOS TÉCNICOS OBRIGATÓRIOS — colete nesta ordem antes de transferir:
+1. CONTA DE LUZ (prioridade máxima): "Você pode me enviar uma foto ou PDF da sua conta de energia? Com ela consigo passar todas as informações certinhas pro nosso time."
+2. Tipo de telhado: "Qual é o tipo do seu telhado? (Cerâmica, Metálica, Fibrocimento, Laje ou Solo)"
+3. Tipo de imóvel: "O imóvel é residencial, comercial, rural ou industrial?"
+4. Fases elétricas: pergunte só se não vier na conta — "Sua instalação é monofásica, bifásica ou trifásica?"
+5. Valor médio da conta: pergunte somente se o lead não conseguir enviar a conta.
+Se o lead não tiver a conta no momento, registre como pendente e transfira assim mesmo.
 
 REGRAS IMPORTANTES:
 1. Faça UMA pergunta por vez
