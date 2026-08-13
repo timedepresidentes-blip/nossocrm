@@ -1,10 +1,10 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Deal } from '@/types';
 import { useUpdateDeal } from '@/lib/query/hooks/useDealsQuery';
 import { useToast } from '@/context/ToastContext';
 import { cn } from '@/lib/utils';
-import { X, Plus, Trash2, Save, TrendingUp, TrendingDown, DollarSign, Percent, CheckCircle2, XCircle, AlertTriangle, Wallet } from 'lucide-react';
+import { X, Plus, Trash2, Save, TrendingUp, TrendingDown, DollarSign, Percent, CheckCircle2, XCircle, AlertTriangle, Wallet, Pencil } from 'lucide-react';
 import { CustosPagos } from '@/lib/supabase/dealCosts';
 
 interface Props {
@@ -26,45 +26,70 @@ function fmtKwp(v: number | undefined | null) {
 }
 
 function parseBRL(s: string): number {
-  // Aceita "28.500,00" ou "28500.00" ou "28500"
+  if (!s.trim()) return 0;
+  // Remove R$, espaços; remove pontos de milhar; converte vírgula decimal
   const clean = s.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
-  return parseFloat(clean) || 0;
+  const n = parseFloat(clean);
+  return isNaN(n) ? 0 : n;
 }
 
 interface FieldRowProps {
   label: string;
   value: number | undefined;
   onChange: (v: number) => void;
+  onLiveChange?: (v: number) => void;
   highlight?: 'green' | 'red';
   pago?: boolean;
   onTogglePago?: () => void;
 }
 
-function FieldRow({ label, value, onChange, highlight, pago, onTogglePago }: FieldRowProps) {
+function FieldRow({ label, value, onChange, onLiveChange, highlight, pago, onTogglePago }: FieldRowProps) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const startEdit = () => {
-    setText(value != null ? value.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
+  const startEdit = useCallback(() => {
+    setText(value != null && value > 0 ? value.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '');
     setEditing(true);
+  }, [value]);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setText(e.target.value);
+    if (onLiveChange) onLiveChange(parseBRL(e.target.value));
   };
+
   const commit = () => {
-    onChange(parseBRL(text));
+    const v = parseBRL(text);
+    onChange(v);
     setEditing(false);
   };
 
   const temValor = value != null && value > 0;
 
   return (
-    <div className={cn(
-      'flex items-center gap-2 py-2 px-3 rounded-lg transition-colors',
-      highlight === 'green' && 'bg-emerald-500/10 border border-emerald-500/20',
-      highlight === 'red' && 'bg-rose-500/10 border border-rose-500/20',
-      !highlight && temValor && !pago && 'bg-rose-500/8 border border-rose-500/15',
-      !highlight && (!temValor || pago) && 'hover:bg-white/5'
-    )}>
+    <div
+      className={cn(
+        'flex items-center gap-2 py-2 px-3 rounded-lg transition-colors group/row',
+        highlight === 'green' && 'bg-emerald-500/10 border border-emerald-500/20',
+        highlight === 'red' && 'bg-rose-500/10 border border-rose-500/20',
+        !highlight && temValor && !pago && 'bg-rose-500/8 border border-rose-500/15',
+        !highlight && (!temValor || pago) && 'hover:bg-white/5',
+        !editing && 'cursor-pointer',
+      )}
+      onClick={() => { if (!editing) startEdit(); }}
+    >
       {onTogglePago && temValor ? (
-        <button onClick={onTogglePago} className="shrink-0 transition-colors" title={pago ? 'Marcar como pendente' : 'Marcar como pago'}>
+        <button
+          onClick={e => { e.stopPropagation(); onTogglePago(); }}
+          className="shrink-0 transition-colors"
+          title={pago ? 'Marcar como pendente' : 'Marcar como pago'}
+        >
           {pago
             ? <CheckCircle2 className="h-4 w-4 text-emerald-400" />
             : <XCircle className="h-4 w-4 text-rose-500 hover:text-rose-400" />}
@@ -72,26 +97,35 @@ function FieldRow({ label, value, onChange, highlight, pago, onTogglePago }: Fie
       ) : onTogglePago ? (
         <div className="w-4 shrink-0" />
       ) : null}
+
       <span className={cn('text-sm flex-1', pago && temValor ? 'text-slate-500 line-through' : 'text-slate-300')}>{label}</span>
+
       {editing ? (
         <input
+          ref={inputRef}
           autoFocus
           className="w-36 text-right bg-dark-card border border-primary-500 rounded px-2 py-0.5 text-sm text-white focus:outline-none"
           value={text}
-          onChange={e => setText(e.target.value)}
+          onChange={handleChange}
           onBlur={commit}
-          onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            if (e.key === 'Escape') { setEditing(false); if (onLiveChange) onLiveChange(value ?? 0); }
+          }}
+          onClick={e => e.stopPropagation()}
+          placeholder="0,00"
         />
       ) : (
-        <button
-          onClick={startEdit}
-          className={cn(
-            'text-sm font-mono font-medium cursor-pointer hover:text-primary-400 transition-colors',
-            highlight === 'green' ? 'text-emerald-400' : highlight === 'red' ? 'text-rose-400' : 'text-white'
-          )}
-        >
-          {value != null ? fmtBRL(value) : <span className="text-slate-500 text-xs">clique para preencher</span>}
-        </button>
+        <div className="flex items-center gap-1">
+          <span className={cn(
+            'text-sm font-mono font-medium',
+            highlight === 'green' ? 'text-emerald-400' : highlight === 'red' ? 'text-rose-400' : temValor ? 'text-white' : 'text-slate-500',
+            pago && temValor && 'line-through',
+          )}>
+            {temValor ? fmtBRL(value) : <span className="text-xs">—</span>}
+          </span>
+          <Pencil className="h-3 w-3 text-slate-600 opacity-0 group-hover/row:opacity-100 transition-opacity" />
+        </div>
       )}
     </div>
   );
