@@ -4,7 +4,7 @@ import { Deal } from '@/types';
 import { useUpdateDeal } from '@/lib/query/hooks/useDealsQuery';
 import { useToast } from '@/context/ToastContext';
 import { cn } from '@/lib/utils';
-import { X, Plus, Trash2, Save, TrendingUp, TrendingDown, DollarSign, Percent, CheckCircle2, Circle, AlertTriangle } from 'lucide-react';
+import { X, Plus, Trash2, Save, TrendingUp, TrendingDown, DollarSign, Percent, CheckCircle2, XCircle, AlertTriangle, Wallet } from 'lucide-react';
 import { CustosPagos } from '@/lib/supabase/dealCosts';
 
 interface Props {
@@ -57,21 +57,22 @@ function FieldRow({ label, value, onChange, highlight, pago, onTogglePago }: Fie
 
   return (
     <div className={cn(
-      'flex items-center gap-2 py-2 px-3 rounded-lg',
+      'flex items-center gap-2 py-2 px-3 rounded-lg transition-colors',
       highlight === 'green' && 'bg-emerald-500/10 border border-emerald-500/20',
       highlight === 'red' && 'bg-rose-500/10 border border-rose-500/20',
-      !highlight && 'hover:bg-white/5'
+      !highlight && temValor && !pago && 'bg-rose-500/8 border border-rose-500/15',
+      !highlight && (!temValor || pago) && 'hover:bg-white/5'
     )}>
       {onTogglePago && temValor ? (
         <button onClick={onTogglePago} className="shrink-0 transition-colors" title={pago ? 'Marcar como pendente' : 'Marcar como pago'}>
           {pago
             ? <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-            : <Circle className="h-4 w-4 text-slate-500 hover:text-slate-300" />}
+            : <XCircle className="h-4 w-4 text-rose-500 hover:text-rose-400" />}
         </button>
       ) : onTogglePago ? (
         <div className="w-4 shrink-0" />
       ) : null}
-      <span className={cn('text-sm flex-1', pago && temValor ? 'text-slate-500 line-through' : 'text-slate-400')}>{label}</span>
+      <span className={cn('text-sm flex-1', pago && temValor ? 'text-slate-500 line-through' : 'text-slate-300')}>{label}</span>
       {editing ? (
         <input
           autoFocus
@@ -148,6 +149,19 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
 
   const lucroBruto = receita - custoTotalCalc;
   const margemPct = receita > 0 ? (lucroBruto / receita) * 100 : 0;
+
+  // Caixa em tempo real: quanto já saiu vs quanto ainda vai sair
+  const totalPago =
+    (custosPagos.nf         ? (custoNf || 0) : 0) +
+    (custosPagos.fornecedor ? custoFornecedorEfetivo : 0) +
+    (custosPagos.engenharia ? (custoEngenharia || 0) : 0) +
+    (custosPagos.art        ? (custoArt || 0) : 0) +
+    (custosPagos.corrugado  ? (custoCorrugado || 0) : 0) +
+    (custosPagos.eletroduto ? (custoEletroduto || 0) : 0) +
+    (custosPagos.comissao   ? (comissaoValor || 0) : 0) +
+    custosExtras.reduce((s, e, i) => s + ((custosPagos.extras || [])[i] ? (e.valor || 0) : 0), 0);
+  const totalPendente = custoTotalCalc - totalPago;
+  const caixaAtual = receita - totalPago;
 
   // Checklist de pagamentos
   const camposComValor = [
@@ -289,20 +303,39 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
         {/* Custos */}
         <div className="flex-1 overflow-y-auto p-4 space-y-1">
 
-          {/* Status de pagamentos */}
-          {totalItens > 0 && (
-            <div className={cn(
-              'flex items-center gap-2 px-3 py-2 rounded-xl mb-3 text-sm font-medium',
-              tudoPago
-                ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400'
-                : 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
-            )}>
-              {tudoPago
-                ? <><CheckCircle2 className="h-4 w-4" /> Todos os custos pagos</>
-                : <><AlertTriangle className="h-4 w-4" /> {pendentes} custo{pendentes !== 1 ? 's' : ''} pendente{pendentes !== 1 ? 's' : ''}</>}
-              <span className="ml-auto text-xs opacity-70">{pagosCount}/{totalItens}</span>
+          {/* Caixa em tempo real */}
+          <div className={cn(
+            'rounded-xl border p-3 mb-3 space-y-2',
+            totalPendente > 0 ? 'bg-rose-500/10 border-rose-500/30' : 'bg-emerald-500/10 border-emerald-500/30'
+          )}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Wallet className={cn('h-4 w-4', totalPendente > 0 ? 'text-rose-400' : 'text-emerald-400')} />
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">Caixa Atual</span>
+              <span className="ml-auto text-xs text-slate-500">{pagosCount}/{totalItens} pagos</span>
             </div>
-          )}
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-400">Receita recebida</span>
+              <span className="text-white font-mono">{fmtBRL(receita)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-400">(-) Já pago</span>
+              <span className="text-emerald-400 font-mono">- {fmtBRL(totalPago)}</span>
+            </div>
+            <div className="h-px bg-white/10" />
+            <div className="flex justify-between text-sm font-semibold">
+              <span className="text-white">Disponível agora</span>
+              <span className={cn('font-mono', caixaAtual >= 0 ? 'text-white' : 'text-rose-400')}>{fmtBRL(caixaAtual)}</span>
+            </div>
+            {totalPendente > 0 && (
+              <div className="flex items-center justify-between pt-1 border-t border-rose-500/20">
+                <div className="flex items-center gap-1.5 text-rose-400">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  <span className="text-xs font-medium">{pendentes} débito{pendentes !== 1 ? 's' : ''} pendente{pendentes !== 1 ? 's' : ''}</span>
+                </div>
+                <span className="text-rose-400 font-mono text-sm font-semibold">- {fmtBRL(totalPendente)}</span>
+              </div>
+            )}
+          </div>
 
           <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">Custos Fixos</p>
 
@@ -362,13 +395,18 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
               <p className="text-xs text-slate-500 italic px-3">Nenhum custo extra registrado.</p>
             )}
 
-            {custosExtras.map((extra, i) => (
-              <div key={i} className="flex items-center gap-2 py-1.5 px-3 rounded-lg hover:bg-white/5">
+            {custosExtras.map((extra, i) => {
+              const isPago = !!(custosPagos.extras || [])[i];
+              return (
+              <div key={i} className={cn(
+                'flex items-center gap-2 py-1.5 px-3 rounded-lg transition-colors',
+                extra.valor > 0 && !isPago ? 'bg-rose-500/8 border border-rose-500/15' : 'hover:bg-white/5'
+              )}>
                 {extra.valor > 0 ? (
-                  <button onClick={() => toggleExtraPago(i)} className="shrink-0 transition-colors" title={(custosPagos.extras || [])[i] ? 'Marcar como pendente' : 'Marcar como pago'}>
-                    {(custosPagos.extras || [])[i]
+                  <button onClick={() => toggleExtraPago(i)} className="shrink-0 transition-colors" title={isPago ? 'Marcar como pendente' : 'Marcar como pago'}>
+                    {isPago
                       ? <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                      : <Circle className="h-4 w-4 text-slate-500 hover:text-slate-300" />}
+                      : <XCircle className="h-4 w-4 text-rose-500 hover:text-rose-400" />}
                   </button>
                 ) : <div className="w-4 shrink-0" />}
                 <input
@@ -388,7 +426,8 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
-            ))}
+              );
+            })}
 
             {somaExtras > 0 && (
               <div className="flex justify-between px-3 py-1.5 mt-1 border-t border-white/5 text-xs">
@@ -405,7 +444,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
               <span className="text-white font-mono">{fmtBRL(receita)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-slate-400">(-) Custos</span>
+              <span className="text-slate-400">(-) Custo total</span>
               <span className="text-rose-300 font-mono">- {fmtBRL(custoTotalCalc)}</span>
             </div>
             <div className="h-px bg-white/10" />
@@ -415,6 +454,17 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
                 {fmtBRL(lucroBruto)} ({margemPct.toFixed(1)}%)
               </span>
             </div>
+            {totalPendente > 0 && (
+              <>
+                <div className="h-px bg-white/10" />
+                <div className="flex justify-between text-xs text-slate-500">
+                  <span>Lucro após quitar pendências</span>
+                  <span className={cn('font-mono', (caixaAtual - totalPendente) >= 0 ? 'text-slate-400' : 'text-rose-400')}>
+                    {fmtBRL(caixaAtual - totalPendente)}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

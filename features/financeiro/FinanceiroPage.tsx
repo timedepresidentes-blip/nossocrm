@@ -7,7 +7,6 @@ import { Deal } from '@/types';
 import { DealFinanceiroSheet } from './components/DealFinanceiroSheet';
 import { autoFillDealCosts } from '@/lib/supabase/autoFillDealCosts';
 import { TrendingUp, TrendingDown, DollarSign, Percent, BarChart3, ChevronRight, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
-import { Deal } from '@/types';
 
 function calcPendentes(deal: Deal): { total: number; pagos: number } {
   const pagos = deal.custosPagos ?? {};
