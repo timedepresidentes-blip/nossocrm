@@ -26,6 +26,7 @@ import {
   CalendarDays,
   Bell,
   FileText,
+  Sparkles,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -46,6 +47,7 @@ import { useNotificationSound } from '@/lib/hooks/useNotificationSound';
 import { useOrcafacilQuotes } from '@/lib/hooks/useOrcafacilQuotes';
 import { supabase } from '@/lib/supabase';
 import { FichaClientePanel } from '@/features/deals/cockpit/FichaClientePanel';
+import type { BriefingResponse } from '@/lib/ai/briefing/schemas';
 
 interface ContactPanelProps {
   conversation: ConversationView | null | undefined;
@@ -539,6 +541,50 @@ export const ContactPanel = memo(function ContactPanel({
             Gerar Orçamento
           </button>
         </div>
+
+        {/* Briefing de handoff — exibido quando Julia transferiu para humano */}
+        {(() => {
+          const meta = (conversation?.metadata ?? {}) as Record<string, unknown>;
+          const briefing = meta.ai_handoff_briefing as BriefingResponse | undefined;
+          if (!briefing) return null;
+          const highPending = (briefing.pendingPoints ?? []).filter(p => p.priority === 'high');
+          const questions = briefing.recommendedApproach?.keyQuestions ?? [];
+          return (
+            <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/8 p-3 space-y-2">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="text-xs font-semibold text-amber-300 uppercase tracking-wider">Resumo da Julia</span>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">{briefing.executiveSummary}</p>
+              {highPending.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-rose-400 uppercase tracking-wider mb-1">Pontos pendentes</p>
+                  <ul className="space-y-1">
+                    {highPending.map((p, i) => (
+                      <li key={i} className="text-xs text-slate-400 flex gap-1.5">
+                        <span className="text-rose-400 shrink-0">•</span>
+                        {p.point}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {questions.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-primary-400 uppercase tracking-wider mb-1">Pergunte ao cliente</p>
+                  <ul className="space-y-1">
+                    {questions.slice(0, 3).map((q, i) => (
+                      <li key={i} className="text-xs text-slate-400 flex gap-1.5">
+                        <span className="text-primary-400 shrink-0">›</span>
+                        {q}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Ficha do Cliente — sempre visível na conversa */}
         {conversation?.id && (

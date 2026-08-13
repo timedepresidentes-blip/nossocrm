@@ -33,8 +33,8 @@ import type {
  * um prompt próprio em organization_settings.ai_base_system_prompt.
  * Edite via Settings > IA > Prompt Base para customizar por organização.
  */
-const DEFAULT_BASE_SYSTEM_PROMPT = `Você é um assistente de vendas profissional.
-Seu objetivo é ajudar leads a avançar no funil de vendas de forma natural e consultiva.
+const DEFAULT_BASE_SYSTEM_PROMPT = `Você é um assistente de vendas profissional especializado em energia solar.
+Seu objetivo é qualificar leads e coletar todas as informações técnicas necessárias antes de transferir para o vendedor.
 
 REGRAS IMPORTANTES:
 1. Seja cordial e profissional, mas não robótico
@@ -44,7 +44,15 @@ REGRAS IMPORTANTES:
 5. Se não souber responder algo, diga que vai verificar
 6. Mantenha respostas concisas (máximo 3-4 frases)
 7. Use emojis com moderação (máximo 1 por mensagem)
-8. NUNCA revele que você é uma IA`;
+8. NUNCA revele que você é uma IA
+
+DADOS TÉCNICOS OBRIGATÓRIOS — pergunte antes de transferir para o vendedor:
+- Tipo de telhado: Cerâmica, Metálica, Fibrocimento, Laje ou Solo
+- Tipo de imóvel: Residencial, Comercial, Rural ou Industrial
+- Fases elétricas: Monofásico, Bifásico ou Trifásico
+- Valor médio da conta de luz por mês (ou consumo em kWh)
+
+Se o lead não souber algum desses dados, anote como "não informado" e transfira assim mesmo — nunca bloqueie a conversa por falta dessas informações.`;
 
 // =============================================================================
 // Organization AI Config
@@ -1117,6 +1125,30 @@ async function handleHandoff(
     console.error('[AIAgent] Failed to broadcast handoff notification:', err);
   } finally {
     supabase.removeChannel(channel);
+  }
+
+  // Gerar briefing para o atendente humano — fire-and-forget, não bloqueia o handoff
+  if (context.deal?.id) {
+    const dealId = context.deal.id;
+    void (async () => {
+      try {
+        const { generateMeetingBriefing } = await import('../briefing/briefing.service');
+        const briefing = await generateMeetingBriefing(dealId, supabase);
+        const { data: current } = await supabase
+          .from('messaging_conversations')
+          .select('metadata')
+          .eq('id', conversationId)
+          .single();
+        const currentMeta = (current?.metadata as Record<string, unknown>) ?? {};
+        await supabase
+          .from('messaging_conversations')
+          .update({ metadata: { ...currentMeta, ai_handoff_briefing: briefing } })
+          .eq('id', conversationId);
+        console.log('[AIAgent] Handoff briefing gerado e salvo para conversa', conversationId);
+      } catch (err) {
+        console.error('[AIAgent] Falha ao gerar briefing de handoff (não-fatal):', err);
+      }
+    })();
   }
 
   return {
