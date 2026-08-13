@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, Component } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDeals } from '@/lib/query/hooks/useDealsQuery';
 import { DEALS_VIEW_KEY, queryKeys } from '@/lib/query/queryKeys';
@@ -8,6 +8,34 @@ import { DealFinanceiroSheet } from './components/DealFinanceiroSheet';
 import { autoFillDealCosts } from '@/lib/supabase/autoFillDealCosts';
 import { TrendingUp, TrendingDown, DollarSign, Percent, BarChart3, ChevronRight, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+class FinanceiroDebugBoundary extends Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      const err = this.state.error as Error;
+      return (
+        <div style={{ padding: '2rem', background: '#0d1117', minHeight: '100vh' }}>
+          <h2 style={{ color: '#f85149', fontFamily: 'monospace', marginBottom: '1rem' }}>
+            FinanceiroPage Runtime Error
+          </h2>
+          <pre style={{
+            background: '#161b22', color: '#f0f6fc', padding: '1rem',
+            borderRadius: '8px', overflow: 'auto', fontFamily: 'monospace',
+            fontSize: '13px', border: '1px solid #30363d', whiteSpace: 'pre-wrap',
+          }}>
+            {err.name}: {err.message}{'\n\n'}{err.stack}
+          </pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function calcPendentes(deal: Deal): { total: number; pagos: number } {
   const pagos = deal.custosPagos ?? {};
@@ -75,6 +103,14 @@ function StatusMargem({ pct }: { pct: number | undefined }) {
 }
 
 export function FinanceiroPage() {
+  return (
+    <FinanceiroDebugBoundary>
+      <FinanceiroPageContent />
+    </FinanceiroDebugBoundary>
+  );
+}
+
+function FinanceiroPageContent() {
   const { data: allDeals = [], isLoading } = useDeals();
   const queryClient = useQueryClient();
   const [periodo, setPeriodo] = useState<Periodo>('all');
