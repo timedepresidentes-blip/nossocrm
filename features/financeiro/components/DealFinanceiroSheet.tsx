@@ -410,11 +410,12 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
                   </button>
                 ) : <div className="w-4 shrink-0" />}
                 <input
-                  placeholder="Descrição"
-                  value={extra.descricao}
+                  placeholder="Descrição do custo"
+                  value={extra.descricao ?? ''}
                   onChange={e => updateExtra(i, 'descricao', e.target.value)}
-                  className={cn('flex-1 bg-transparent text-sm placeholder-slate-500 border-b border-white/10 focus:border-primary-500 focus:outline-none pb-0.5',
-                    (custosPagos.extras || [])[i] && extra.valor > 0 ? 'text-slate-500 line-through' : 'text-white')}
+                  className={cn('flex-1 bg-transparent text-sm border-b border-white/10 focus:border-primary-500 focus:outline-none pb-0.5',
+                    'placeholder-slate-600',
+                    isPago && extra.valor > 0 ? 'text-slate-500 line-through' : extra.descricao ? 'text-white' : 'text-slate-400')}
                 />
                 <input
                   placeholder="0,00"

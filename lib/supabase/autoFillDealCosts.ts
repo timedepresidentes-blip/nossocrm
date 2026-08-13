@@ -46,8 +46,8 @@ export async function autoFillDealCosts(dealId: string): Promise<void> {
   const custoEletroduto = exEletroduto > 0 ? exEletroduto : cfg.custoEletroduto;
   const custoNf = exNf > 0 ? exNf : calcNfCost(valorVenda, nfTipo, cfg, exFornecedor);
 
-  const comissaoPct = calcComissaoPct(kwp, cfg);
-  const comissaoValor = exComissao > 0 ? exComissao : valorVenda * (comissaoPct / 100);
+  // Comissão nunca é auto-preenchida — só mantém o valor se já foi preenchido manualmente
+  const comissaoValor = exComissao > 0 ? exComissao : 0;
 
   const somaExtras = exExtras.reduce((s, c) => s + (Number(c.valor) || 0), 0);
   const custoTotal = custoNf + custoArt + custoEngenharia + custoCorrugado + custoEletroduto + exFornecedor + comissaoValor + somaExtras;
