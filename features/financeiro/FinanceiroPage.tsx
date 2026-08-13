@@ -7,6 +7,7 @@ import { Deal } from '@/types';
 import { DealFinanceiroSheet } from './components/DealFinanceiroSheet';
 import { autoFillDealCosts } from '@/lib/supabase/autoFillDealCosts';
 import { TrendingUp, TrendingDown, DollarSign, Percent, BarChart3, ChevronRight, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 function calcPendentes(deal: Deal): { total: number; pagos: number } {
   const pagos = deal.custosPagos ?? {};
@@ -25,7 +26,6 @@ function calcPendentes(deal: Deal): { total: number; pagos: number } {
     + extras.filter((_, i) => ((pagos.extras || []) as boolean[])[i]).length;
   return { total, pagos: pagosCount };
 }
-import { cn } from '@/lib/utils';
 
 type Periodo = 'all' | 'this_month' | 'last_month' | 'last_3_months' | 'this_year';
 
