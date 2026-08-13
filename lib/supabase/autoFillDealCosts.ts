@@ -20,10 +20,9 @@ export async function autoFillDealCosts(dealId: string): Promise<void> {
   if (!dealRow) return;
   const row = dealRow as any;
 
-  const valorVenda = Number(row.value ?? 0);
-  if (valorVenda <= 0) return;
-
   const fichaCliente = row.ficha_cliente as Record<string, any> | null;
+  // Usa deal.value; se zerado, tenta fichaCliente.valorTotal como fallback
+  const valorVenda = Number(row.value ?? 0) || Number(fichaCliente?.valorTotal ?? 0);
   const kwp = Number(fichaCliente?.potenciaKwp ?? 0);
 
   const exNf = Number(row.custo_nf ?? 0);
@@ -39,14 +38,13 @@ export async function autoFillDealCosts(dealId: string): Promise<void> {
   const { data: cfg } = await orgSettingsService.getCostSettings();
   if (!cfg) return;
 
-  // Usa valor existente quando preenchido; caso contrário aplica padrão da org
+  // Custos fixos (não dependem do valor de venda): preenche sempre
   const custoEngenharia = exEng > 0 ? exEng : calcEngCost(kwp, cfg);
   const custoArt = exArt > 0 ? exArt : cfg.custoArt;
   const custoCorrugado = exCorrugado > 0 ? exCorrugado : cfg.custoCorrugado;
   const custoEletroduto = exEletroduto > 0 ? exEletroduto : cfg.custoEletroduto;
-  const custoNf = exNf > 0 ? exNf : calcNfCost(valorVenda, nfTipo, cfg, exFornecedor);
-
-  // Comissão nunca é auto-preenchida — só mantém o valor se já foi preenchido manualmente
+  // NF e comissão dependem do valor de venda: só preenche se valorVenda > 0
+  const custoNf = exNf > 0 ? exNf : (valorVenda > 0 ? calcNfCost(valorVenda, nfTipo, cfg, exFornecedor) : 0);
   const comissaoValor = exComissao > 0 ? exComissao : 0;
 
   const somaExtras = exExtras.reduce((s, c) => s + (Number(c.valor) || 0), 0);
