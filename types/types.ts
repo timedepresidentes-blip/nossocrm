@@ -25,6 +25,21 @@
  * O estágio atual é deal.status (UUID do stage no board).
  * Mantido apenas para compatibilidade de código legado.
  */
+// Etapas da linha do tempo do projeto de instalação solar
+export const PROJETO_STEPS = [
+  { key: 'orcamento',       label: 'Orçamento escolhido'       },
+  { key: 'contrato',        label: 'Contrato assinado'         },
+  { key: 'engenharia',      label: 'Entrada na engenharia'     },
+  { key: 'projetoAprovado', label: 'Projeto aprovado'          },
+  { key: 'equipamento',     label: 'Entrega de equipamento'    },
+  { key: 'agendamento',     label: 'Agendamento de instalação' },
+  { key: 'instalado',       label: 'Instalado'                 },
+  { key: 'vistoria',        label: 'Solicitação de vistoria'   },
+  { key: 'homologado',      label: 'Homologado'                },
+] as const;
+
+export type ProjetoStepKey = typeof PROJETO_STEPS[number]['key'];
+
 export enum DealStatus {
   NEW = 'NEW',
   CONTACTED = 'CONTACTED',
@@ -269,6 +284,9 @@ export interface Deal {
   companyId?: string;
 
   // Dados financeiros da venda
+  // Linha do tempo do projeto (etapas de instalação solar)
+  projetoTimeline?: Partial<Record<ProjetoStepKey, string>>; // valor = data ISO de conclusão
+
   fichaCliente?: Record<string, any>;   // Dados do contrato (inclui potenciaKwp, valorTotal, etc.)
   custoNf?: number;                     // Custo da nota fiscal
   custoNfTipo?: string;                 // Tipo NF (ex: "percentual", "fixo")
@@ -278,6 +296,16 @@ export interface Deal {
   custoFornecedor?: number;             // Custo do fornecedor (equipamentos)
   voucherBancoPct?: number;             // Percentual de voucher/cashback do banco sobre o fornecedor
   custoArt?: number;                    // Custo da ART
+  custosPagos?: {                       // Checklist de pagamentos por custo
+    nf?: boolean;
+    fornecedor?: boolean;
+    engenharia?: boolean;
+    art?: boolean;
+    corrugado?: boolean;
+    eletroduto?: boolean;
+    comissao?: boolean;
+    extras?: boolean[];
+  };
   custosExtras?: { descricao: string; valor: number }[]; // Custos imprevistos/adicionais
   custoTotal?: number;                  // Total de custos (calculado)
   comissaoValor?: number;               // Valor da comissão

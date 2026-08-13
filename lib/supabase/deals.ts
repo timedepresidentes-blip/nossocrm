@@ -207,6 +207,7 @@ const transformDeal = (db: DbDeal | DbDealWithItems, items?: DbDealItem[]): Deal
     comissaoValor: (db as any).comissao_valor ?? undefined,
     lucroBruto: (db as any).lucro_bruto ?? undefined,
     margemPct: (db as any).margem_pct ?? undefined,
+    projetoTimeline: (db as any).projeto_timeline ?? undefined,
     createdAt: db.created_at,
     updatedAt: db.updated_at,
     items: filteredItems.map(i => ({
@@ -274,6 +275,7 @@ const transformDealToDb = (deal: Partial<Deal>): Partial<DbDeal> => {
   if (deal.comissaoValor !== undefined) (db as any).comissao_valor = deal.comissaoValor;
   if (deal.lucroBruto !== undefined) (db as any).lucro_bruto = deal.lucroBruto;
   if (deal.margemPct !== undefined) (db as any).margem_pct = deal.margemPct;
+  if (deal.projetoTimeline !== undefined) (db as any).projeto_timeline = deal.projetoTimeline;
 
   return db;
 };

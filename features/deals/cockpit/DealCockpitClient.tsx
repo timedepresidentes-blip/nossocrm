@@ -43,6 +43,7 @@ import type { QuickScript, ScriptCategory } from '@/lib/supabase/quickScripts';
 import type { Activity, Board, BoardStage, Contact, DealView } from '@/types';
 import { DealCostsPanel } from './DealCostsPanel';
 import { FichaClientePanel } from './FichaClientePanel';
+import { ProjetoTimelinePanel } from './ProjetoTimelinePanel';
 
 type Tab = 'chat' | 'notas' | 'scripts' | 'arquivos';
 
@@ -1857,6 +1858,11 @@ export default function DealCockpitClient({ dealId }: { dealId?: string }) {
                 </div>
               </div>
             </Panel>
+
+            <ProjetoTimelinePanel
+              dealId={deal.id}
+              timeline={deal.projetoTimeline}
+            />
 
             <DealCostsPanel
               dealId={deal.id}
