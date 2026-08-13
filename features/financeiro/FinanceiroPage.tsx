@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDeals } from '@/lib/query/hooks/useDealsQuery';
-import { DEALS_VIEW_KEY } from '@/lib/query/queryKeys';
+import { DEALS_VIEW_KEY, queryKeys } from '@/lib/query/queryKeys';
 import { Deal } from '@/types';
 import { DealFinanceiroSheet } from './components/DealFinanceiroSheet';
 import { autoFillDealCosts } from '@/lib/supabase/autoFillDealCosts';
@@ -313,7 +313,10 @@ export function FinanceiroPage() {
       <DealFinanceiroSheet
         deal={selectedDeal}
         isOpen={!!selectedDeal}
-        onClose={() => setSelectedDeal(null)}
+        onClose={() => {
+          setSelectedDeal(null);
+          queryClient.invalidateQueries({ queryKey: queryKeys.deals.all });
+        }}
       />
     </div>
   );
