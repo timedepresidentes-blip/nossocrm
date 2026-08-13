@@ -265,6 +265,8 @@ const transformDealToDb = (deal: Partial<Deal>): Partial<DbDeal> => {
   if (deal.custoEletroduto !== undefined) (db as any).custo_eletroduto = deal.custoEletroduto;
   if (deal.custoFornecedor !== undefined) (db as any).custo_fornecedor = deal.custoFornecedor;
   if (deal.custoArt !== undefined) (db as any).custo_art = deal.custoArt;
+  if (deal.voucherBancoPct !== undefined) (db as any).voucher_banco_pct = deal.voucherBancoPct;
+  if (deal.custosPagos !== undefined) (db as any).custos_pagos = deal.custosPagos;
   if (deal.custosExtras !== undefined) (db as any).custos_extras = deal.custosExtras;
   if (deal.custoTotal !== undefined) (db as any).custo_total = deal.custoTotal;
   if (deal.comissaoValor !== undefined) (db as any).comissao_valor = deal.comissaoValor;
