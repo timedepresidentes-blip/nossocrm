@@ -20,9 +20,11 @@ function fmtBRL(v: number | undefined | null) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-function fmtKwp(v: number | undefined | null) {
+function fmtKwp(v: number | string | undefined | null) {
   if (v == null) return '—';
-  return `${v.toFixed(2)} kWp`;
+  const n = Number(v);
+  if (isNaN(n)) return '—';
+  return `${n.toFixed(2)} kWp`;
 }
 
 function parseBRL(s: string): number {
@@ -165,8 +167,8 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
 
   if (!isOpen || !deal) return null;
 
-  const receita = deal.value || 0;
-  const kwp = deal.fichaCliente?.potenciaKwp ?? null;
+  const receita = Number(deal.value) || 0;
+  const kwp = deal.fichaCliente?.potenciaKwp != null ? Number(deal.fichaCliente.potenciaKwp) : null;
   const nomeCliente = deal.fichaCliente?.nomeCompleto || deal.title;
 
   const somaExtras = custosExtras.reduce((s, c) => s + (c.valor || 0), 0);
