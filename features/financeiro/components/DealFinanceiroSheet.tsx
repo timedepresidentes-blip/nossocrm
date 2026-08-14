@@ -5,7 +5,8 @@ import { useUpdateDeal } from '@/lib/query/hooks/useDealsQuery';
 import { useToast } from '@/context/ToastContext';
 import { cn } from '@/lib/utils';
 import { X, Plus, Trash2, Save, TrendingUp, TrendingDown, DollarSign, Percent, CheckCircle2, XCircle, AlertTriangle, Wallet, Pencil } from 'lucide-react';
-import { CustosPagos } from '@/lib/supabase/dealCosts';
+import { CustosPagos, calcNfCost } from '@/lib/supabase/dealCosts';
+import { orgSettingsService, OrgCostSettings } from '@/lib/supabase/orgSettings';
 
 interface Props {
   deal: Deal | null;
@@ -137,10 +138,11 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
   const { addToast } = useToast();
   const updateDeal = useUpdateDeal();
 
+  const [orgCfg, setOrgCfg] = useState<OrgCostSettings | null>(null);
   const [custoNf, setCustoNf] = useState<number | undefined>(undefined);
-  const [custoNfTipo, setCustoNfTipo] = useState<string>('fixo');
+  const [custoNfTipo, setCustoNfTipo] = useState<'kit' | 'servico' | 'cliente'>('kit');
   const [custoEngenharia, setCustoEngenharia] = useState<number | undefined>(undefined);
-  const [custoInstalacao, setCustoInstalacao] = useState<number | undefined>(undefined);
+  const [custoInstalacao, setCustoInstalacao] = useState<number>(0);
   const [custoCorrugado, setCustoCorrugado] = useState<number | undefined>(undefined);
   const [custoEletroduto, setCustoEletroduto] = useState<number | undefined>(undefined);
   const [custoFornecedor, setCustoFornecedor] = useState<number | undefined>(undefined);
@@ -152,12 +154,29 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
   const [receita, setReceita] = useState<number>(0);
   const [saving, setSaving] = useState(false);
 
+  const recalcNf = useCallback((
+    tipo: 'kit' | 'servico' | 'cliente',
+    forn: number | undefined,
+    cfg: OrgCostSettings | null,
+    receitaVal: number,
+  ): number | undefined => {
+    if (!cfg) return undefined;
+    return calcNfCost(receitaVal, tipo, cfg, forn ?? 0);
+  }, []);
+
+  useEffect(() => {
+    void orgSettingsService.getCostSettings().then(r => { if (r.data) setOrgCfg(r.data); });
+  }, []);
+
   useEffect(() => {
     if (!deal) return;
     setCustoNf(deal.custoNf);
-    setCustoNfTipo(deal.custoNfTipo || 'fixo');
+    const tipoValido = (['kit', 'servico', 'cliente'] as const).includes(deal.custoNfTipo as 'kit' | 'servico' | 'cliente')
+      ? deal.custoNfTipo as 'kit' | 'servico' | 'cliente'
+      : 'kit';
+    setCustoNfTipo(tipoValido);
     setCustoEngenharia(deal.custoEngenharia);
-    setCustoInstalacao(deal.custoInstalacao);
+    setCustoInstalacao(deal.custoInstalacao ?? 0);
     setCustoCorrugado(deal.custoCorrugado);
     setCustoEletroduto(deal.custoEletroduto);
     setCustoFornecedor(deal.custoFornecedor);
@@ -396,15 +415,31 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
             </div>
             <select
               value={custoNfTipo}
-              onChange={e => setCustoNfTipo(e.target.value)}
+              onChange={e => {
+                const tipo = e.target.value as 'kit' | 'servico' | 'cliente';
+                setCustoNfTipo(tipo);
+                const nfRecalc = recalcNf(tipo, custoFornecedor, orgCfg, receita);
+                if (nfRecalc !== undefined) setCustoNf(Math.round(nfRecalc * 100) / 100);
+              }}
               className="text-xs bg-dark-card border border-white/10 rounded px-1.5 py-1 text-slate-400 focus:outline-none"
             >
-              <option value="fixo">R$ fixo</option>
-              <option value="percentual">%</option>
+              <option value="kit">Kit (4%)</option>
+              <option value="servico">Serviço s/ kit (6%)</option>
+              <option value="cliente">NF ao cliente (6%)</option>
             </select>
           </div>
 
-          <FieldRow label="Fornecedor (equipamentos)" value={custoFornecedor} onChange={setCustoFornecedor} pago={custosPagos.fornecedor} onTogglePago={() => togglePago('fornecedor')} />
+          <FieldRow
+            label="Fornecedor (equipamentos)"
+            value={custoFornecedor}
+            onChange={v => {
+              setCustoFornecedor(v);
+              const nfRecalc = recalcNf(custoNfTipo, v, orgCfg, receita);
+              if (nfRecalc !== undefined) setCustoNf(Math.round(nfRecalc * 100) / 100);
+            }}
+            pago={custosPagos.fornecedor}
+            onTogglePago={() => togglePago('fornecedor')}
+          />
           <div className="flex items-center justify-between py-2 border-b border-white/5">
             <span className="text-xs text-slate-400">Voucher banco (%)</span>
             <div className="flex items-center gap-1">
@@ -424,7 +459,13 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
             </div>
           </div>
           <FieldRow label="Engenharia / Projeto" value={custoEngenharia} onChange={setCustoEngenharia} pago={custosPagos.engenharia} onTogglePago={() => togglePago('engenharia')} />
-          <FieldRow label={`Instalação${kwp ? ` (${kwp} kWp)` : ''}`} value={custoInstalacao} onChange={setCustoInstalacao} pago={custosPagos.instalacao} onTogglePago={() => togglePago('instalacao')} />
+          <FieldRow
+            label={`Instalação${kwp ? ` (${kwp} kWp × R$${orgCfg?.custoInstalacaoPorKwp ?? 190}/kWp)` : ''}`}
+            value={custoInstalacao}
+            onChange={setCustoInstalacao}
+            pago={custosPagos.instalacao}
+            onTogglePago={() => togglePago('instalacao')}
+          />
           <FieldRow label="ART" value={custoArt} onChange={setCustoArt} pago={custosPagos.art} onTogglePago={() => togglePago('art')} />
           <FieldRow label="Corrugado" value={custoCorrugado} onChange={setCustoCorrugado} pago={custosPagos.corrugado} onTogglePago={() => togglePago('corrugado')} />
           <FieldRow label="Eletroduto" value={custoEletroduto} onChange={setCustoEletroduto} pago={custosPagos.eletroduto} onTogglePago={() => togglePago('eletroduto')} />
