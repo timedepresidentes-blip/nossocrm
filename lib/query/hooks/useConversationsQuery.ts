@@ -446,10 +446,10 @@ export function useMarkConversationRead() {
 
   return useMutation({
     mutationFn: async (conversationId: string) => {
-      const { error } = await supabase
-        .from('messaging_conversations')
-        .update({ unread_count: 0 })
-        .eq('id', conversationId);
+      // RPC com SECURITY DEFINER: contorna RLS que bloqueia update direto
+      const { error } = await supabase.rpc('mark_conversation_read', {
+        p_conversation_id: conversationId,
+      });
 
       if (error) throw error;
       return conversationId;
