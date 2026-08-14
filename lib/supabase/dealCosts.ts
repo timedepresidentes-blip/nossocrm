@@ -13,7 +13,7 @@ export type CustosPagos = {
 
 export interface DealCostData {
   custoNf: number;
-  custoNfTipo: 'kit' | 'servico';
+  custoNfTipo: 'kit' | 'servico' | 'cliente';
   custoArt: number;
   custoEngenharia: number;
   custoInstalacao: number;
@@ -53,7 +53,7 @@ export const dealCostsService = {
       return {
         data: {
           custoNf: Number(row.custo_nf ?? 0),
-          custoNfTipo: (row.custo_nf_tipo === 'servico' ? 'servico' : 'kit') as 'kit' | 'servico',
+          custoNfTipo: (['servico', 'cliente'].includes(row.custo_nf_tipo) ? row.custo_nf_tipo : 'kit') as 'kit' | 'servico' | 'cliente',
           custoArt: Number(row.custo_art ?? 0),
           custoEngenharia: Number(row.custo_engenharia ?? 0),
           custoInstalacao: Number(row.custo_instalacao ?? 0),
@@ -122,21 +122,24 @@ export function calcComissaoPct(kwp: number, cfg: { custoComissaoPct: number; cu
 }
 
 /** Calcula o custo de NF
- *  - kit:     valorVenda × pct%
- *  - servico: (valorVenda − custoFornecedor) × pct%  (NF apenas sobre a diferença)
+ *  - kit:     valorVenda × custoNfKitPct%      (NF sobre kit completo)
+ *  - servico: (valorVenda − fornecedor) × 6%   (NF só sobre serviço, fornecedor sem NF)
+ *  - cliente: valorVenda × custoNfServicoPct%   (NF de serviço emitida ao cliente, base = total)
  */
 export function calcNfCost(
   valorVenda: number,
-  tipo: 'kit' | 'servico',
+  tipo: 'kit' | 'servico' | 'cliente',
   cfg: { custoNfKitPct: number; custoNfServicoPct: number },
   custoFornecedor?: number,
 ): number {
-  const pct = tipo === 'servico' ? cfg.custoNfServicoPct : cfg.custoNfKitPct;
   if (tipo === 'servico') {
     const base = Math.max(0, valorVenda - (custoFornecedor ?? 0));
-    return base * (pct / 100);
+    return base * (cfg.custoNfServicoPct / 100);
   }
-  return valorVenda * (pct / 100);
+  if (tipo === 'cliente') {
+    return valorVenda * (cfg.custoNfServicoPct / 100);
+  }
+  return valorVenda * (cfg.custoNfKitPct / 100);
 }
 
 /** Calcula totais a partir dos dados de custo e valor de venda */

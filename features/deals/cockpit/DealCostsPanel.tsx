@@ -74,7 +74,7 @@ export const DealCostsPanel: React.FC<Props> = ({ dealId, valorVenda, kwp }) => 
     });
   }, [orgCfg, kwp, recalc]);
 
-  const setNfTipo = (tipo: 'kit' | 'servico') => {
+  const setNfTipo = (tipo: 'kit' | 'servico' | 'cliente') => {
     setCosts((prev) => recalc({ ...prev, custoNfTipo: tipo }, orgCfg));
   };
 
@@ -136,17 +136,19 @@ export const DealCostsPanel: React.FC<Props> = ({ dealId, valorVenda, kwp }) => 
       {/* Tipo de NF */}
       <div>
         <div className="text-[10px] text-slate-500 mb-1">Tipo de NF</div>
-        <div className="flex gap-2">
-          {(['kit', 'servico'] as const).map((tipo) => (
-            <button key={tipo} type="button" onClick={() => setNfTipo(tipo)}
-              className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-semibold transition-colors ${
-                costs.custoNfTipo === tipo
+        <div className="flex gap-1.5">
+          {([
+            { value: 'kit',     label: `Kit total (${PCT(orgCfg?.custoNfKitPct ?? 4)})` },
+            { value: 'servico', label: `Serviço s/ kit (${PCT(orgCfg?.custoNfServicoPct ?? 6)})` },
+            { value: 'cliente', label: `NF ao cliente (${PCT(orgCfg?.custoNfServicoPct ?? 6)})` },
+          ] as const).map(({ value, label }) => (
+            <button key={value} type="button" onClick={() => setNfTipo(value)}
+              className={`flex-1 rounded-lg border px-1.5 py-1.5 text-[10px] font-semibold transition-colors ${
+                costs.custoNfTipo === value
                   ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-200'
                   : 'border-white/10 bg-white/3 text-slate-400 hover:bg-white/5'
               }`}>
-              {tipo === 'kit'
-                ? `Kit total (${PCT(orgCfg?.custoNfKitPct ?? 4)})`
-                : `Só serviço (${PCT(orgCfg?.custoNfServicoPct ?? 6)})`}
+              {label}
             </button>
           ))}
         </div>

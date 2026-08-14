@@ -34,7 +34,7 @@ export async function autoFillDealCosts(dealId: string): Promise<void> {
   const exFornecedor = Number(row.custo_fornecedor ?? 0);
   const exExtras: { descricao: string; valor: number }[] = Array.isArray(row.custos_extras) ? row.custos_extras : [];
   const exComissao = Number(row.comissao_valor ?? 0);
-  const nfTipo = (row.custo_nf_tipo === 'servico' ? 'servico' : 'kit') as 'kit' | 'servico';
+  const nfTipo = (['servico', 'cliente'].includes(row.custo_nf_tipo) ? row.custo_nf_tipo : 'kit') as 'kit' | 'servico' | 'cliente';
 
   const { data: cfg } = await orgSettingsService.getCostSettings();
   if (!cfg) return;
