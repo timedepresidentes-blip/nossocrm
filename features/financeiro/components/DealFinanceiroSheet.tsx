@@ -140,6 +140,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
   const [custoNf, setCustoNf] = useState<number | undefined>(undefined);
   const [custoNfTipo, setCustoNfTipo] = useState<string>('fixo');
   const [custoEngenharia, setCustoEngenharia] = useState<number | undefined>(undefined);
+  const [custoInstalacao, setCustoInstalacao] = useState<number | undefined>(undefined);
   const [custoCorrugado, setCustoCorrugado] = useState<number | undefined>(undefined);
   const [custoEletroduto, setCustoEletroduto] = useState<number | undefined>(undefined);
   const [custoFornecedor, setCustoFornecedor] = useState<number | undefined>(undefined);
@@ -156,6 +157,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
     setCustoNf(deal.custoNf);
     setCustoNfTipo(deal.custoNfTipo || 'fixo');
     setCustoEngenharia(deal.custoEngenharia);
+    setCustoInstalacao(deal.custoInstalacao);
     setCustoCorrugado(deal.custoCorrugado);
     setCustoEletroduto(deal.custoEletroduto);
     setCustoFornecedor(deal.custoFornecedor);
@@ -179,6 +181,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
   const custoTotalCalc =
     (custoNf || 0) +
     (custoEngenharia || 0) +
+    (custoInstalacao || 0) +
     (custoCorrugado || 0) +
     (custoEletroduto || 0) +
     custoFornecedorEfetivo +
@@ -194,6 +197,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
     (custosPagos.nf         ? (custoNf || 0) : 0) +
     (custosPagos.fornecedor ? custoFornecedorEfetivo : 0) +
     (custosPagos.engenharia ? (custoEngenharia || 0) : 0) +
+    (custosPagos.instalacao ? (custoInstalacao || 0) : 0) +
     (custosPagos.art        ? (custoArt || 0) : 0) +
     (custosPagos.corrugado  ? (custoCorrugado || 0) : 0) +
     (custosPagos.eletroduto ? (custoEletroduto || 0) : 0) +
@@ -207,6 +211,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
     { key: 'nf' as const,         val: custoNf },
     { key: 'fornecedor' as const,  val: custoFornecedor },
     { key: 'engenharia' as const,  val: custoEngenharia },
+    { key: 'instalacao' as const,  val: custoInstalacao },
     { key: 'art' as const,         val: custoArt },
     { key: 'corrugado' as const,   val: custoCorrugado },
     { key: 'eletroduto' as const,  val: custoEletroduto },
@@ -255,6 +260,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
           custoNf,
           custoNfTipo,
           custoEngenharia,
+          custoInstalacao,
           custoCorrugado,
           custoEletroduto,
           custoFornecedor,
@@ -418,6 +424,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
             </div>
           </div>
           <FieldRow label="Engenharia / Projeto" value={custoEngenharia} onChange={setCustoEngenharia} pago={custosPagos.engenharia} onTogglePago={() => togglePago('engenharia')} />
+          <FieldRow label={`Instalação${kwp ? ` (${kwp} kWp)` : ''}`} value={custoInstalacao} onChange={setCustoInstalacao} pago={custosPagos.instalacao} onTogglePago={() => togglePago('instalacao')} />
           <FieldRow label="ART" value={custoArt} onChange={setCustoArt} pago={custosPagos.art} onTogglePago={() => togglePago('art')} />
           <FieldRow label="Corrugado" value={custoCorrugado} onChange={setCustoCorrugado} pago={custosPagos.corrugado} onTogglePago={() => togglePago('corrugado')} />
           <FieldRow label="Eletroduto" value={custoEletroduto} onChange={setCustoEletroduto} pago={custosPagos.eletroduto} onTogglePago={() => togglePago('eletroduto')} />

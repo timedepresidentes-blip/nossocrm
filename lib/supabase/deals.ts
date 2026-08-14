@@ -108,6 +108,7 @@ export interface DbDeal {
   custo_nf: number | null;
   custo_nf_tipo: string | null;
   custo_engenharia: number | null;
+  custo_instalacao: number | null;
   custo_corrugado: number | null;
   custo_eletroduto: number | null;
   custo_fornecedor: number | null;
@@ -196,6 +197,7 @@ const transformDeal = (db: DbDeal | DbDealWithItems, items?: DbDealItem[]): Deal
     custoNf: (db as any).custo_nf ?? undefined,
     custoNfTipo: (db as any).custo_nf_tipo || undefined,
     custoEngenharia: (db as any).custo_engenharia ?? undefined,
+    custoInstalacao: (db as any).custo_instalacao ?? undefined,
     custoCorrugado: (db as any).custo_corrugado ?? undefined,
     custoEletroduto: (db as any).custo_eletroduto ?? undefined,
     custoFornecedor: (db as any).custo_fornecedor ?? undefined,
@@ -264,6 +266,7 @@ const transformDealToDb = (deal: Partial<Deal>): Partial<DbDeal> => {
   if (deal.custoNf !== undefined) (db as any).custo_nf = deal.custoNf;
   if (deal.custoNfTipo !== undefined) (db as any).custo_nf_tipo = deal.custoNfTipo;
   if (deal.custoEngenharia !== undefined) (db as any).custo_engenharia = deal.custoEngenharia;
+  if (deal.custoInstalacao !== undefined) (db as any).custo_instalacao = deal.custoInstalacao;
   if (deal.custoCorrugado !== undefined) (db as any).custo_corrugado = deal.custoCorrugado;
   if (deal.custoEletroduto !== undefined) (db as any).custo_eletroduto = deal.custoEletroduto;
   if (deal.custoFornecedor !== undefined) (db as any).custo_fornecedor = deal.custoFornecedor;

@@ -4,6 +4,7 @@ export type CustosPagos = {
   nf?: boolean;
   fornecedor?: boolean;
   engenharia?: boolean;
+  instalacao?: boolean;
   art?: boolean;
   corrugado?: boolean;
   eletroduto?: boolean;

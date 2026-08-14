@@ -291,6 +291,7 @@ export interface Deal {
   custoNf?: number;                     // Custo da nota fiscal
   custoNfTipo?: string;                 // Tipo NF (ex: "percentual", "fixo")
   custoEngenharia?: number;             // Custo de engenharia/projeto
+  custoInstalacao?: number;             // Custo de instalação (kWp × R$/kWp)
   custoCorrugado?: number;              // Custo de corrugado
   custoEletroduto?: number;             // Custo de eletroduto
   custoFornecedor?: number;             // Custo do fornecedor (equipamentos)
@@ -300,6 +301,7 @@ export interface Deal {
     nf?: boolean;
     fornecedor?: boolean;
     engenharia?: boolean;
+    instalacao?: boolean;
     art?: boolean;
     corrugado?: boolean;
     eletroduto?: boolean;
