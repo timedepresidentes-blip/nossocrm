@@ -1,11 +1,12 @@
 'use client';
 import React, { useState, useMemo, Component } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDeals } from '@/lib/query/hooks/useDealsQuery';
 import { DEALS_VIEW_KEY, queryKeys } from '@/lib/query/queryKeys';
 import { Deal } from '@/types';
 import { DealFinanceiroSheet } from './components/DealFinanceiroSheet';
 import { autoFillDealCosts } from '@/lib/supabase/autoFillDealCosts';
+import { boardsService, boardStagesService, dealsService } from '@/lib/supabase';
 import { TrendingUp, TrendingDown, DollarSign, Percent, BarChart3, ChevronRight, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -121,15 +122,37 @@ function FinanceiroPageContent() {
 
   const { start, end } = useMemo(() => getRange(periodo), [periodo]);
 
+  // Busca estágios e boards para detectar "ganho" além de is_won
+  const { data: allBoards = [] } = useQuery({
+    queryKey: ['financeiro-boards'],
+    queryFn: async () => { const r = await boardsService.getAll(); return r.data || []; },
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: allStages = [] } = useQuery({
+    queryKey: ['financeiro-stages'],
+    queryFn: async () => { const r = await boardStagesService.getAll(); return r.data || []; },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // IDs de estágios que representam "ganho" — via won_stage_id do board ou linked_lifecycle_stage
+  const wonStageIds = useMemo(() => {
+    const ids = new Set<string>();
+    allBoards.forEach(b => { if (b.wonStageId) ids.add(b.wonStageId); });
+    allStages.filter(s => s.linked_lifecycle_stage === 'CUSTOMER').forEach(s => ids.add(s.id));
+    return ids;
+  }, [allBoards, allStages]);
+
   const wonDeals = useMemo(() => {
     return allDeals.filter(d => {
-      if (!d.isWon) return false;
-      const ref = d.closedAt || d.updatedAt;
+      // Inclui: is_won=true OU no estágio de ganho OU com contrato assinado
+      const isConsideredWon = d.isWon || wonStageIds.has(d.status) || !!d.contratoAssinado;
+      if (!isConsideredWon) return false;
+      const ref = d.closedAt || d.contratoAssinadoAt || d.updatedAt;
       if (!ref) return false;
       const dt = new Date(ref);
       return dt >= start && dt <= end;
     });
-  }, [allDeals, start, end]);
+  }, [allDeals, wonStageIds, start, end]);
 
   // Métricas agregadas
   const totais = useMemo(() => {
@@ -146,12 +169,36 @@ function FinanceiroPageContent() {
     return { receita, custos, lucro, margem, kwpTotal, comDetalhe };
   }, [wonDeals]);
 
-  const semFinanceiro = wonDeals.filter(d => !d.custoFornecedor && !d.custoNf && !d.custoTotal);
+  const semFinanceiro = wonDeals.filter(d => {
+    // Sem nenhum custo lançado
+    if (!d.custoFornecedor && !d.custoNf && !d.custoTotal) return true;
+    // Tem kWp mas custo de instalação zerado (ex: importação antes de salvar ficha)
+    const kwp = Number(d.fichaCliente?.potenciaKwp ?? 0);
+    const custoInstalacao = Number(d.custoInstalacao ?? 0);
+    if (kwp > 0 && custoInstalacao === 0) return true;
+    return false;
+  });
 
   const handleSincronizarTodos = async () => {
     setSyncing(true);
+    // Corrige is_won=false para deals em estágio de ganho ou com contrato assinado
+    const dealsComIsWonErrado = allDeals.filter(d =>
+      !d.isWon && (wonStageIds.has(d.status) || !!d.contratoAssinado)
+    );
+    if (dealsComIsWonErrado.length > 0) {
+      const now = new Date().toISOString();
+      await Promise.allSettled(dealsComIsWonErrado.map(d =>
+        dealsService.update(d.id, {
+          isWon: true,
+          isLost: false,
+          closedAt: d.closedAt || now,
+        })
+      ));
+    }
+    // Preenche custos automáticos para vendas sem financeiro
     await Promise.allSettled(semFinanceiro.map(d => autoFillDealCosts(d.id)));
     await queryClient.invalidateQueries({ queryKey: DEALS_VIEW_KEY });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.deals.lists() });
     setSyncing(false);
   };
 
@@ -228,8 +275,8 @@ function FinanceiroPageContent() {
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>
-                <strong>{semFinanceiro.length}</strong> venda{semFinanceiro.length > 1 ? 's' : ''} sem custos lançados.
-                Clique na venda para editar manualmente ou sincronize com os padrões da organização.
+                <strong>{semFinanceiro.length}</strong> venda{semFinanceiro.length > 1 ? 's' : ''} com custos incompletos ou a sincronizar.
+                Clique em &quot;Sincronizar&quot; para preencher automaticamente.
               </span>
             </div>
             <button

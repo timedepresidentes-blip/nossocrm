@@ -259,6 +259,8 @@ export interface Deal {
   isWon: boolean; // Deal foi ganho?
   isLost: boolean; // Deal foi perdido?
   closedAt?: string; // Quando foi fechado
+  contratoAssinado?: boolean; // Contrato foi assinado (via FichaClientePanel)
+  contratoAssinadoAt?: string;
   createdAt: string;
   updatedAt: string;
   probability: number;

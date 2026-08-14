@@ -210,6 +210,8 @@ const transformDeal = (db: DbDeal | DbDealWithItems, items?: DbDealItem[]): Deal
     lucroBruto: (db as any).lucro_bruto ?? undefined,
     margemPct: (db as any).margem_pct ?? undefined,
     projetoTimeline: (db as any).projeto_timeline ?? undefined,
+    contratoAssinado: db.contrato_assinado ?? undefined,
+    contratoAssinadoAt: db.contrato_assinado_at || undefined,
     createdAt: db.created_at,
     updatedAt: db.updated_at,
     items: filteredItems.map(i => ({
