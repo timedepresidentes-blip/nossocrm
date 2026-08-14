@@ -21,7 +21,7 @@ import { ConfirmDialog as ConfirmModal } from '@/components/ui/confirm-dialog';
 import { LossReasonModal } from '@/components/ui/LossReasonModal';
 import { useMoveDealSimple } from '@/lib/query/hooks';
 import { useLabels, useAssignLabel } from '@/lib/query/hooks/useLabelsQuery';
-import { queryKeys } from '@/lib/query';
+import { DEALS_VIEW_KEY } from '@/lib/query';
 import { FocusTrap, useFocusReturn } from '@/lib/a11y';
 import { Activity, DealView } from '@/types';
 import { usePersistedState } from '@/hooks/usePersistedState';
@@ -114,12 +114,10 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const { addToast } = useToast();
   const router = useRouter();
 
-  // Usa a MESMA query key que useDealsByBoard para ler do mesmo slot de cache.
-  // useDealsByBoard armazena em [...lists(), 'view', roleScope]; DEALS_VIEW_KEY não tem roleScope
-  // e ficava em um slot diferente, fazendo allDeals sempre vazio e o modal nunca abrindo.
-  const roleScope = profile?.role === 'vendedor' ? profile.id : 'all';
+  // Subscribe to DEALS_VIEW_KEY — única fonte de verdade compartilhada por
+  // useDealsByBoard, Realtime sync e useMoveDeal.
   const { data: allDeals = [] } = useQuery<DealView[]>({
-    queryKey: [...queryKeys.deals.lists(), 'view', roleScope],
+    queryKey: DEALS_VIEW_KEY,
     queryFn: () => [] as DealView[], // never called — enabled: false
     enabled: false, // não faz fetch — dado já está no cache pelo useDealsByBoard do Kanban
   });

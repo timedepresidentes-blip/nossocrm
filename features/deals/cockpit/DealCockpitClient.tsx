@@ -1867,7 +1867,7 @@ export default function DealCockpitClient({ dealId }: { dealId?: string }) {
             <DealCostsPanel
               dealId={deal.id}
               valorVenda={deal.value ?? 0}
-              kwp={(deal.aiExtracted as any)?.kwp ?? undefined}
+              kwp={(deal.fichaCliente as any)?.potenciaKwp ?? (deal.aiExtracted as any)?.kwp ?? undefined}
             />
 
             <FichaClientePanel

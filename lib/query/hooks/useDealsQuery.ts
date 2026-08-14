@@ -131,13 +131,10 @@ export const useDeals = (filters?: DealsFilters, options?: { enabled?: boolean }
 export const useDealsView = (filters?: DealsFilters) => {
   const { user, profile, loading: authLoading } = useAuth();
 
-  // Scope a query key para evitar conflito de cache entre papéis
-  const roleScope = profile?.role === 'vendedor' ? profile.id : 'all';
-
   return useQuery<DealView[]>({
     queryKey: filters
-      ? [...queryKeys.deals.list(filters as Record<string, unknown>), 'view', roleScope]
-      : [...queryKeys.deals.lists(), 'view', roleScope],
+      ? [...queryKeys.deals.list(filters as Record<string, unknown>), 'view']
+      : DEALS_VIEW_KEY,
     queryFn: async ({ signal }) => {
       let deals = await dealsViewQueryFn({ signal });
 
@@ -197,7 +194,7 @@ export const useDealsByBoard = (boardId: string) => {
   const { user, profile, loading: authLoading } = useAuth();
   const selectForBoard = useMemo(() => {
     const filterByBoard = makeSelectByBoard(boardId);
-    // Vendedor vê apenas seus próprios leads no kanban
+    // Vendedor vê apenas seus próprios leads no kanban (filtro client-side)
     return (data: DealView[]) => {
       const scoped = profile?.role === 'vendedor'
         ? data.filter(d => d.ownerId === profile.id)
@@ -206,11 +203,11 @@ export const useDealsByBoard = (boardId: string) => {
     };
   }, [boardId, profile?.role, profile?.id]);
 
-  const roleScope = profile?.role === 'vendedor' ? profile.id : 'all';
-
   return useQuery<DealView[], Error, DealView[]>({
-    // Query key com roleScope para não misturar cache entre papéis
-    queryKey: [...queryKeys.deals.lists(), 'view', roleScope],
+    // Usa DEALS_VIEW_KEY — mesma chave que Realtime, useMoveDeal e DealDetailModal.
+    // roleScope foi removido da key: o RLS do Supabase já filtra por usuário no DB;
+    // o select() acima aplica filtro adicional de vendedor no client-side.
+    queryKey: DEALS_VIEW_KEY,
     queryFn: ({ signal }) => dealsViewQueryFn({ signal }),
     select: selectForBoard,
     staleTime: 2 * 60 * 1000,

@@ -248,6 +248,7 @@ const DealCardComponent: React.FC<DealCardProps> = ({
                 className="w-5 h-5 rounded-full ring-1 ring-white dark:ring-slate-800"
                 title={`Responsável: ${deal.owner.name}`}
                 unoptimized
+                draggable={false}
               />
             ) : (
               <div
