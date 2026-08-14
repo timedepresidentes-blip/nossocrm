@@ -166,7 +166,18 @@ export const FichaClientePanel: React.FC<Props> = ({
         setFicha(body.ficha);
         if (body.ficha.valorTotal || body.ficha.nomeCompleto) setContratoAssinado(true);
         if (contactId) await applyVendaLabel(contactId);
-        if (dealId) autoFillDealCosts(dealId).catch(console.warn);
+        if (dealId && supabase) {
+          // Salva ficha no DB ANTES de chamar autoFillDealCosts
+          // (autoFill lê ficha_cliente do banco; sem isso potenciaKwp chegaria 0)
+          const fichaUpdates: Record<string, unknown> = { ficha_cliente: body.ficha, updated_at: new Date().toISOString() };
+          if (body.ficha.valorTotal) {
+            const raw = String(body.ficha.valorTotal).replace(/[R$\s.]/g, '').replace(',', '.');
+            const n = parseFloat(raw);
+            if (!isNaN(n) && n > 0) fichaUpdates.value = n;
+          }
+          await supabase.from('deals').update(fichaUpdates).eq('id', dealId);
+          autoFillDealCosts(dealId).catch(console.warn);
+        }
         setPdfExtractMsg('ok');
       } else {
         const msg = body.error?.message || `HTTP ${res.status}`;
@@ -238,24 +249,37 @@ export const FichaClientePanel: React.FC<Props> = ({
           ? Math.round(numPaineis * painelW / 1000 * 100) / 100
           : o.potencia_kwp ?? null;
 
-      setFicha(prev => ({
-        ...prev,
-        nomeCompleto:     o.cliente_nome          ?? prev.nomeCompleto,
-        telefone:         o.cliente_telefone      ?? prev.telefone,
-        enderecoCidade:   o.cliente_cidade        ?? prev.enderecoCidade,
-        instalacaoCidade: o.cliente_cidade        ?? prev.instalacaoCidade,
+      const fichaAtualizada = {
+        ...ficha,
+        nomeCompleto:     o.cliente_nome          ?? ficha.nomeCompleto,
+        telefone:         o.cliente_telefone      ?? ficha.telefone,
+        enderecoCidade:   o.cliente_cidade        ?? ficha.enderecoCidade,
+        instalacaoCidade: o.cliente_cidade        ?? ficha.instalacaoCidade,
         potenciaKwp,
         numPaineis,
         potenciaPainelW:  painelW,
-        modeloPainel:     o.modelo_painel         ?? prev.modeloPainel,
-        modeloInversor:   o.modelo_inversor       ?? prev.modeloInversor,
-        tipoInversor:     o.tipo_inversor         ?? prev.tipoInversor,
-        qtdInversores:    o.qtd_inversores        ?? prev.qtdInversores,
-        tipoEstrutura:    o.tipo_estrutura        ?? prev.tipoEstrutura,
-        valorTotal:       o.valor_final           ?? prev.valorTotal,
-        formaPagamento:   o.forma_pagamento       ?? prev.formaPagamento,
-        distribuidora:    o.distribuidora_nome    ?? prev.distribuidora,
-      }));
+        modeloPainel:     o.modelo_painel         ?? ficha.modeloPainel,
+        modeloInversor:   o.modelo_inversor       ?? ficha.modeloInversor,
+        tipoInversor:     o.tipo_inversor         ?? ficha.tipoInversor,
+        qtdInversores:    o.qtd_inversores        ?? ficha.qtdInversores,
+        tipoEstrutura:    o.tipo_estrutura        ?? ficha.tipoEstrutura,
+        valorTotal:       o.valor_final           ?? ficha.valorTotal,
+        formaPagamento:   o.forma_pagamento       ?? ficha.formaPagamento,
+        distribuidora:    o.distribuidora_nome    ?? ficha.distribuidora,
+      };
+      setFicha(fichaAtualizada);
+
+      // Salva no DB e recalcula custos (incluindo instalação via potenciaKwp)
+      if (dealId && supabase) {
+        const fichaUpdates: Record<string, unknown> = { ficha_cliente: fichaAtualizada, updated_at: new Date().toISOString() };
+        if (fichaAtualizada.valorTotal) {
+          const raw = String(fichaAtualizada.valorTotal).replace(/[R$\s.]/g, '').replace(',', '.');
+          const n = parseFloat(raw);
+          if (!isNaN(n) && n > 0) fichaUpdates.value = n;
+        }
+        await supabase.from('deals').update(fichaUpdates).eq('id', dealId);
+        autoFillDealCosts(dealId).catch(console.warn);
+      }
       setOrcMsg('ok');
     } catch (e: unknown) {
       setOrcError(e instanceof Error ? e.message : 'Erro inesperado');
@@ -315,17 +339,48 @@ export const FichaClientePanel: React.FC<Props> = ({
     if (!supabase || !dealId) return;
     setMarcandoContrato(true);
     const agora = new Date().toISOString();
-    await supabase
+
+    // Descobre o estágio GANHO do board para sincronizar o status do deal
+    let wonStageId: string | null = null;
+    const { data: dealRow } = await supabase
       .from('deals')
-      .update({
-        contrato_assinado: true,
-        contrato_assinado_at: agora,
-        is_won: true,
-        is_lost: false,
-        closed_at: agora,
-        updated_at: agora,
-      })
-      .eq('id', dealId);
+      .select('board_id')
+      .eq('id', dealId)
+      .maybeSingle();
+
+    if (dealRow?.board_id) {
+      const { data: boardRow } = await supabase
+        .from('boards')
+        .select('won_stage_id')
+        .eq('id', dealRow.board_id)
+        .maybeSingle();
+
+      if (boardRow?.won_stage_id) {
+        wonStageId = boardRow.won_stage_id;
+      } else {
+        // Fallback: busca estágio com linked_lifecycle_stage = 'CUSTOMER'
+        const { data: stageRow } = await supabase
+          .from('board_stages')
+          .select('id')
+          .eq('board_id', dealRow.board_id)
+          .eq('linked_lifecycle_stage', 'CUSTOMER')
+          .limit(1)
+          .maybeSingle();
+        wonStageId = stageRow?.id ?? null;
+      }
+    }
+
+    const updates: Record<string, unknown> = {
+      contrato_assinado: true,
+      contrato_assinado_at: agora,
+      is_won: true,
+      is_lost: false,
+      closed_at: agora,
+      updated_at: agora,
+    };
+    if (wonStageId) updates.status = wonStageId;
+
+    await supabase.from('deals').update(updates).eq('id', dealId);
     if (contactId) await applyVendaLabel(contactId);
     if (dealId) autoFillDealCosts(dealId).catch(console.warn);
     setContratoAssinado(true);
