@@ -21,7 +21,7 @@ import { ConfirmDialog as ConfirmModal } from '@/components/ui/confirm-dialog';
 import { LossReasonModal } from '@/components/ui/LossReasonModal';
 import { useMoveDealSimple } from '@/lib/query/hooks';
 import { useLabels, useAssignLabel } from '@/lib/query/hooks/useLabelsQuery';
-import { DEALS_VIEW_KEY } from '@/lib/query';
+import { queryKeys } from '@/lib/query';
 import { FocusTrap, useFocusReturn } from '@/lib/a11y';
 import { Activity, DealView } from '@/types';
 import { usePersistedState } from '@/hooks/usePersistedState';
@@ -114,13 +114,14 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const { addToast } = useToast();
   const router = useRouter();
 
-  // Subscribe to the same cache the Kanban uses (DEALS_VIEW_KEY).
-  // This ensures newly-created deals (written there by the optimistic insert in CRMContext.addDeal)
-  // are immediately visible to the modal, without waiting for Realtime to update ['deals', 'list'].
+  // Usa a MESMA query key que useDealsByBoard para ler do mesmo slot de cache.
+  // useDealsByBoard armazena em [...lists(), 'view', roleScope]; DEALS_VIEW_KEY não tem roleScope
+  // e ficava em um slot diferente, fazendo allDeals sempre vazio e o modal nunca abrindo.
+  const roleScope = profile?.role === 'vendedor' ? profile.id : 'all';
   const { data: allDeals = [] } = useQuery<DealView[]>({
-    queryKey: DEALS_VIEW_KEY,
-    queryFn: () => [] as DealView[], // never called — enabled: false; queryFn required by TanStack Query v5
-    enabled: false, // don't trigger a new fetch — data is always hydrated by the Kanban's useDealsByBoard
+    queryKey: [...queryKeys.deals.lists(), 'view', roleScope],
+    queryFn: () => [] as DealView[], // never called — enabled: false
+    enabled: false, // não faz fetch — dado já está no cache pelo useDealsByBoard do Kanban
   });
 
   // Performance: avoid repeated `find(...)` on large arrays.
