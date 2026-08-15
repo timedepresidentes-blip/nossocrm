@@ -7,7 +7,7 @@ import { Deal } from '@/types';
 import { DealFinanceiroSheet } from './components/DealFinanceiroSheet';
 import { autoFillDealCosts } from '@/lib/supabase/autoFillDealCosts';
 import { boardsService, boardStagesService, dealsService } from '@/lib/supabase';
-import { TrendingUp, TrendingDown, DollarSign, Percent, BarChart3, ChevronRight, AlertTriangle, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Percent, BarChart3, ChevronRight, AlertTriangle, RefreshCw, CheckCircle2, Trash2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 class FinanceiroDebugBoundary extends Component<
@@ -119,6 +119,8 @@ function FinanceiroPageContent() {
   const [periodo, setPeriodo] = useState<Periodo>('all');
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   const { start, end } = useMemo(() => getRange(periodo), [periodo]);
 
@@ -200,6 +202,24 @@ function FinanceiroPageContent() {
     await queryClient.invalidateQueries({ queryKey: DEALS_VIEW_KEY });
     await queryClient.invalidateQueries({ queryKey: queryKeys.deals.lists() });
     setSyncing(false);
+  };
+
+  const PERDIDO_STAGE_ID = 'bed08225-faef-4fee-8561-27066ad20815';
+
+  const handleRemoverDoFinanceiro = async (dealId: string) => {
+    setRemovingId(dealId);
+    setConfirmRemoveId(null);
+    try {
+      await dealsService.update(dealId, {
+        isWon: false,
+        isLost: true,
+        status: PERDIDO_STAGE_ID,
+      });
+      await queryClient.invalidateQueries({ queryKey: DEALS_VIEW_KEY });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.deals.lists() });
+    } finally {
+      setRemovingId(null);
+    }
   };
 
   return (
@@ -382,7 +402,37 @@ function FinanceiroPageContent() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <ChevronRight className="h-4 w-4 text-slate-500 group-hover:text-primary-400 transition-colors ml-auto" />
+                          <div className="flex items-center justify-end gap-1">
+                            {confirmRemoveId === deal.id ? (
+                              <>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setConfirmRemoveId(null); }}
+                                  className="p-1 text-slate-400 hover:text-slate-200 transition-colors"
+                                  title="Cancelar"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleRemoverDoFinanceiro(deal.id); }}
+                                  disabled={removingId === deal.id}
+                                  className="text-xs px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30 transition-colors disabled:opacity-50"
+                                >
+                                  {removingId === deal.id ? '...' : 'Remover?'}
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setConfirmRemoveId(deal.id); }}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-500 hover:text-rose-400"
+                                  title="Remover do Financeiro (marcar como Perdido)"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                                <ChevronRight className="h-4 w-4 text-slate-500 group-hover:text-primary-400 transition-colors" />
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
