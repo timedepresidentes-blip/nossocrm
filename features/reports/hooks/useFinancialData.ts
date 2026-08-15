@@ -15,7 +15,6 @@ export interface FinancialDeal {
   margemPct: number;
   comissaoValor: number;
   custoNf: number;
-  custoArt: number;
   custoEngenharia: number;
   custoCorrugado: number;
   custoEletroduto: number;
@@ -124,7 +123,7 @@ export function useFinancialData(period: PeriodFilter, boardId?: string): Financ
           .select(`
             id, title, board_id, closed_at, value,
             custo_total, lucro_bruto, margem_pct, comissao_valor,
-            custo_nf, custo_art, custo_engenharia, custo_corrugado,
+            custo_nf, custo_engenharia, custo_corrugado,
             custo_eletroduto, custo_fornecedor,
             contacts ( name )
           `)
@@ -149,7 +148,6 @@ export function useFinancialData(period: PeriodFilter, boardId?: string): Financ
           margemPct: Number(r.margem_pct ?? 0),
           comissaoValor: Number(r.comissao_valor ?? 0),
           custoNf: Number(r.custo_nf ?? 0),
-          custoArt: Number(r.custo_art ?? 0),
           custoEngenharia: Number(r.custo_engenharia ?? 0),
           custoCorrugado: Number(r.custo_corrugado ?? 0),
           custoEletroduto: Number(r.custo_eletroduto ?? 0),

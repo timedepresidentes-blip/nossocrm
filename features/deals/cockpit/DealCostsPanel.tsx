@@ -18,7 +18,7 @@ const PCT = (v: number) => `${v.toFixed(1)}%`;
 const inputCls = 'w-full rounded-lg border border-white/10 bg-white/3 px-2.5 py-1.5 text-xs text-slate-100 outline-none placeholder:text-slate-600 focus:ring-1 focus:ring-cyan-500/30';
 
 const defaultCosts: DealCostData = {
-  custoNf: 0, custoNfTipo: 'kit', custoArt: 0, custoEngenharia: 0, custoInstalacao: 0,
+  custoNf: 0, custoNfTipo: 'kit', custoEngenharia: 0, custoInstalacao: 0,
   custoCorrugado: 0, custoEletroduto: 0, custoFornecedor: 0, voucherBancoPct: 0,
   custosExtras: [], custoTotal: 0, comissaoValor: 0, lucroBruto: 0, margemPct: 0,
 };
@@ -66,7 +66,6 @@ export const DealCostsPanel: React.FC<Props> = ({ dealId, valorVenda, kwp }) => 
         ...prev,
         custoEngenharia: calcEngCost(kwpVal, orgCfg),
         custoInstalacao: kwpVal * (orgCfg.custoInstalacaoPorKwp ?? 190),
-        custoArt: orgCfg.custoArt,
         custoCorrugado: orgCfg.custoCorrugado,
         custoEletroduto: orgCfg.custoEletroduto,
       };
@@ -158,7 +157,6 @@ export const DealCostsPanel: React.FC<Props> = ({ dealId, valorVenda, kwp }) => 
       {/* Campos de custo */}
       <div className="grid grid-cols-2 gap-2 text-xs">
         {([
-          { key: 'custoArt' as const, label: 'ART Engenharia' },
           { key: 'custoEngenharia' as const, label: `Engenharia${kwp ? ` (${kwp} kWp)` : ''}` },
           { key: 'custoInstalacao' as const, label: `Instalação${kwp ? ` (${kwp} kWp × R$${orgCfg?.custoInstalacaoPorKwp ?? 190}/kWp)` : ''}` },
           { key: 'custoCorrugado' as const, label: 'Corrugado' },

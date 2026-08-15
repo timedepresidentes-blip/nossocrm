@@ -298,7 +298,6 @@ export interface Deal {
   custoEletroduto?: number;             // Custo de eletroduto
   custoFornecedor?: number;             // Custo do fornecedor (equipamentos)
   voucherBancoPct?: number;             // Percentual de voucher/cashback do banco sobre o fornecedor
-  custoArt?: number;                    // Custo da ART
   custosPagos?: {                       // Checklist de pagamentos por custo
     nf?: boolean;
     fornecedor?: boolean;

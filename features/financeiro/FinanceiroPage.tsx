@@ -44,7 +44,6 @@ function calcPendentes(deal: Deal): { total: number; pagos: number } {
     { key: 'nf',         val: deal.custoNf },
     { key: 'fornecedor', val: deal.custoFornecedor },
     { key: 'engenharia', val: deal.custoEngenharia },
-    { key: 'art',        val: deal.custoArt },
     { key: 'corrugado',  val: deal.custoCorrugado },
     { key: 'eletroduto', val: deal.custoEletroduto },
     { key: 'comissao',   val: deal.comissaoValor },

@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { MoneyInput } from '@/components/ui/MoneyInput';
 
 const defaults: OrgCostSettings = {
-  custoArt: 0,
   custoNfKitPct: 4,
   custoNfServicoPct: 6,
   custoEng1a3kwp: 350,
@@ -133,14 +132,6 @@ export const CostSettingsSection: React.FC = () => {
                 <MoneyInput value={form.custoEngAcima5kwp} onChange={setNum('custoEngAcima5kwp')} min={0} className={inp + ' pl-8'} placeholder="600" />
               </div>
             </div>
-          </div>
-          <div className="max-w-xs">
-            <label className={lbl}>ART de Engenharia (fixo por projeto)</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">R$</span>
-              <MoneyInput value={form.custoArt} onChange={setNum('custoArt')} min={0} className={inp + ' pl-8'} placeholder="0" />
-            </div>
-            <p className={hint}>Custo fixo da Anotação de Responsabilidade Técnica por projeto.</p>
           </div>
         </div>
 

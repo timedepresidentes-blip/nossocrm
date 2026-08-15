@@ -7,7 +7,6 @@ export interface CustoAdicionalFixo {
 }
 
 export interface OrgCostSettings {
-  custoArt: number;
   custoNfKitPct: number;             // % NF sobre total do kit
   custoNfServicoPct: number;         // % NF sobre somente serviço
   custoEng1a3kwp: number;           // 1–2,99 kWp
@@ -116,13 +115,13 @@ export const orgSettingsService = {
 
       const { data, error } = await supabase
         .from('organization_settings')
-        .select('custo_art, custo_nf_kit_pct, custo_nf_servico_pct, custo_eng_ate5kwp, custo_eng_3a5kwp, custo_eng_acima5kwp, custo_corrugado, custo_eletroduto, custo_instalacao_por_kwp, custo_comissao_pct, custo_comissao_acima5kwp_pct, custos_adicionais_fixos')
+        .select('custo_nf_kit_pct, custo_nf_servico_pct, custo_eng_ate5kwp, custo_eng_3a5kwp, custo_eng_acima5kwp, custo_corrugado, custo_eletroduto, custo_instalacao_por_kwp, custo_comissao_pct, custo_comissao_acima5kwp_pct, custos_adicionais_fixos')
         .eq('organization_id', orgId)
         .maybeSingle();
 
       if (error) return { data: null, error };
       const defaults: OrgCostSettings = {
-        custoArt: 0, custoNfKitPct: 4, custoNfServicoPct: 6,
+        custoNfKitPct: 4, custoNfServicoPct: 6,
         custoEng1a3kwp: 350, custoEng3a5kwp: 450, custoEngAcima5kwp: 600,
         custoCorrugado: 0, custoEletroduto: 0, custoInstalacaoPorKwp: 190,
         custoComissaoPct: 5, custoComissaoAcima5kwpPct: 7,
@@ -133,7 +132,6 @@ export const orgSettingsService = {
       const row = data as any;
       return {
         data: {
-          custoArt: Number(row.custo_art ?? 0),
           custoNfKitPct: Number(row.custo_nf_kit_pct ?? 4),
           custoNfServicoPct: Number(row.custo_nf_servico_pct ?? 6),
           custoEng1a3kwp: Number(row.custo_eng_ate5kwp ?? 350),
@@ -160,7 +158,6 @@ export const orgSettingsService = {
       if (!orgId) return { error: new Error('Organização não encontrada') };
 
       const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      if (updates.custoArt !== undefined) payload.custo_art = updates.custoArt;
       if (updates.custoNfKitPct !== undefined) { payload.custo_nf_kit_pct = updates.custoNfKitPct; payload.custo_nf_pct = updates.custoNfKitPct; }
       if (updates.custoNfServicoPct !== undefined) payload.custo_nf_servico_pct = updates.custoNfServicoPct;
       if (updates.custoEng1a3kwp !== undefined) payload.custo_eng_ate5kwp = updates.custoEng1a3kwp;

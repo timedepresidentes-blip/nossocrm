@@ -176,7 +176,6 @@ export function FinancialTab({ period, boardId }: Props) {
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                           {[
                             { label: 'Nota Fiscal', value: deal.custoNf },
-                            { label: 'ART Engenharia', value: deal.custoArt },
                             { label: 'Engenharia', value: deal.custoEngenharia },
                             { label: 'Corrugado', value: deal.custoCorrugado },
                             { label: 'Eletroduto', value: deal.custoEletroduto },

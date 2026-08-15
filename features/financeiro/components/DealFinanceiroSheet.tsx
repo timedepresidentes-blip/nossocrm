@@ -147,7 +147,6 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
   const [custoEletroduto, setCustoEletroduto] = useState<number | undefined>(undefined);
   const [custoFornecedor, setCustoFornecedor] = useState<number | undefined>(undefined);
   const [voucherBancoPct, setVoucherBancoPct] = useState<number | undefined>(undefined);
-  const [custoArt, setCustoArt] = useState<number | undefined>(undefined);
   const [comissaoValor, setComissaoValor] = useState<number | undefined>(undefined);
   const [custosExtras, setCustosExtras] = useState<CustoExtra[]>([]);
   const [custosPagos, setCustosPagos] = useState<CustosPagos>({});
@@ -181,7 +180,6 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
     setCustoEletroduto(deal.custoEletroduto);
     setCustoFornecedor(deal.custoFornecedor);
     setVoucherBancoPct(deal.voucherBancoPct);
-    setCustoArt(deal.custoArt);
     setComissaoValor(deal.comissaoValor);
     setCustosExtras(deal.custosExtras || []);
     setCustosPagos(deal.custosPagos || {});
@@ -204,7 +202,6 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
     (custoCorrugado || 0) +
     (custoEletroduto || 0) +
     custoFornecedorEfetivo +
-    (custoArt || 0) +
     (comissaoValor || 0) +
     somaExtras;
 
@@ -217,7 +214,6 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
     (custosPagos.fornecedor ? custoFornecedorEfetivo : 0) +
     (custosPagos.engenharia ? (custoEngenharia || 0) : 0) +
     (custosPagos.instalacao ? (custoInstalacao || 0) : 0) +
-    (custosPagos.art        ? (custoArt || 0) : 0) +
     (custosPagos.corrugado  ? (custoCorrugado || 0) : 0) +
     (custosPagos.eletroduto ? (custoEletroduto || 0) : 0) +
     (custosPagos.comissao   ? (comissaoValor || 0) : 0) +
@@ -231,7 +227,6 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
     { key: 'fornecedor' as const,  val: custoFornecedor },
     { key: 'engenharia' as const,  val: custoEngenharia },
     { key: 'instalacao' as const,  val: custoInstalacao },
-    { key: 'art' as const,         val: custoArt },
     { key: 'corrugado' as const,   val: custoCorrugado },
     { key: 'eletroduto' as const,  val: custoEletroduto },
     { key: 'comissao' as const,    val: comissaoValor },
@@ -284,7 +279,6 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
           custoEletroduto,
           custoFornecedor,
           voucherBancoPct,
-          custoArt,
           comissaoValor,
           custosExtras,
           custoTotal: custoTotalCalc,
@@ -466,7 +460,6 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
             pago={custosPagos.instalacao}
             onTogglePago={() => togglePago('instalacao')}
           />
-          <FieldRow label="ART" value={custoArt} onChange={setCustoArt} pago={custosPagos.art} onTogglePago={() => togglePago('art')} />
           <FieldRow label="Corrugado" value={custoCorrugado} onChange={setCustoCorrugado} pago={custosPagos.corrugado} onTogglePago={() => togglePago('corrugado')} />
           <FieldRow label="Eletroduto" value={custoEletroduto} onChange={setCustoEletroduto} pago={custosPagos.eletroduto} onTogglePago={() => togglePago('eletroduto')} />
           <FieldRow label="Comissão" value={comissaoValor} onChange={setComissaoValor} pago={custosPagos.comissao} onTogglePago={() => togglePago('comissao')} />

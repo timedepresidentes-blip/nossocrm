@@ -80,7 +80,7 @@ async function fileToBase64(file: File): Promise<string> {
 }
 
 const defaultCfg: OrgCostSettings = {
-  custoArt: 0, custoNfKitPct: 4, custoNfServicoPct: 6,
+  custoNfKitPct: 4, custoNfServicoPct: 6,
   custoEng1a3kwp: 350, custoEng3a5kwp: 450, custoEngAcima5kwp: 600,
   custoCorrugado: 0, custoEletroduto: 0, custoComissaoPct: 5, custoComissaoAcima5kwpPct: 7,
 };
@@ -117,7 +117,6 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
   // Custos internos
   const [tipoVenda, setTipoVenda] = useState<'propria' | 'vendedor'>('vendedor');
   const [custoNfTipo, setCustoNfTipo] = useState<'kit' | 'servico'>('kit');
-  const [custoArt, setCustoArt] = useState('');
   const [custoEngenharia, setCustoEngenharia] = useState('');
   const [custoCorrugado, setCustoCorrugado] = useState('');
   const [custoEletroduto, setCustoEletroduto] = useState('');
@@ -151,7 +150,6 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
     orgSettingsService.getCostSettings().then(({ data }) => {
       const cfg = data ?? defaultCfg;
       setOrgCfg(cfg);
-      setCustoArt(cfg.custoArt > 0 ? fmtMoeda(cfg.custoArt) : '');
       setCustoCorrugado(cfg.custoCorrugado > 0 ? fmtMoeda(cfg.custoCorrugado) : '');
       setCustoEletroduto(cfg.custoEletroduto > 0 ? fmtMoeda(cfg.custoEletroduto) : '');
       setCustoComissaoPct(String(cfg.custoComissaoPct));
@@ -207,7 +205,7 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
   const custoInstalacaoNum = parseFlt(custoInstalacao);
   const custosAdicionaisTotal = custosAdicionais.reduce((s, e) => s + parseFlt(e.valor), 0);
   const nfPreview = valorFinalVenda > 0 ? calcNfCost(valorFinalVenda, custoNfTipo, orgCfg, custoFornecedorEfetivo) : 0;
-  const totalCustos = nfPreview + parseFlt(custoArt) + parseFlt(custoEngenharia) +
+  const totalCustos = nfPreview + parseFlt(custoEngenharia) +
     parseFlt(custoCorrugado) + parseFlt(custoEletroduto) + custoFornecedorEfetivo +
     custoInstalacaoNum + custosAdicionaisTotal;
   const comissaoVal = valorFinalVenda * (comPct / 100);
@@ -222,7 +220,7 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
 
     // Triangulação: custo + margem → valor de venda
     // Fórmula: V = custos_fixos / (1 - NF% - margem% - comissão%)
-    const custosFixos = parseFlt(custoArt) + parseFlt(custoEngenharia) +
+    const custosFixos = parseFlt(custoEngenharia) +
       parseFlt(custoCorrugado) + parseFlt(custoEletroduto) + custoFornecedorEfetivo +
       parseFlt(custoInstalacao) + custosAdicionais.reduce((s, e) => s + parseFlt(e.valor), 0);
     if (custosFixos <= 0) return;
@@ -344,7 +342,6 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
         custosAdicionais.filter(e => e.nome.trim()).forEach(e => extrasParaSalvar.push({ descricao: e.nome.trim(), valor: parseFlt(e.valor) }));
         await dealCostsService.updateCosts(dealId, {
           custoNfTipo, custoNf: nf,
-          custoArt: parseFlt(custoArt),
           custoEngenharia: parseFlt(custoEngenharia),
           custoCorrugado: parseFlt(custoCorrugado),
           custoEletroduto: parseFlt(custoEletroduto),
@@ -357,11 +354,9 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
       // Salva custos fixos e adicionais como novo padrão da organização (fire and forget)
       // Fornecedor e instalação são específicos por deal — não sobem para o padrão
       const novoPadrao: Partial<import('@/lib/supabase/orgSettings').OrgCostSettings> = {};
-      const artNum = parseFlt(custoArt);
       const corrugadoNum = parseFlt(custoCorrugado);
       const eletrodutoNum = parseFlt(custoEletroduto);
       const comissaoNum = parseFlt(custoComissaoPct);
-      if (artNum > 0) novoPadrao.custoArt = artNum;
       if (corrugadoNum > 0) novoPadrao.custoCorrugado = corrugadoNum;
       if (eletrodutoNum > 0) novoPadrao.custoEletroduto = eletrodutoNum;
       if (tipoVenda === 'vendedor' && comissaoNum > 0) novoPadrao.custoComissaoPct = comissaoNum;
@@ -575,13 +570,6 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">R$</span>
                   <input type="text" inputMode="decimal" value={custoEngenharia} onChange={e => setCustoEngenharia(e.target.value)} onFocus={e => e.target.select()} onBlur={e => blurFmt(e.target.value, setCustoEngenharia)} className={inpPre} placeholder="0,00" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">ART de Engenharia</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">R$</span>
-                  <input type="text" inputMode="decimal" value={custoArt} onChange={e => setCustoArt(e.target.value)} onFocus={e => e.target.select()} onBlur={e => blurFmt(e.target.value, setCustoArt)} className={inpPre} placeholder="0,00" />
                 </div>
               </div>
               <div>

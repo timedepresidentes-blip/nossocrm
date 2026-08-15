@@ -13,7 +13,7 @@ export async function autoFillDealCosts(dealId: string): Promise<void> {
 
   const { data: dealRow } = await supabase
     .from('deals')
-    .select('value, ficha_cliente, custo_nf, custo_nf_tipo, custo_art, custo_engenharia, custo_instalacao, custo_corrugado, custo_eletroduto, custo_fornecedor, custos_extras, comissao_valor')
+    .select('value, ficha_cliente, custo_nf, custo_nf_tipo, custo_engenharia, custo_instalacao, custo_corrugado, custo_eletroduto, custo_fornecedor, custos_extras, comissao_valor')
     .eq('id', dealId)
     .maybeSingle();
 
@@ -26,7 +26,6 @@ export async function autoFillDealCosts(dealId: string): Promise<void> {
   const kwp = Number(fichaCliente?.potenciaKwp ?? 0);
 
   const exNf = Number(row.custo_nf ?? 0);
-  const exArt = Number(row.custo_art ?? 0);
   const exEng = Number(row.custo_engenharia ?? 0);
   const exInstalacao = Number(row.custo_instalacao ?? 0);
   const exCorrugado = Number(row.custo_corrugado ?? 0);
@@ -42,7 +41,6 @@ export async function autoFillDealCosts(dealId: string): Promise<void> {
   // Custos fixos (não dependem do valor de venda): preenche sempre
   const custoEngenharia = exEng > 0 ? exEng : calcEngCost(kwp, cfg);
   const custoInstalacao = exInstalacao > 0 ? exInstalacao : kwp * (cfg.custoInstalacaoPorKwp ?? 190);
-  const custoArt = exArt > 0 ? exArt : cfg.custoArt;
   const custoCorrugado = exCorrugado > 0 ? exCorrugado : cfg.custoCorrugado;
   const custoEletroduto = exEletroduto > 0 ? exEletroduto : cfg.custoEletroduto;
   // NF e comissão dependem do valor de venda: só preenche se valorVenda > 0
@@ -50,14 +48,13 @@ export async function autoFillDealCosts(dealId: string): Promise<void> {
   const comissaoValor = exComissao > 0 ? exComissao : 0;
 
   const somaExtras = exExtras.reduce((s, c) => s + (Number(c.valor) || 0), 0);
-  const custoTotal = custoNf + custoArt + custoEngenharia + custoInstalacao + custoCorrugado + custoEletroduto + exFornecedor + comissaoValor + somaExtras;
+  const custoTotal = custoNf + custoEngenharia + custoInstalacao + custoCorrugado + custoEletroduto + exFornecedor + comissaoValor + somaExtras;
   const lucroBruto = valorVenda - custoTotal;
   const margemPct = valorVenda > 0 ? (lucroBruto / valorVenda) * 100 : 0;
 
   await dealCostsService.updateCosts(dealId, {
     custoNf,
     custoNfTipo: nfTipo,
-    custoArt,
     custoEngenharia,
     custoInstalacao,
     custoCorrugado,

@@ -112,7 +112,6 @@ export interface DbDeal {
   custo_corrugado: number | null;
   custo_eletroduto: number | null;
   custo_fornecedor: number | null;
-  custo_art: number | null;
   custos_extras: { descricao: string; valor: number }[] | null;
   custo_total: number | null;
   comissao_valor: number | null;
@@ -202,7 +201,6 @@ const transformDeal = (db: DbDeal | DbDealWithItems, items?: DbDealItem[]): Deal
     custoEletroduto: (db as any).custo_eletroduto ?? undefined,
     custoFornecedor: (db as any).custo_fornecedor ?? undefined,
     voucherBancoPct: (db as any).voucher_banco_pct ?? undefined,
-    custoArt: (db as any).custo_art ?? undefined,
     custosPagos: (db as any).custos_pagos ?? undefined,
     custosExtras: (db as any).custos_extras || undefined,
     custoTotal: (db as any).custo_total ?? undefined,
@@ -272,7 +270,6 @@ const transformDealToDb = (deal: Partial<Deal>): Partial<DbDeal> => {
   if (deal.custoCorrugado !== undefined) (db as any).custo_corrugado = deal.custoCorrugado;
   if (deal.custoEletroduto !== undefined) (db as any).custo_eletroduto = deal.custoEletroduto;
   if (deal.custoFornecedor !== undefined) (db as any).custo_fornecedor = deal.custoFornecedor;
-  if (deal.custoArt !== undefined) (db as any).custo_art = deal.custoArt;
   if (deal.voucherBancoPct !== undefined) (db as any).voucher_banco_pct = deal.voucherBancoPct;
   if (deal.custosPagos !== undefined) (db as any).custos_pagos = deal.custosPagos;
   if (deal.custosExtras !== undefined) (db as any).custos_extras = deal.custosExtras;
