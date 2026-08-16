@@ -3,14 +3,13 @@
 import React, { useState } from 'react';
 import {
   BadgeCheck, CalendarClock, ChevronDown, ChevronUp,
-  FileText, Package, PenLine, RotateCcw, Ruler, SearchCheck,
+  Package, PenLine, RotateCcw, Ruler, SearchCheck,
   Zap, CheckSquare, Loader2,
 } from 'lucide-react';
 import { PROJETO_STEPS, type ProjetoStepKey } from '@/types';
 import { useUpdateDeal } from '@/lib/query/hooks/useDealsQuery';
 
 const STEP_ICONS: Record<ProjetoStepKey, React.ElementType> = {
-  orcamento:       FileText,
   contrato:        PenLine,
   engenharia:      Ruler,
   projetoAprovado: CheckSquare,

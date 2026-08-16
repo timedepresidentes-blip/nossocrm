@@ -135,7 +135,7 @@ export function useAssignLabel() {
         }
       }
 
-      // Sincroniza ganho: marca deal como is_won quando etiqueta "Venda concluída" é atribuída
+      // Sincroniza ganho: marca deal como is_won e contato como CUSTOMER
       if (labelData?.syncs_with_won) {
         const dealIds = await fetchDealIds();
         if (dealIds.length > 0) {
@@ -149,6 +149,11 @@ export function useAssignLabel() {
             })
             .in('id', dealIds);
         }
+        // Atualiza estágio do contato para Cliente (venda concluída)
+        await sb
+          .from('contacts')
+          .update({ stage: 'CUSTOMER', updated_at: new Date().toISOString() })
+          .eq('id', contactId);
       }
 
       // Sincroniza perdido: marca deal como is_lost quando etiqueta "Perdido" é atribuída
@@ -170,6 +175,7 @@ export function useAssignLabel() {
     onSuccess: (_data, { contactId }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.labels.byContact(contactId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.deals.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all });
     },
   });
 }

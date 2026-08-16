@@ -140,7 +140,7 @@ const DealCardComponent: React.FC<DealCardProps> = ({
     // Main content
     parts.push(deal.title);
     if (deal.companyName) parts.push(deal.companyName);
-    parts.push(`$${deal.value.toLocaleString()}`);
+    parts.push(`R$ ${deal.value.toLocaleString('pt-BR')}`);
 
     // Additional context
     const priority = getPriorityLabel(deal.priority);
@@ -260,7 +260,7 @@ const DealCardComponent: React.FC<DealCardProps> = ({
             )
           )}
           <span className="text-sm font-bold text-slate-700 dark:text-slate-200 font-mono">
-            ${deal.value.toLocaleString()}
+            R$ {deal.value.toLocaleString('pt-BR')}
           </span>
         </div>
 

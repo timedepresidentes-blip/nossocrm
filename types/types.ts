@@ -27,7 +27,6 @@
  */
 // Etapas da linha do tempo do projeto de instalação solar
 export const PROJETO_STEPS = [
-  { key: 'orcamento',       label: 'Orçamento escolhido'       },
   { key: 'contrato',        label: 'Contrato assinado'         },
   { key: 'engenharia',      label: 'Entrada na engenharia'     },
   { key: 'projetoAprovado', label: 'Projeto aprovado'          },
