@@ -31,7 +31,8 @@ interface BaixaLine {
   qty: string;
 }
 
-const inp = 'w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:ring-1 focus:ring-cyan-500/40';
+const inp = 'w-full rounded-lg border border-white/10 bg-[#1e2435] px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:ring-1 focus:ring-cyan-500/40';
+const sel = 'w-full rounded-lg border border-white/10 bg-[#1e2435] px-3 py-2 text-sm text-slate-100 outline-none focus:ring-1 focus:ring-cyan-500/40 [&>option]:bg-[#1e2435] [&>option]:text-slate-100';
 
 function StatusBadge({ item }: { item: StockItem }) {
   if (item.quantity <= 0)
@@ -92,24 +93,35 @@ export function EstoquePage() {
     const linhas = entradaLines.filter(l => l.itemId && parseFloat(l.qty) > 0);
     if (!linhas.length) return;
     setSavingEntrada(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase.from('profiles').select('id, organization_id').eq('id', user?.id ?? '').maybeSingle();
+      const orgId = profile?.organization_id;
+      const userId = profile?.id;
 
-    const { data: profile } = await supabase.from('profiles').select('id, organization_id').eq('id', (await supabase.auth.getUser()).data.user?.id ?? '').maybeSingle();
-    const orgId = profile?.organization_id;
-    const userId = profile?.id;
-
-    for (const l of linhas) {
-      const qty = parseFloat(l.qty);
-      await supabase.from('stock_movements').insert({ organization_id: orgId, stock_item_id: l.itemId, type: 'entrada', quantity: qty, notes: entradaNotes || null, created_by: userId });
-      await supabase.rpc('increment_stock', { p_item_id: l.itemId, p_delta: qty }).catch(() =>
-        supabase.from('stock_items').select('quantity').eq('id', l.itemId).maybeSingle().then(({ data }) =>
-          supabase.from('stock_items').update({ quantity: (data?.quantity ?? 0) + qty, updated_at: new Date().toISOString() }).eq('id', l.itemId)
-        )
-      );
+      for (const l of linhas) {
+        const qty = parseFloat(l.qty);
+        const itemAtual = items.find(i => i.id === l.itemId);
+        await supabase.from('stock_movements').insert({
+          organization_id: orgId,
+          stock_item_id: l.itemId,
+          type: 'entrada',
+          quantity: qty,
+          notes: entradaNotes || null,
+          created_by: userId,
+        });
+        await supabase.from('stock_items').update({
+          quantity: (itemAtual?.quantity ?? 0) + qty,
+          updated_at: new Date().toISOString(),
+        }).eq('id', l.itemId);
+      }
+      setEntradaOpen(false);
+      await load();
+    } catch (e) {
+      console.error('Erro ao salvar entrada:', e);
+    } finally {
+      setSavingEntrada(false);
     }
-
-    setSavingEntrada(false);
-    setEntradaOpen(false);
-    load();
   };
 
   const salvarBaixa = async () => {
@@ -117,23 +129,36 @@ export function EstoquePage() {
     const linhas = baixaLines.filter(l => parseFloat(l.qty) > 0);
     if (!linhas.length) return;
     setSavingBaixa(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase.from('profiles').select('id, organization_id').eq('id', user?.id ?? '').maybeSingle();
+      const orgId = profile?.organization_id;
+      const userId = profile?.id;
 
-    const { data: profile } = await supabase.from('profiles').select('id, organization_id').eq('id', (await supabase.auth.getUser()).data.user?.id ?? '').maybeSingle();
-    const orgId = profile?.organization_id;
-    const userId = profile?.id;
-
-    for (const l of linhas) {
-      const qty = parseFloat(l.qty);
-      const item = items.find(i => i.id === l.itemId);
-      if (!item) continue;
-      await supabase.from('stock_movements').insert({ organization_id: orgId, stock_item_id: l.itemId, type: 'saida', quantity: qty, notes: baixaNotes || null, created_by: userId });
-      const novaQty = Math.max(0, item.quantity - qty);
-      await supabase.from('stock_items').update({ quantity: novaQty, updated_at: new Date().toISOString() }).eq('id', l.itemId);
+      for (const l of linhas) {
+        const qty = parseFloat(l.qty);
+        const item = items.find(i => i.id === l.itemId);
+        if (!item) continue;
+        await supabase.from('stock_movements').insert({
+          organization_id: orgId,
+          stock_item_id: l.itemId,
+          type: 'saida',
+          quantity: qty,
+          notes: baixaNotes || null,
+          created_by: userId,
+        });
+        await supabase.from('stock_items').update({
+          quantity: Math.max(0, item.quantity - qty),
+          updated_at: new Date().toISOString(),
+        }).eq('id', l.itemId);
+      }
+      setBaixaOpen(false);
+      await load();
+    } catch (e) {
+      console.error('Erro ao salvar baixa:', e);
+    } finally {
+      setSavingBaixa(false);
     }
-
-    setSavingBaixa(false);
-    setBaixaOpen(false);
-    load();
   };
 
   const fmt = (n: number, unit: string) => `${n % 1 === 0 ? n : n.toFixed(1)} ${unit}`;
@@ -259,7 +284,7 @@ export function EstoquePage() {
                   <div className="flex-1 flex flex-col gap-1">
                     {i === 0 && <label className="text-[10px] text-slate-500">Item</label>}
                     <select
-                      className={inp}
+                      className={sel}
                       value={line.itemId}
                       onChange={e => setEntradaLines(prev => prev.map((l, j) => j === i ? { ...l, itemId: e.target.value } : l))}
                     >
