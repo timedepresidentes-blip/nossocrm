@@ -117,6 +117,10 @@ export const FichaClientePanel: React.FC<Props> = ({
   const [orcMsg, setOrcMsg] = useState<'ok' | 'error' | null>(null);
   const [orcError, setOrcError] = useState('');
 
+  // Modal de revisão antes de gerar O.S.
+  const [osModalOpen, setOsModalOpen] = useState(false);
+  const [osFields, setOsFields] = useState<Partial<FichaClienteData>>({});
+
   // Carrega ficha salva no deal
   const load = useCallback(async () => {
     if (!supabase || !dealId) return;
@@ -457,9 +461,43 @@ export const FichaClientePanel: React.FC<Props> = ({
     window.open(URL.createObjectURL(blob), '_blank');
   };
 
-  const handleGerarOS = async () => {
+  const abrirModalOS = () => {
+    setOsFields({
+      instalacaoTelhado:   ficha.instalacaoTelhado,
+      tipoEstrutura:       ficha.tipoEstrutura,
+      instalacaoFases:     ficha.instalacaoFases,
+      instalacaoDisjuntor: ficha.instalacaoDisjuntor,
+      instalacaoTipoImovel:ficha.instalacaoTipoImovel,
+      instalacaoEndereco:  ficha.instalacaoEndereco,
+      instalacaoCidade:    ficha.instalacaoCidade,
+      potenciaKwp:         ficha.potenciaKwp,
+      numPaineis:          ficha.numPaineis,
+      modeloPainel:        ficha.modeloPainel,
+      potenciaPainelW:     ficha.potenciaPainelW,
+      modeloInversor:      ficha.modeloInversor,
+      tipoInversor:        ficha.tipoInversor,
+      qtdInversores:       ficha.qtdInversores,
+    });
+    setOsModalOpen(true);
+  };
+
+  const confirmarGerarOS = async () => {
+    // Mescla edições do modal na ficha e salva no banco
+    const fichaAtualizada = { ...ficha, ...osFields };
+    setFicha(fichaAtualizada);
+    if (supabase && dealId) {
+      await supabase.from('deals').update({
+        ficha_cliente: fichaAtualizada,
+        updated_at: new Date().toISOString(),
+      }).eq('id', dealId);
+    }
+    setOsModalOpen(false);
+    await gerarOSHtml(fichaAtualizada);
+  };
+
+  const gerarOSHtml = async (fichaParam?: FichaClienteData) => {
     const logo = await fetchLogoBase64();
-    const f = ficha;
+    const f = fichaParam ?? ficha;
     const hoje = new Date().toLocaleDateString('pt-BR');
     const osNum = `OS-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${dealId?.slice(0, 6).toUpperCase() ?? 'XXXXX'}`;
     const endCliente = [f.enderecoRua, f.enderecoBairro, f.enderecoCidade, f.enderecoEstado]
@@ -1104,6 +1142,7 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
   const valorFmt = dealValue != null ? BRL.format(dealValue) : (f.valorTotal != null ? BRL.format(f.valorTotal) : '___________');
 
   return (
+    <>
     <div className="rounded-xl border border-white/10 bg-white/2">
       {/* Header */}
       <button
@@ -1401,7 +1440,7 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
                     )}
                     <button
                       type="button"
-                      onClick={handleGerarOS}
+                      onClick={abrirModalOS}
                       className="flex items-center gap-1.5 rounded-lg border border-orange-500/40 bg-orange-500/15 px-2.5 py-1.5 text-[11px] font-semibold text-orange-300 hover:bg-orange-500/25"
                     >
                       <FileText className="h-3 w-3" /> Gerar O.S.
@@ -1549,5 +1588,99 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
       </div>
 
     </div>
+
+    {/* Modal de revisão/edição da O.S. */}
+
+    {osModalOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="w-full max-w-xl rounded-xl border border-white/10 bg-[#1a1f2e] shadow-2xl flex flex-col max-h-[90vh]">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Revisar dados da O.S.</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">Confirme ou corrija os dados antes de gerar o documento.</p>
+            </div>
+            <button onClick={() => setOsModalOpen(false)} className="text-slate-500 hover:text-white text-xl leading-none">&times;</button>
+          </div>
+
+          <div className="overflow-y-auto px-5 py-4 space-y-4">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">Instalação</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: 'Tipo de telhado',  key: 'instalacaoTelhado' },
+                { label: 'Tipo de estrutura', key: 'tipoEstrutura' },
+                { label: 'Fases elétricas',  key: 'instalacaoFases' },
+                { label: 'Disjuntor (A)',     key: 'instalacaoDisjuntor' },
+                { label: 'Tipo de imóvel',   key: 'instalacaoTipoImovel' },
+              ].map(({ label, key }) => (
+                <div key={key} className="flex flex-col gap-1">
+                  <label className="text-[10px] text-slate-500">{label}</label>
+                  <input
+                    className={inp}
+                    value={toStr((osFields as any)[key])}
+                    onChange={e => setOsFields(prev => ({ ...prev, [key]: e.target.value || null }))}
+                  />
+                </div>
+              ))}
+              <div className="col-span-2 flex flex-col gap-1">
+                <label className="text-[10px] text-slate-500">Endereço instalação</label>
+                <input
+                  className={inp}
+                  value={toStr(osFields.instalacaoEndereco)}
+                  onChange={e => setOsFields(prev => ({ ...prev, instalacaoEndereco: e.target.value || null }))}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-slate-500">Cidade instalação</label>
+                <input
+                  className={inp}
+                  value={toStr(osFields.instalacaoCidade)}
+                  onChange={e => setOsFields(prev => ({ ...prev, instalacaoCidade: e.target.value || null }))}
+                />
+              </div>
+            </div>
+
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold pt-1">Sistema solar</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: 'Potência (kWp)',   key: 'potenciaKwp' },
+                { label: 'Nº painéis',       key: 'numPaineis' },
+                { label: 'Modelo painel',    key: 'modeloPainel' },
+                { label: 'Potência painel W',key: 'potenciaPainelW' },
+                { label: 'Modelo inversor',  key: 'modeloInversor' },
+                { label: 'Tipo inversor',    key: 'tipoInversor' },
+                { label: 'Qtd inversores',   key: 'qtdInversores' },
+              ].map(({ label, key }) => (
+                <div key={key} className="flex flex-col gap-1">
+                  <label className="text-[10px] text-slate-500">{label}</label>
+                  <input
+                    className={inp}
+                    value={toStr((osFields as any)[key])}
+                    onChange={e => setOsFields(prev => ({ ...prev, [key]: e.target.value || null }))}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 px-5 py-4 border-t border-white/10">
+            <button
+              type="button"
+              onClick={() => setOsModalOpen(false)}
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-slate-300 hover:bg-white/10"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={confirmarGerarOS}
+              className="flex items-center gap-1.5 rounded-lg border border-orange-500/40 bg-orange-500/15 px-3 py-1.5 text-[11px] font-semibold text-orange-300 hover:bg-orange-500/25"
+            >
+              <FileText className="h-3 w-3" /> Salvar e Gerar O.S.
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };
