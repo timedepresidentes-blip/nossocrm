@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Package, Plus, TrendingDown, AlertTriangle, CheckCircle2, XCircle, Loader2, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
+import { Package, Plus, TrendingDown, AlertTriangle, CheckCircle2, XCircle, Loader2, ArrowUpCircle, ArrowDownCircle, Sparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface StockItem {
@@ -59,6 +59,9 @@ export function EstoquePage() {
   const [baixaLines, setBaixaLines] = useState<BaixaLine[]>([]);
   const [baixaNotes, setBaixaNotes] = useState('');
   const [savingBaixa, setSavingBaixa] = useState(false);
+  const [textoRelatorio, setTextoRelatorio] = useState('');
+  const [extraindo, setExtraindo] = useState(false);
+  const [extraidoMsg, setExtraidoMsg] = useState<'ok' | 'erro' | null>(null);
 
   const load = useCallback(async () => {
     if (!supabase) return;
@@ -85,7 +88,38 @@ export function EstoquePage() {
   const abrirBaixa = () => {
     setBaixaLines(items.map(i => ({ itemId: i.id, qty: '' })));
     setBaixaNotes('');
+    setTextoRelatorio('');
+    setExtraidoMsg(null);
     setBaixaOpen(true);
+  };
+
+  const extrairPorIA = async () => {
+    if (!textoRelatorio.trim()) return;
+    setExtraindo(true);
+    setExtraidoMsg(null);
+    try {
+      const resp = await fetch('/api/estoque/extrair', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          texto: textoRelatorio,
+          itens: items.map(i => ({ id: i.id, name: i.name, unit: i.unit })),
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.extraidos) throw new Error(data.error ?? 'Erro');
+
+      // Preenche as linhas de baixa com os valores extraídos
+      setBaixaLines(prev => prev.map(l => {
+        const encontrado = data.extraidos.find((e: { itemId: string; qty: number }) => e.itemId === l.itemId);
+        return encontrado ? { ...l, qty: String(encontrado.qty) } : l;
+      }));
+      setExtraidoMsg('ok');
+    } catch {
+      setExtraidoMsg('erro');
+    } finally {
+      setExtraindo(false);
+    }
   };
 
   const salvarEntrada = async () => {
@@ -345,10 +379,40 @@ export function EstoquePage() {
               <button onClick={() => setBaixaOpen(false)} className="text-slate-500 hover:text-white text-xl leading-none">&times;</button>
             </div>
 
-            <div className="overflow-y-auto px-5 py-4 space-y-1">
-              <div className="flex flex-col gap-1 mb-3">
+            <div className="overflow-y-auto px-5 py-4 space-y-3">
+              {/* Observação */}
+              <div className="flex flex-col gap-1">
                 <label className="text-[10px] text-slate-500">Observação / O.S. (ex: nome do cliente, número da OS)</label>
                 <input className={inp} placeholder="Ex: João da Silva — OS-20260817-ABC123" value={baixaNotes} onChange={e => setBaixaNotes(e.target.value)} />
+              </div>
+
+              {/* Extração por IA */}
+              <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+                  <span className="text-[11px] font-semibold text-cyan-300">Extração por IA</span>
+                  <span className="text-[10px] text-slate-500 ml-1">Cole o relatório do instalador abaixo</span>
+                </div>
+                <textarea
+                  className="w-full rounded-lg border border-white/10 bg-[#1e2435] px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:ring-1 focus:ring-cyan-500/40 resize-none"
+                  rows={4}
+                  placeholder={"Ex:\nCabo CA 10mm: 35m\nCabo Terra 6mm: 20m\nDisjuntor 32A: 1 un\nCaixa Disjuntor: 1\nPlaquinha: 2"}
+                  value={textoRelatorio}
+                  onChange={e => { setTextoRelatorio(e.target.value); setExtraidoMsg(null); }}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={extrairPorIA}
+                    disabled={extraindo || !textoRelatorio.trim()}
+                    className="flex items-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 py-1.5 text-[11px] font-semibold text-cyan-300 hover:bg-cyan-500/25 disabled:opacity-40"
+                  >
+                    {extraindo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                    {extraindo ? 'Extraindo...' : 'Extrair e preencher'}
+                  </button>
+                  {extraidoMsg === 'ok' && <span className="flex items-center gap-1 text-[11px] text-emerald-400"><CheckCircle2 className="h-3 w-3" />Campos preenchidos!</span>}
+                  {extraidoMsg === 'erro' && <span className="flex items-center gap-1 text-[11px] text-red-400"><XCircle className="h-3 w-3" />Erro na extração</span>}
+                </div>
               </div>
 
               <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold pb-1">Materiais utilizados</p>
