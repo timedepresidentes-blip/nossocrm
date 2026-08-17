@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { Package, Plus, TrendingDown, AlertTriangle, CheckCircle2, XCircle, Loader2, ArrowUpCircle, ArrowDownCircle, Sparkles } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Package, Plus, TrendingDown, AlertTriangle, CheckCircle2, XCircle, Loader2, ArrowUpCircle, ArrowDownCircle, Sparkles, Upload, FileImage } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface StockItem {
@@ -59,9 +59,10 @@ export function EstoquePage() {
   const [baixaLines, setBaixaLines] = useState<BaixaLine[]>([]);
   const [baixaNotes, setBaixaNotes] = useState('');
   const [savingBaixa, setSavingBaixa] = useState(false);
-  const [textoRelatorio, setTextoRelatorio] = useState('');
+  const [arquivoRelatorio, setArquivoRelatorio] = useState<File | null>(null);
   const [extraindo, setExtraindo] = useState(false);
-  const [extraidoMsg, setExtraidoMsg] = useState<'ok' | 'erro' | null>(null);
+  const [extraidoMsg, setExtraidoMsg] = useState<'ok' | 'erro' | string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     if (!supabase) return;
@@ -88,35 +89,32 @@ export function EstoquePage() {
   const abrirBaixa = () => {
     setBaixaLines(items.map(i => ({ itemId: i.id, qty: '' })));
     setBaixaNotes('');
-    setTextoRelatorio('');
+    setArquivoRelatorio(null);
     setExtraidoMsg(null);
     setBaixaOpen(true);
   };
 
   const extrairPorIA = async () => {
-    if (!textoRelatorio.trim()) return;
+    if (!arquivoRelatorio) return;
     setExtraindo(true);
     setExtraidoMsg(null);
     try {
-      const resp = await fetch('/api/estoque/extrair', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          texto: textoRelatorio,
-          itens: items.map(i => ({ id: i.id, name: i.name, unit: i.unit })),
-        }),
-      });
+      const fd = new FormData();
+      fd.append('arquivo', arquivoRelatorio);
+      fd.append('itens', JSON.stringify(items.map(i => ({ id: i.id, name: i.name, unit: i.unit }))));
+
+      const resp = await fetch('/api/estoque/extrair', { method: 'POST', body: fd });
       const data = await resp.json();
       if (!resp.ok || !data.extraidos) throw new Error(data.error ?? 'Erro');
 
-      // Preenche as linhas de baixa com os valores extraídos
+      const encontrados = data.extraidos.length as number;
       setBaixaLines(prev => prev.map(l => {
-        const encontrado = data.extraidos.find((e: { itemId: string; qty: number }) => e.itemId === l.itemId);
-        return encontrado ? { ...l, qty: String(encontrado.qty) } : l;
+        const e = data.extraidos.find((x: { itemId: string; qty: number }) => x.itemId === l.itemId);
+        return e ? { ...l, qty: String(e.qty) } : l;
       }));
-      setExtraidoMsg('ok');
-    } catch {
-      setExtraidoMsg('erro');
+      setExtraidoMsg(`${encontrados} item(s) identificado(s)`);
+    } catch (err) {
+      setExtraidoMsg('erro: ' + (err instanceof Error ? err.message : 'falha na extração'));
     } finally {
       setExtraindo(false);
     }
@@ -391,27 +389,57 @@ export function EstoquePage() {
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
                   <span className="text-[11px] font-semibold text-cyan-300">Extração por IA</span>
-                  <span className="text-[10px] text-slate-500 ml-1">Cole o relatório do instalador abaixo</span>
+                  <span className="text-[10px] text-slate-500 ml-1">Foto ou PDF do formulário do instalador</span>
                 </div>
-                <textarea
-                  className="w-full rounded-lg border border-white/10 bg-[#1e2435] px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:ring-1 focus:ring-cyan-500/40 resize-none"
-                  rows={4}
-                  placeholder={"Ex:\nCabo CA 10mm: 35m\nCabo Terra 6mm: 20m\nDisjuntor 32A: 1 un\nCaixa Disjuntor: 1\nPlaquinha: 2"}
-                  value={textoRelatorio}
-                  onChange={e => { setTextoRelatorio(e.target.value); setExtraidoMsg(null); }}
+
+                {/* Área de upload */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,.pdf"
+                  className="hidden"
+                  onChange={e => { setArquivoRelatorio(e.target.files?.[0] ?? null); setExtraidoMsg(null); }}
                 />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`w-full flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-5 transition-colors
+                    ${arquivoRelatorio
+                      ? 'border-cyan-500/50 bg-cyan-500/10'
+                      : 'border-white/10 bg-white/3 hover:border-cyan-500/30 hover:bg-cyan-500/5'
+                    }`}
+                >
+                  {arquivoRelatorio ? (
+                    <>
+                      <FileImage className="h-6 w-6 text-cyan-400" />
+                      <span className="text-[11px] text-cyan-300 font-medium truncate max-w-full px-2">{arquivoRelatorio.name}</span>
+                      <span className="text-[10px] text-slate-500">Clique para trocar o arquivo</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-6 w-6 text-slate-500" />
+                      <span className="text-[11px] text-slate-400">Clique para selecionar foto ou PDF</span>
+                      <span className="text-[10px] text-slate-600">JPG, PNG, WEBP ou PDF</span>
+                    </>
+                  )}
+                </button>
+
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={extrairPorIA}
-                    disabled={extraindo || !textoRelatorio.trim()}
+                    disabled={extraindo || !arquivoRelatorio}
                     className="flex items-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 py-1.5 text-[11px] font-semibold text-cyan-300 hover:bg-cyan-500/25 disabled:opacity-40"
                   >
                     {extraindo ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                    {extraindo ? 'Extraindo...' : 'Extrair e preencher'}
+                    {extraindo ? 'Lendo formulário...' : 'Extrair e preencher'}
                   </button>
-                  {extraidoMsg === 'ok' && <span className="flex items-center gap-1 text-[11px] text-emerald-400"><CheckCircle2 className="h-3 w-3" />Campos preenchidos!</span>}
-                  {extraidoMsg === 'erro' && <span className="flex items-center gap-1 text-[11px] text-red-400"><XCircle className="h-3 w-3" />Erro na extração</span>}
+                  {extraidoMsg && !extraidoMsg.startsWith('erro') && (
+                    <span className="flex items-center gap-1 text-[11px] text-emerald-400"><CheckCircle2 className="h-3 w-3" />{extraidoMsg}</span>
+                  )}
+                  {extraidoMsg?.startsWith('erro') && (
+                    <span className="flex items-center gap-1 text-[11px] text-red-400"><XCircle className="h-3 w-3" />{extraidoMsg}</span>
+                  )}
                 </div>
               </div>
 
