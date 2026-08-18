@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, CalendarClock, ArrowLeftRight, X, BotMessageSquare, ArrowLeft, ChevronRight } from 'lucide-react';
+import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, CalendarClock, ArrowLeftRight, X, BotMessageSquare, ArrowLeft, ChevronRight, Send, Loader2 } from 'lucide-react';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
@@ -87,6 +87,12 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
     contactName: string;
     reason?: string;
   } | null>(null);
+
+  // Painel de consulta à Júlia
+  const [showJuliaPanel, setShowJuliaPanel] = useState(false);
+  const [juliaQuestion, setJuliaQuestion] = useState('');
+  const [juliaResponse, setJuliaResponse] = useState('');
+  const [juliaLoading, setJuliaLoading] = useState(false);
 
   // Detecção de mobile
   const [isMobile, setIsMobile] = useState(false);
@@ -253,20 +259,42 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
     }
   }, [selectedConversationId, selectedConversation, isConversationLoading, router]);
 
-  // Mark as read when opening a conversation
+  // Mark as read when opening a conversation (always, to clear stale unread count in DB)
   useEffect(() => {
-    if (selectedConversationId && selectedConversation && selectedConversation.unreadCount > 0) {
+    if (selectedConversationId) {
       markAsRead(selectedConversationId);
     }
-  }, [selectedConversationId, selectedConversation, markAsRead]);
+  }, [selectedConversationId, markAsRead]);
 
 
   // Update URL when conversation changes
   const handleSelectConversation = useCallback((id: string) => {
     setSelectedConversationId(id);
     setShowSearch(false);
+    setShowJuliaPanel(false);
+    setJuliaQuestion('');
+    setJuliaResponse('');
     router.push(`/messaging?id=${id}`, { scroll: false });
   }, [router]);
+
+  const handleAskJulia = useCallback(async () => {
+    if (!selectedConversationId || !juliaQuestion.trim() || juliaLoading) return;
+    setJuliaLoading(true);
+    setJuliaResponse('');
+    try {
+      const resp = await fetch('/api/messaging/ai/consult', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: selectedConversationId, question: juliaQuestion }),
+      });
+      const data = await resp.json() as { response?: string; error?: string };
+      setJuliaResponse(data.response || data.error || 'Sem resposta');
+    } catch {
+      setJuliaResponse('Erro ao conectar com a Júlia');
+    } finally {
+      setJuliaLoading(false);
+    }
+  }, [selectedConversationId, juliaQuestion, juliaLoading]);
 
   // Link conversation to contact
   const handleLinkContact = useCallback(async (contactId: string) => {
@@ -644,6 +672,22 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
                 )}
                 <button
                   type="button"
+                  onClick={() => {
+                    setShowJuliaPanel((v) => !v);
+                    if (showJuliaPanel) { setJuliaQuestion(''); setJuliaResponse(''); }
+                  }}
+                  className={cn(
+                    'p-2 rounded-lg transition-colors',
+                    showJuliaPanel
+                      ? 'text-violet-500 bg-violet-50 dark:bg-violet-500/10'
+                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
+                  )}
+                  title="Consultar Júlia"
+                >
+                  <BotMessageSquare className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => setShowSearch((v) => !v)}
                   className={cn(
                     'p-2 rounded-lg transition-colors',
@@ -771,6 +815,47 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
               onReply={setReplyToMessage}
               labelColor={selectedLabelColor}
             />
+
+            {/* Painel de consulta à Júlia */}
+            {showJuliaPanel && (
+              <div className="border-t border-violet-500/20 bg-violet-950/20 dark:bg-violet-500/5 px-4 py-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <BotMessageSquare className="w-4 h-4 text-violet-400 shrink-0" />
+                  <span className="text-xs font-semibold text-violet-300 uppercase tracking-wide">Consultar Júlia</span>
+                  <button
+                    type="button"
+                    onClick={() => { setShowJuliaPanel(false); setJuliaQuestion(''); setJuliaResponse(''); }}
+                    className="ml-auto text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {juliaResponse && (
+                  <div className="rounded-lg bg-violet-900/30 border border-violet-500/20 p-3 text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">
+                    <span className="text-violet-400 font-semibold">Júlia: </span>{juliaResponse}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    value={juliaQuestion}
+                    onChange={(e) => setJuliaQuestion(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleAskJulia(); } }}
+                    placeholder="Pergunte algo para a Júlia sobre esse cliente..."
+                    className="flex-1 bg-[#1a1f2e] border border-white/10 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-500 outline-none focus:border-violet-500/50 transition-colors"
+                    disabled={juliaLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleAskJulia()}
+                    disabled={juliaLoading || !juliaQuestion.trim()}
+                    className="px-3 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs rounded-lg font-medium transition-colors flex items-center gap-1.5 shrink-0"
+                  >
+                    {juliaLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                    {juliaLoading ? 'Pensando...' : 'Perguntar'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Input */}
             <MessageInput

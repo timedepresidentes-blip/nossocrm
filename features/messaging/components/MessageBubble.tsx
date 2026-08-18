@@ -708,6 +708,26 @@ export const MessageBubble = memo(function MessageBubble({
     [message.externalId, conversationId, sendMessage],
   );
 
+  // Nota interna (ex: resumo de handoff da Júlia) — exibe card distinto, não como bolha normal
+  const isInternalNote = !!(message.metadata?.internal_note as boolean | undefined);
+  if (isInternalNote && !isDeleted) {
+    const text = typeof message.content === 'string'
+      ? message.content
+      : ((message.content as Record<string, unknown>)?.text as string) ?? '';
+    return (
+      <div className="flex justify-center my-3">
+        <div className="w-full max-w-[85%] rounded-xl border border-amber-400/40 bg-amber-50/10 dark:bg-amber-900/10 px-4 py-3 shadow-sm">
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="text-amber-500 text-xs">📋</span>
+            <span className="text-xs font-semibold text-amber-500 uppercase tracking-wide">Nota interna — Júlia</span>
+            <span className="ml-auto text-[10px] text-slate-400">{time}</span>
+          </div>
+          <pre className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap font-sans leading-relaxed">{text}</pre>
+        </div>
+      </div>
+    );
+  }
+
   // Mensagem apagada — exibe placeholder sem conteúdo
   if (isDeleted) {
     return (
