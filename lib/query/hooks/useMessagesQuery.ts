@@ -52,8 +52,9 @@ export function useMessages(conversationId: string | undefined) {
     },
     staleTime: 1 * 1000,
     refetchInterval: 2 * 1000, // Polling a cada 2s — mensagens em tempo real
-    refetchIntervalInBackground: false,
+    refetchIntervalInBackground: true, // garante atualização ao voltar do background no mobile
     refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     enabled: !authLoading && !!user && !!conversationId,
   });
 }
@@ -101,7 +102,8 @@ export function useMessagesInfinite(conversationId: string | undefined) {
     enabled: !authLoading && !!user && !!conversationId,
     staleTime: 1 * 1000,
     refetchInterval: 2 * 1000, // Polling a cada 2s — mensagens em tempo real
-    refetchIntervalInBackground: false,
+    refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }

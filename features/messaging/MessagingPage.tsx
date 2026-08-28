@@ -431,7 +431,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
     // Lista de conversas
     if (mobilePanel === 'list') {
       return (
-        <div className="h-[calc(100dvh-4rem)] flex flex-col overflow-hidden">
+        <div className="flex flex-col overflow-hidden" style={{ height: 'calc(100dvh - 4rem - var(--app-bottom-nav-height, 0px))' }}>
           <ConversationList
             selectedId={selectedConversationId}
             onSelect={(id) => { handleSelectConversation(id); setMobilePanel('thread'); }}
@@ -447,7 +447,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
     // Thread de mensagens
     if (mobilePanel === 'thread') {
       return (
-        <div className="h-[calc(100dvh-4rem)] flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900/50">
+        <div className="flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900/50" style={{ height: 'calc(100dvh - 4rem - var(--app-bottom-nav-height, 0px))' }}>
           {/* Header mobile */}
           <div className="h-14 px-2 flex items-center gap-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-white/10 shrink-0">
             <button
@@ -548,7 +548,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
 
     // Painel do contato
     return (
-      <div className="h-[calc(100dvh-4rem)] flex flex-col overflow-hidden bg-white dark:bg-slate-900">
+      <div className="flex flex-col overflow-hidden bg-white dark:bg-slate-900" style={{ height: 'calc(100dvh - 4rem - var(--app-bottom-nav-height, 0px))' }}>
         <div className="h-14 px-2 flex items-center gap-3 border-b border-slate-200 dark:border-white/10 shrink-0">
           <button
             type="button"
