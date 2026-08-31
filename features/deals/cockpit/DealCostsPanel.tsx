@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, DollarSign, Loader2, Plus, TrendingUp, X } from 'lucide-react';
 import { dealCostsService, calcDealCosts, calcEngCost, calcComissaoPct, calcNfCost, DealCostData } from '@/lib/supabase/dealCosts';
 import { orgSettingsService, OrgCostSettings } from '@/lib/supabase/orgSettings';
@@ -18,9 +18,10 @@ const PCT = (v: number) => `${v.toFixed(1)}%`;
 const inputCls = 'w-full rounded-lg border border-white/10 bg-white/3 px-2.5 py-1.5 text-xs text-slate-100 outline-none placeholder:text-slate-600 focus:ring-1 focus:ring-cyan-500/30';
 
 const defaultCosts: DealCostData = {
-  custoNf: 0, custoNfTipo: 'kit', custoEngenharia: 0, custoInstalacao: 0,
+  custoNf: 0, custoNfTipo: 'servico', custoEngenharia: 0, custoInstalacao: 0,
   custoCorrugado: 0, custoEletroduto: 0, custoFornecedor: 0, voucherBancoPct: 0,
   custosExtras: [], custoTotal: 0, comissaoValor: 0, lucroBruto: 0, margemPct: 0,
+  custosPagos: {}, vendaPropria: true,
 };
 
 export const DealCostsPanel: React.FC<Props> = ({ dealId, valorVenda, kwp }) => {
@@ -31,12 +32,14 @@ export const DealCostsPanel: React.FC<Props> = ({ dealId, valorVenda, kwp }) => 
   const [saved, setSaved] = useState(false);
   const [newExtraDesc, setNewExtraDesc] = useState('');
   const [newExtraValor, setNewExtraValor] = useState('');
+  const prevKwpRef = useRef<number | undefined>(kwp);
 
   const recalc = useCallback((base: DealCostData, cfg: OrgCostSettings | null): DealCostData => {
     if (!cfg) return base;
     const custoFornecedorEfetivo = base.custoFornecedor * (1 - (base.voucherBancoPct ?? 0) / 100);
     const nf = calcNfCost(valorVenda, base.custoNfTipo, cfg, custoFornecedorEfetivo);
-    const totals = calcDealCosts({ ...base, custoNf: nf }, valorVenda, calcComissaoPct(kwp ?? 0, cfg));
+    const comPct = base.vendaPropria ? 0 : calcComissaoPct(kwp ?? 0, cfg);
+    const totals = calcDealCosts({ ...base, custoNf: nf }, valorVenda, comPct);
     return { ...base, custoNf: nf, ...totals };
   }, [valorVenda, kwp]);
 
@@ -56,7 +59,20 @@ export const DealCostsPanel: React.FC<Props> = ({ dealId, valorVenda, kwp }) => 
 
   useEffect(() => { void load(); }, [load]);
 
-  const comissaoPct = orgCfg ? calcComissaoPct(kwp ?? 0, orgCfg) : 0;
+  // Auto-calcula engenharia quando kWp está disponível
+  useEffect(() => {
+    if (loading || !orgCfg || !kwp || kwp <= 0) return;
+    const prev = prevKwpRef.current;
+    prevKwpRef.current = kwp;
+    setCosts((prevCosts) => {
+      const prevAutoCalc = prev && prev > 0 ? calcEngCost(prev, orgCfg) : 0;
+      const shouldApply = prevCosts.custoEngenharia === 0 || prevCosts.custoEngenharia === prevAutoCalc;
+      if (!shouldApply) return prevCosts;
+      return recalc({ ...prevCosts, custoEngenharia: calcEngCost(kwp, orgCfg) }, orgCfg);
+    });
+  }, [kwp, orgCfg, loading, recalc]);
+
+  const comissaoPct = costs.vendaPropria ? 0 : (orgCfg ? calcComissaoPct(kwp ?? 0, orgCfg) : 0);
 
   const aplicarPadroes = useCallback(() => {
     if (!orgCfg) return;
@@ -130,6 +146,24 @@ export const DealCostsPanel: React.FC<Props> = ({ dealId, valorVenda, kwp }) => 
           title="Preenche com os padrões configurados">
           Aplicar padrões
         </button>
+      </div>
+
+      {/* Toggle Própria / Vendedor */}
+      <div className="flex gap-1.5">
+        {([
+          { value: false, label: 'Por vendedor' },
+          { value: true,  label: 'Venda própria' },
+        ] as const).map(({ value, label }) => (
+          <button key={String(value)} type="button"
+            onClick={() => setCosts(prev => recalc({ ...prev, vendaPropria: value }, orgCfg))}
+            className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-semibold transition-colors ${
+              costs.vendaPropria === value
+                ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-200'
+                : 'border-white/10 bg-white/3 text-slate-400 hover:bg-white/5'
+            }`}>
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* Tipo de NF */}
