@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { conversationId, organizationId, messageId, messageText } = body;
+  const { conversationId, organizationId, messageId, messageText, mediaUrl, mediaType } = body;
 
   // Validate required fields and UUID format
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -99,6 +99,8 @@ export async function POST(request: NextRequest) {
       organizationId,
       incomingMessage: messageText,
       messageId: validMessageId,
+      mediaUrl: typeof mediaUrl === 'string' ? mediaUrl : undefined,
+      mediaType: typeof mediaType === 'string' ? mediaType : undefined,
     }).catch((error) => {
       console.error('[AI Process] Background processing error:', error);
     })

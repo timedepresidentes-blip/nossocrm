@@ -10,11 +10,14 @@ import type { ConversationView } from '@/lib/messaging/types';
 
 interface SolarExtracted {
   kwhMonth: number | null;
+  consumoFuturoKwh: number | null;
   city: string | null;
   state: string | null;
   distributor: string | null;
   currentBillValue: number | null;
   systemPowerKwp: number | null;
+  kwpRecomendado: number | null;
+  raciocinioDimensionamento: string | null;
   observations: string | null;
   confidence: number;
 }
@@ -115,14 +118,17 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
   const [cfgLoaded, setCfgLoaded] = useState(false);
 
   // Custos internos
-  const [tipoVenda, setTipoVenda] = useState<'propria' | 'vendedor'>('vendedor');
-  const [custoNfTipo, setCustoNfTipo] = useState<'kit' | 'servico'>('kit');
+  const [tipoVenda, setTipoVenda] = useState<'propria' | 'vendedor'>('propria');
+  const [custoNfTipo, setCustoNfTipo] = useState<'kit' | 'servico'>('servico');
   const [custoEngenharia, setCustoEngenharia] = useState('');
   const [custoCorrugado, setCustoCorrugado] = useState('');
   const [custoEletroduto, setCustoEletroduto] = useState('');
   const [custoFornecedor, setCustoFornecedor] = useState('');
   const [voucherBancoPct, setVoucherBancoPct] = useState('');
   const [custoComissaoPct, setCustoComissaoPct] = useState('');
+
+  // kWp manual (sobrepõe o extraído pela IA ou PDF)
+  const [kwpManual, setKwpManual] = useState('');
 
   // Custo instalação e extras nomeados
   const [custoInstalacao, setCustoInstalacao] = useState('');
@@ -142,6 +148,7 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
     setBillFile(null); setSupplierFile(null);
     setValorBase(''); setMargemDesejada('');
     setDescontoPct(''); setDescontoReais('');
+    setKwpManual('');
     setCustoInstalacao(''); setCustosAdicionais([]);
     setCustoEngenharia(''); setCustoFornecedor('');
     setCfgLoaded(false);
@@ -164,15 +171,19 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
     });
   }, [isOpen, contactName]);
 
-  // Auto-seleciona engenharia e comissão quando kWp muda (conversa IA ou PDF fornecedor)
+  // Auto-calcula engenharia, comissão e instalação quando kWp muda (manual, IA ou PDF)
   useEffect(() => {
     if (!cfgLoaded) return;
-    const kwp = extracted?.systemPowerKwp ?? supplierData?.systemPowerKwp ?? 0;
-    if (kwp > 0) {
-      setCustoEngenharia(fmtMoeda(calcEngCost(kwp, orgCfg)));
-      setCustoComissaoPct(String(calcComissaoPct(kwp, orgCfg)));
+    // Prioridade: manual > recomendado IA > mencionado cliente > PDF fornecedor
+    const kwpVal = parseFlt(kwpManual) > 0
+      ? parseFlt(kwpManual)
+      : (extracted?.kwpRecomendado ?? extracted?.systemPowerKwp ?? supplierData?.systemPowerKwp ?? 0);
+    if (kwpVal > 0) {
+      setCustoEngenharia(fmtMoeda(calcEngCost(kwpVal, orgCfg)));
+      setCustoComissaoPct(String(calcComissaoPct(kwpVal, orgCfg)));
+      setCustoInstalacao(fmtMoeda(kwpVal * 190));
     }
-  }, [extracted?.systemPowerKwp, supplierData?.systemPowerKwp, orgCfg, cfgLoaded]);
+  }, [kwpManual, extracted?.kwpRecomendado, extracted?.systemPowerKwp, supplierData?.systemPowerKwp, orgCfg, cfgLoaded]);
 
   // Preenche valor final de venda a partir do PDF do fornecedor
   useEffect(() => {
@@ -187,7 +198,10 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
   const salesBoard = boards.find((b: any) => b.template === 'SALES') ?? boards.find((b: any) => b.isDefault) ?? boards[0];
   const firstStage = (salesBoard as any)?.stages?.[0];
 
-  const kwp = extracted?.systemPowerKwp ?? supplierData?.systemPowerKwp ?? 0;
+  // Prioridade: manual > recomendado pela IA > mencionado pelo cliente > extraído do PDF do fornecedor
+  const kwp = parseFlt(kwpManual) > 0
+    ? parseFlt(kwpManual)
+    : (extracted?.kwpRecomendado ?? extracted?.systemPowerKwp ?? supplierData?.systemPowerKwp ?? 0);
   const nfPct = custoNfTipo === 'kit' ? orgCfg.custoNfKitPct : orgCfg.custoNfServicoPct;
   const comPct = tipoVenda === 'propria' ? 0 : parseFlt(custoComissaoPct);
 
@@ -295,6 +309,11 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
       if (!res.ok || data.error) { setAiError(data.error?.message || 'Erro ao analisar.'); return; }
       setExtracted(data.extracted);
       setShowExtracted(true);
+      // Auto-preenche kWp com o valor recomendado pela IA (se não foi digitado manualmente)
+      const recKwp = data.extracted?.kwpRecomendado ?? data.extracted?.systemPowerKwp;
+      if (recKwp && recKwp > 0 && !kwpManual) {
+        setKwpManual(String(recKwp));
+      }
     } catch { setAiError('Erro de conexão.'); }
     finally { setAiLoading(false); }
   }
@@ -420,17 +439,27 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
             </div>
             {extracted && showExtracted && (
               <div className="px-4 pb-4 space-y-2 border-t border-primary-200 dark:border-primary-500/20 pt-3">
+                {/* Dimensionamento recomendado — destaque */}
+                {extracted.kwpRecomendado && (
+                  <div className="rounded-lg border-2 border-primary-400 dark:border-primary-500 bg-primary-50 dark:bg-primary-500/10 px-3 py-2.5">
+                    <p className="text-[10px] text-primary-500 uppercase tracking-wide font-semibold mb-0.5">Sistema recomendado pela IA</p>
+                    <p className="text-xl font-bold text-primary-700 dark:text-primary-300">{extracted.kwpRecomendado} kWp</p>
+                    {extracted.raciocinioDimensionamento && (
+                      <p className="text-[11px] text-primary-600 dark:text-primary-400 mt-1 leading-relaxed">{extracted.raciocinioDimensionamento}</p>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
-                  {extracted.systemPowerKwp !== null && (
-                    <div className="rounded-lg bg-white dark:bg-slate-800 px-3 py-2 border border-slate-100 dark:border-white/10 col-span-2">
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wide">Potência estimada</p>
-                      <p className="text-base font-bold text-primary-600 dark:text-primary-400">{extracted.systemPowerKwp} kWp</p>
-                    </div>
-                  )}
                   {extracted.kwhMonth !== null && (
                     <div className="rounded-lg bg-white dark:bg-slate-800 px-3 py-2 border border-slate-100 dark:border-white/10">
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wide">Consumo mensal</p>
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">{extracted.kwhMonth} kWh</p>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wide">Consumo atual</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{extracted.kwhMonth} kWh/mês</p>
+                    </div>
+                  )}
+                  {extracted.consumoFuturoKwh !== null && extracted.consumoFuturoKwh > 0 && (
+                    <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 px-3 py-2 border border-amber-200 dark:border-amber-500/30">
+                      <p className="text-[10px] text-amber-500 uppercase tracking-wide font-semibold">+ Consumo futuro</p>
+                      <p className="text-sm font-bold text-amber-700 dark:text-amber-300">+{extracted.consumoFuturoKwh} kWh/mês</p>
                     </div>
                   )}
                   {extracted.currentBillValue !== null && (
@@ -442,7 +471,7 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
                   {extracted.city && (
                     <div className="rounded-lg bg-white dark:bg-slate-800 px-3 py-2 border border-slate-100 dark:border-white/10">
                       <p className="text-[10px] text-slate-400 uppercase tracking-wide">Cidade</p>
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">{extracted.city}{extracted.state ? ` - ${extracted.state}` : ''}</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{extracted.city}{extracted.state ? ` — ${extracted.state}` : ''}</p>
                     </div>
                   )}
                   {extracted.distributor && (
@@ -451,8 +480,14 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
                       <p className="text-sm font-bold text-slate-900 dark:text-white">{extracted.distributor}</p>
                     </div>
                   )}
+                  {extracted.systemPowerKwp !== null && extracted.systemPowerKwp !== extracted.kwpRecomendado && (
+                    <div className="rounded-lg bg-white dark:bg-slate-800 px-3 py-2 border border-slate-100 dark:border-white/10 col-span-2">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wide">Potência mencionada pelo cliente</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{extracted.systemPowerKwp} kWp</p>
+                    </div>
+                  )}
                 </div>
-                {extracted.observations && <p className="text-xs text-slate-500 dark:text-slate-400 italic">{extracted.observations}</p>}
+                {extracted.observations && <p className="text-xs text-slate-500 dark:text-slate-400 italic border-t border-primary-100 dark:border-primary-500/20 pt-2">{extracted.observations}</p>}
               </div>
             )}
             {aiError && <p className="px-4 pb-3 text-xs text-red-500">{aiError}</p>}
@@ -563,6 +598,35 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
               </div>
             </div>
 
+            {/* kWp do sistema — manual ou auto-extraído */}
+            <div className="mb-4 rounded-xl border border-primary-200 dark:border-primary-500/20 bg-primary-50/50 dark:bg-primary-500/5 px-3 py-3">
+              <label className="block text-xs font-semibold text-primary-700 dark:text-primary-300 mb-1.5">
+                Potência do sistema (kWp)
+                {!parseFlt(kwpManual) && kwp > 0 && (
+                  <span className="ml-2 text-[10px] font-normal text-primary-500">← extraído automaticamente</span>
+                )}
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={kwpManual}
+                  onChange={e => setKwpManual(e.target.value)}
+                  onFocus={e => e.target.select()}
+                  placeholder={kwp > 0 ? String(kwp) : 'Ex: 4.5'}
+                  className={inpSuf + ' text-primary-700 dark:text-primary-200 font-semibold'}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">kWp</span>
+              </div>
+              {kwp > 0 && (
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5">
+                  Instalação automática: <span className="font-semibold text-slate-700 dark:text-slate-200">{fmtBRL(kwp * 190)}</span>
+                  <span className="ml-1 opacity-60">({kwp} × R$190,00)</span>
+                </p>
+              )}
+            </div>
+
             {/* Campos de custo */}
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -610,7 +674,10 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
               </div>
               {/* Custo de Instalação */}
               <div className="col-span-2">
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Custo de Instalação</label>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+                  Custo de Instalação
+                  {kwp > 0 && <span className="ml-1.5 text-[10px] font-normal text-primary-500">auto: {kwp} kWp × R$190,00</span>}
+                </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">R$</span>
                   <input type="text" inputMode="decimal" value={custoInstalacao} onChange={e => setCustoInstalacao(e.target.value)} onFocus={e => e.target.select()} onBlur={e => blurFmt(e.target.value, setCustoInstalacao)} className={inpPre} placeholder="0,00" />

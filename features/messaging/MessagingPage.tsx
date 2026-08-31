@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, CalendarClock, ArrowLeftRight, X, BotMessageSquare, ArrowLeft, ChevronRight, Send, Loader2 } from 'lucide-react';
+import { MessageSquare, User, CheckCircle, MoreVertical, LinkIcon, Trash2, RotateCcw, Search, Volume2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, CalendarClock, ArrowLeftRight, X, BotMessageSquare, ArrowLeft, ChevronRight, Send, Loader2, Bot } from 'lucide-react';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
@@ -331,6 +331,19 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
     return contact.id;
   }, [profile?.organization_id]);
 
+  // Reativa Júlia para continuar o atendimento
+  const handleReturnToJulia = useCallback(async (conversationId: string) => {
+    try {
+      await fetch('/api/messaging/ai/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId }),
+      });
+    } catch (err) {
+      console.error('[MessagingPage] Falha ao acionar Júlia:', err);
+    }
+  }, []);
+
   // View contact in CRM
   const handleViewContact = useCallback((contactId: string) => {
     router.push(`/contacts?id=${contactId}`);
@@ -499,7 +512,15 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
                       <MoreVertical className="w-5 h-5" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem
+                      onClick={() => handleReturnToJulia(selectedConversation.id)}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <Bot className="w-4 h-4 text-violet-500" />
+                      <span className="text-violet-600 dark:text-violet-400">Passar para Júlia</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     {selectedConversation.status === 'resolved' && (
                       <DropdownMenuItem onClick={() => reopenConversation(selectedConversation.id)} className="gap-2">
                         <RotateCcw className="w-4 h-4" /> Reabrir conversa
@@ -522,7 +543,7 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
 
           {selectedConversation ? (
             <>
-              <div className="flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                 <MessageThread
                   conversationId={selectedConversation.id}
                   presenceStatus={selectedConversation.contactId ? getPresence(selectedConversation.contactId) : undefined}
@@ -648,6 +669,16 @@ export function MessagingPage({ initialConversationId }: MessagingPageProps = {}
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {/* Botão Passar para Júlia */}
+                <button
+                  type="button"
+                  onClick={() => handleReturnToJulia(selectedConversation.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10 hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors"
+                  title="Passar para Júlia continuar o atendimento"
+                >
+                  <Bot className="w-4 h-4" />
+                  Passar para Júlia
+                </button>
                 <TransferButton
                   conversationId={selectedConversation.id}
                   assignedUserId={selectedConversation.assignedUserId}

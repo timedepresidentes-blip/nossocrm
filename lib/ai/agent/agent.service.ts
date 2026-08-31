@@ -8,7 +8,9 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { generateText } from 'ai';
 import { type AIProvider } from '../config';
+import { getModel } from '../config';
 import { AI_DEFAULT_MODELS, AI_DEFAULT_PROVIDER } from '../defaults';
 import { generateWithFailover, buildProviderList } from './provider-failover';
 import { checkRateLimit, recordRateCall } from './rate-limiter';
@@ -195,6 +197,10 @@ export interface ProcessMessageParams {
   messageId?: string;
   /** Quando definido, bypassa a verificação de ai_paused e substitui o prompt de disparo */
   triggerContext?: string;
+  /** URL pública da mídia enviada pelo cliente (imagem ou PDF da conta de luz) */
+  mediaUrl?: string;
+  /** MIME type da mídia (image/jpeg, image/png, application/pdf, etc.) */
+  mediaType?: string;
 }
 
 // =============================================================================
@@ -220,7 +226,7 @@ export interface ProcessMessageParams {
 export async function processIncomingMessage(
   params: ProcessMessageParams
 ): Promise<AgentProcessResult> {
-  const { supabase, conversationId, organizationId, incomingMessage, messageId, triggerContext } = params;
+  const { supabase, conversationId, organizationId, incomingMessage, messageId, triggerContext, mediaUrl, mediaType } = params;
 
   console.log('[AIAgent] Processing message:', { conversationId, messageId, trigger: !!triggerContext, org: organizationId });
 
@@ -517,10 +523,87 @@ export async function processIncomingMessage(
   }
 
   // 9. Gerar resposta usando configuração de AI do banco
+  // Se o cliente enviou uma mídia (imagem/PDF da conta de luz), analisar antes de responder
+  let effectiveMessage = incomingMessage;
+  if ((mediaUrl || mediaType) && !triggerContext) {
+    // Lê a mídia do banco (mais confiável que URL do webhook que pode ter expirado)
+    const { data: mediaMsg } = await supabase
+      .from('messaging_messages')
+      .select('content, content_type')
+      .eq('conversation_id', conversationId)
+      .eq('direction', 'inbound')
+      .in('content_type', ['image', 'document'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const storedContent = mediaMsg?.content as Record<string, unknown> | undefined;
+    const storedUrl = (storedContent?.mediaUrl as string | undefined) || mediaUrl;
+    const storedMime = (storedContent?.mimeType as string | undefined) ||
+      mediaType ||
+      (mediaMsg?.content_type === 'document' ? 'application/pdf' : 'image/jpeg');
+
+    if (storedUrl && storedMime) {
+      // Resolve IDs Meta (meta:{id}) baixando via Graph API com token do canal
+      let resolvedUrl = storedUrl;
+      if (storedUrl.startsWith('meta:')) {
+        const mediaId = storedUrl.slice(5);
+        const { data: conv } = await supabase
+          .from('messaging_conversations')
+          .select('channel_id')
+          .eq('id', conversationId)
+          .maybeSingle();
+        if (conv?.channel_id) {
+          const { data: ch } = await supabase
+            .from('messaging_channels')
+            .select('credentials')
+            .eq('id', conv.channel_id)
+            .maybeSingle();
+          const token = ((ch?.credentials as Record<string, unknown> | null)?.accessToken
+            ?? (ch?.credentials as Record<string, unknown> | null)?.access_token) as string | undefined;
+          if (token) {
+            try {
+              const infoRes = await fetch(`https://graph.facebook.com/v25.0/${mediaId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+                signal: AbortSignal.timeout(10000),
+              });
+              if (infoRes.ok) {
+                const info = await infoRes.json() as { url?: string };
+                if (info.url) {
+                  const mediaRes = await fetch(info.url, {
+                    headers: { Authorization: `Bearer ${token}` },
+                    signal: AbortSignal.timeout(20000),
+                  });
+                  if (mediaRes.ok) {
+                    const buffer = await mediaRes.arrayBuffer();
+                    const b64 = Buffer.from(new Uint8Array(buffer)).toString('base64');
+                    resolvedUrl = `data:${storedMime};base64,${b64}`;
+                    console.log('[AIAgent] Meta media downloaded OK, size:', buffer.byteLength);
+                  }
+                }
+              } else {
+                console.warn('[AIAgent] Meta Graph API error:', infoRes.status);
+              }
+            } catch (e) {
+              console.warn('[AIAgent] Meta media download failed:', e instanceof Error ? e.message : e);
+            }
+          } else {
+            console.warn('[AIAgent] No Meta access token found for channel');
+          }
+        }
+      }
+
+      const billAnalysis = await analyzeMediaBill(resolvedUrl, storedMime, aiConfig);
+      if (billAnalysis) {
+        effectiveMessage = `[O cliente enviou uma conta de energia]\n\nDados extraídos da conta:\n${billAnalysis}\n\nAcuse o recebimento de forma natural, informe os dados encontrados e prossiga coletando as informações ainda faltantes (telhado, tipo de imóvel, fases elétricas).`;
+      }
+    }
+  }
+
   const decision = await generateResponse({
     context,
     stageConfig: config,
-    incomingMessage,
+    incomingMessage: effectiveMessage,
     aiConfig,
     closingMode: conversation?.closing_mode ?? false,
     triggerContext,
@@ -652,6 +735,98 @@ export async function processIncomingMessage(
     success: true,
     decision,
   };
+}
+
+// =============================================================================
+// Media Bill Analysis
+// =============================================================================
+
+/**
+ * Analisa uma conta de energia enviada pelo cliente via WhatsApp.
+ * Aceita data URIs (Evolution já decodificou) ou URLs HTTP (Z-API CDN).
+ * Retorna resumo textual: consumo, distribuidora, cidade, valor.
+ */
+async function analyzeMediaBill(
+  mediaUrl: string,
+  mimeType: string,
+  aiConfig: OrgAIConfig
+): Promise<string | null> {
+  try {
+    let base64: string;
+    let actualMime = mimeType.toLowerCase();
+
+    if (mediaUrl.startsWith('data:')) {
+      // Evolution API já decodificou para data URI — extrai base64 diretamente
+      const commaIdx = mediaUrl.indexOf(',');
+      if (commaIdx === -1) return null;
+      const header = mediaUrl.substring(5, commaIdx); // após "data:"
+      base64 = mediaUrl.substring(commaIdx + 1);
+      const mimePart = header.split(';')[0];
+      if (mimePart) actualMime = mimePart.toLowerCase();
+    } else {
+      // URL HTTP (Z-API CDN) — tenta baixar com timeout
+      let res: Response;
+      try {
+        res = await fetch(mediaUrl, { signal: AbortSignal.timeout(15000) });
+      } catch (fetchErr) {
+        console.warn('[AIAgent] analyzeMediaBill: fetch failed', fetchErr instanceof Error ? fetchErr.message : fetchErr);
+        return null;
+      }
+      if (!res.ok) {
+        console.warn('[AIAgent] analyzeMediaBill: HTTP', res.status, 'for media URL');
+        return null;
+      }
+      const buffer = await res.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      base64 = Buffer.from(bytes).toString('base64');
+    }
+
+    if (!base64) return null;
+
+    const isPdf = actualMime.includes('pdf');
+    const contentPart = isPdf
+      ? { type: 'file' as const, data: base64, mediaType: 'application/pdf' as const }
+      : { type: 'image' as const, image: `data:${actualMime};base64,${base64}` };
+
+    // Escolhe o melhor provider disponível para análise multimodal
+    const providerPriority: AIProvider[] = ['anthropic', 'google', 'openai'];
+    let model = null;
+    for (const p of providerPriority) {
+      const key = aiConfig.allKeys[p];
+      if (key) {
+        try {
+          model = getModel(p, key, p === 'anthropic' ? 'claude-haiku-4-5-20251001' : p === 'google' ? 'gemini-2.0-flash' : 'gpt-4o-mini');
+          break;
+        } catch { /* provider indisponível */ }
+      }
+    }
+    if (!model) {
+      console.warn('[AIAgent] analyzeMediaBill: nenhum provider com chave disponível');
+      return null;
+    }
+
+    const result = await generateText({
+      model,
+      maxRetries: 1,
+      messages: [{
+        role: 'user',
+        content: [
+          contentPart,
+          {
+            type: 'text',
+            text: 'Analise esta conta de energia elétrica e extraia com precisão: consumo médio mensal em kWh (use histórico de 12 meses se disponível), valor da última fatura em R$, nome da distribuidora, cidade e estado do cliente. Responda SOMENTE neste formato: "Consumo: X kWh/mês | Valor: R$ X | Distribuidora: X | Cidade: X/UF". Se não conseguir ler o documento, responda: "Não foi possível extrair os dados."',
+          },
+        ],
+      }],
+    });
+
+    const summary = result.text.trim();
+    console.log('[AIAgent] analyzeMediaBill result:', summary);
+    return summary.startsWith('Não foi possível') ? null : summary;
+  } catch (e) {
+    console.error('[AIAgent] analyzeMediaBill error:', e instanceof Error ? e.message : e);
+    return null;
+  }
 }
 
 // =============================================================================
@@ -937,6 +1112,15 @@ async function sendAIResponse(params: {
         })
         .eq('id', message.id);
 
+      // Reseta unread_count: AI respondeu, operador não precisa ver como pendente
+      supabase
+        .from('messaging_conversations')
+        .update({ unread_count: 0 })
+        .eq('id', conversationId)
+        .then(({ error }) => {
+          if (error) console.error('[AIAgent] Falha ao resetar unread_count (não-fatal):', error);
+        });
+
       return {
         success: true,
         messageId: message.id,
@@ -1135,6 +1319,8 @@ async function handleHandoff(
       try {
         const { generateMeetingBriefing } = await import('../briefing/briefing.service');
         const briefing = await generateMeetingBriefing(dealId, supabase);
+
+        // Salva na metadata (para exibição no painel de contato)
         const { data: current } = await supabase
           .from('messaging_conversations')
           .select('metadata')
@@ -1145,6 +1331,30 @@ async function handleHandoff(
           .from('messaging_conversations')
           .update({ metadata: { ...currentMeta, ai_handoff_briefing: briefing } })
           .eq('id', conversationId);
+
+        // Envia resumo como nota interna no thread (visível no CRM, NÃO enviado ao WhatsApp)
+        const lines: string[] = [`📋 Resumo de atendimento — Júlia\n`, briefing.executiveSummary];
+        const highPending = (briefing.pendingPoints ?? []).filter((p: { priority: string }) => p.priority === 'high');
+        if (highPending.length > 0) {
+          lines.push('\n⚠️ Pontos pendentes:');
+          highPending.forEach((p: { point: string }) => lines.push(`• ${p.point}`));
+        }
+        const questions: string[] = briefing.recommendedApproach?.keyQuestions ?? [];
+        if (questions.length > 0) {
+          lines.push('\n💡 Sugestões de perguntas:');
+          questions.slice(0, 3).forEach((q: string) => lines.push(`• ${q}`));
+        }
+        await supabase.from('messaging_messages').insert({
+          conversation_id: conversationId,
+          direction: 'outbound',
+          content_type: 'text',
+          content: { type: 'text', text: lines.join('\n') },
+          status: 'sent',
+          sender_type: 'ai',
+          sender_name: 'Julia',
+          metadata: { internal_note: true, note_type: 'handoff_summary', sent_by_ai: true },
+        });
+
         console.log('[AIAgent] Handoff briefing gerado e salvo para conversa', conversationId);
       } catch (err) {
         console.error('[AIAgent] Falha ao gerar briefing de handoff (não-fatal):', err);

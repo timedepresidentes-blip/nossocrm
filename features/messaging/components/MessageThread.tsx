@@ -4,9 +4,11 @@ import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import { format, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { MessageSquare } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { PresenceIndicator } from './PresenceIndicator';
 import { MessageBubble } from './MessageBubble';
 import { useMessages } from '@/lib/query/hooks/useMessagesQuery';
+import { queryKeys } from '@/lib/query';
 import type { MessagingMessage } from '@/lib/messaging/types';
 
 interface MessageThreadProps {
@@ -43,11 +45,25 @@ function DateDivider({ date }: { date: Date }) {
 
 export function MessageThread({ conversationId, presenceStatus, onReply, labelColor }: MessageThreadProps) {
   const { data, isLoading, error } = useMessages(conversationId);
+  const queryClient = useQueryClient();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
   const prevLastMessageIdRef = useRef<string | undefined>(undefined);
   const isInitialLoadRef = useRef(true);
+
+  // Força refetch quando o usuário volta ao app no celular (visibilitychange)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && conversationId) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.messagingMessages.byConversation(conversationId),
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [conversationId, queryClient]);
 
   // Filter out reaction messages — displayed as pills, not standalone bubbles
   const messages = useMemo(
@@ -57,20 +73,27 @@ export function MessageThread({ conversationId, presenceStatus, onReply, labelCo
 
   const lastMessageId = messages[messages.length - 1]?.id;
 
-  // Scroll to bottom when new messages arrive.
-  // Tracks both count AND last message ID: when a poll refetch replaces old messages
-  // with newer ones (count stays the same), the ID change still triggers the scroll.
+  // Scroll para o fundo quando chegam mensagens novas.
+  // Usa requestAnimationFrame para garantir que o DOM esteja pintado antes de medir scrollHeight.
+  // scrollTop direto é mais confiável que scrollTo no mobile.
   useEffect(() => {
     const isNewLastMessage =
       lastMessageId !== undefined && lastMessageId !== prevLastMessageIdRef.current;
     const isMoreMessages = messages.length > prevMessagesLengthRef.current;
 
     if (isNewLastMessage || isMoreMessages) {
-      scrollRef.current?.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: isInitialLoadRef.current ? 'auto' : 'smooth',
-      });
+      const instant = isInitialLoadRef.current;
       isInitialLoadRef.current = false;
+
+      requestAnimationFrame(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        if (instant) {
+          el.scrollTop = el.scrollHeight;
+        } else {
+          el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+        }
+      });
     }
 
     prevMessagesLengthRef.current = messages.length;

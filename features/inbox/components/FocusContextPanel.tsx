@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { Deal, Activity, Contact, Board } from '@/types';
 import { useAIDealAnalysis, deriveHealthFromProbability } from '../hooks/useAIDealAnalysis';
+import { ProjetoTimelinePanel } from '@/features/deals/cockpit/ProjetoTimelinePanel';
 import { useDealNotes } from '../hooks/useDealNotes';
 import { useDealFiles } from '../hooks/useDealFiles';
 import { useQuickScripts } from '../hooks/useQuickScripts';
@@ -1512,18 +1513,18 @@ export const FocusContextPanel: React.FC<FocusContextPanelProps> = ({
                         <div className="w-[400px] flex flex-col min-h-0 bg-slate-900/20 border-l border-white/5 relative">
                             {/* Workspace Tabs */}
                             <div className="shrink-0 flex items-center px-4 h-14 border-b border-white/5 gap-4">
-                                {['chat', 'notas', 'scripts', 'files', 'contrato'].map((tab) => (
+                                {([...['chat', 'notas', 'scripts', 'files', 'contrato'], ...(deal.isWon ? ['projeto'] : [])] as string[]).map((tab) => (
                                     <button
                                         key={tab}
                                         onClick={() => setActiveTab(tab)}
                                         className={`relative h-full flex items-center justify-center text-xs font-semibold uppercase tracking-wider transition-all ${activeTab === tab
-                                            ? 'text-primary-400 shadow-[0_4px_20px_-10px_rgba(var(--primary-500),0.3)]'
+                                            ? tab === 'projeto' ? 'text-emerald-400' : 'text-primary-400 shadow-[0_4px_20px_-10px_rgba(var(--primary-500),0.3)]'
                                             : 'text-slate-500 hover:text-slate-300'
                                             }`}
                                     >
-                                        {tab === 'notas' ? 'Notas' : tab === 'chat' ? 'Chat IA' : tab === 'scripts' ? 'Scripts' : tab === 'files' ? 'Arquivos' : 'Contrato'}
+                                        {tab === 'notas' ? 'Notas' : tab === 'chat' ? 'Chat IA' : tab === 'scripts' ? 'Scripts' : tab === 'files' ? 'Arquivos' : tab === 'projeto' ? '📅 Projeto' : 'Contrato'}
                                         {activeTab === tab && (
-                                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-500 shadow-[0_0_15px_rgba(var(--primary-500),0.8)]" />
+                                            <div className={`absolute bottom-0 left-0 right-0 h-0.5 ${tab === 'projeto' ? 'bg-emerald-500' : 'bg-primary-500 shadow-[0_0_15px_rgba(var(--primary-500),0.8)]'}`} />
                                         )}
                                     </button>
                                 ))}
@@ -1807,6 +1808,16 @@ export const FocusContextPanel: React.FC<FocusContextPanelProps> = ({
                                         contactName={contact?.name}
                                         contactEmail={contact?.email}
                                         contactPhone={contact?.phone}
+                                    />
+                                </div>
+                            )}
+
+                            {/* Linha do Tempo do Projeto — só para deals ganhos */}
+                            {activeTab === 'projeto' && deal.isWon && (
+                                <div className="flex-1 overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-slate-800">
+                                    <ProjetoTimelinePanel
+                                        dealId={deal.id}
+                                        timeline={deal.projetoTimeline}
                                     />
                                 </div>
                             )}
