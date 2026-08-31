@@ -334,11 +334,32 @@ function ChannelCard({
   isLoading,
   isRoutingLoading,
 }: ChannelCardProps) {
+  const { addToast } = useToast();
   const Icon = CHANNEL_ICONS[channel.channelType] || MessageSquare;
   const StatusIcon = STATUS_ICONS[channel.status];
   const typeInfo = CHANNEL_TYPE_INFO[channel.channelType];
   const isConnected = channel.status === 'connected';
   const isConnecting = channel.status === 'connecting';
+
+  const [isSyncingTemplates, setIsSyncingTemplates] = useState(false);
+
+  const handleSyncTemplates = async () => {
+    setIsSyncingTemplates(true);
+    try {
+      const res = await fetch('/api/messaging/templates/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelId: channel.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao sincronizar');
+      addToast(`Templates sincronizados: ${data.synced} de ${data.total}`, 'success');
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Erro ao sincronizar templates', 'error');
+    } finally {
+      setIsSyncingTemplates(false);
+    }
+  };
 
   // Routing state
   const [isRoutingExpanded, setIsRoutingExpanded] = useState(false);
@@ -506,6 +527,19 @@ function ChannelCard({
             </button>
           </div>
 
+          {channel.provider === 'meta-cloud' && (
+            <button
+              onClick={handleSyncTemplates}
+              disabled={isLoading || isSyncingTemplates}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20
+                text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-500/20
+                transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={cn('w-3.5 h-3.5', isSyncingTemplates && 'animate-spin')} />
+              {isSyncingTemplates ? 'Sincronizando...' : 'Sincronizar Templates'}
+            </button>
+          )}
           <button
             onClick={onDelete}
             disabled={isLoading}

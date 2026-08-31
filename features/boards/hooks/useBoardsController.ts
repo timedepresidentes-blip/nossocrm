@@ -397,9 +397,10 @@ export const useBoardsController = () => {
       let matchesStatus = true;
       if (statusFilter === 'open') {
         const closedRef = l.closedAt || l.updatedAt;
-        const recentlyClosed = (l.isWon || l.isLost) &&
+        // Perdidos: visíveis por 7 dias. Ganhos: sempre visíveis na coluna GANHO.
+        const recentlyLost = l.isLost &&
           !!closedRef && new Date(closedRef).getTime() >= recentClosedCutoff;
-        matchesStatus = (!l.isWon && !l.isLost) || recentlyClosed;
+        matchesStatus = (!l.isWon && !l.isLost) || l.isWon || recentlyLost;
       } else if (statusFilter === 'won') {
         matchesStatus = l.isWon;
       } else if (statusFilter === 'lost') {
@@ -408,8 +409,8 @@ export const useBoardsController = () => {
 
       let matchesRecent = true;
       if (statusFilter === 'open' || statusFilter === 'all') {
-        if (l.isWon || l.isLost) {
-          // Usa cutoffTime pré-computado
+        // Corte de 30 dias aplica-se só a perdidos; ganhos sempre aparecem.
+        if (l.isLost) {
           if (new Date(l.updatedAt).getTime() < cutoffTime) {
             matchesRecent = false;
           }

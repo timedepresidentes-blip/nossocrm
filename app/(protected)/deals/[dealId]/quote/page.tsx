@@ -37,6 +37,8 @@ interface FichaCliente {
   prazoEntrega?: string;
   observacoes?: string;
   valorTotal?: number;
+  valorContaAtual?: number;
+  consumoMensalKwh?: number;
   [key: string]: unknown;
 }
 
@@ -331,11 +333,22 @@ export default function QuotePage() {
   const handleDownloadPDF = () => {
     if (!quote) return;
     const subtotalCalc = quote.items.reduce((sum, i) => sum + i.quantity * i.price, 0);
+
+    // Neuromarketing: calcula economia/payback a partir dos dados do sistema
+    const kwp = quote.fichaCliente?.potenciaKwp ?? null;
+    const geracaoMensalKwh = kwp ? Math.round(kwp * 115) : null;  // 4.8h/dia × 30 × 0.8 efic.
+    const tarifaMedia = 0.90  // R$/kWh — média Brasil 2026
+    const economiaAnualEstimada = geracaoMensalKwh ? Math.round(geracaoMensalKwh * 12 * tarifaMedia) : null;
+    const paybackAnos = (economiaAnualEstimada && subtotalCalc > 0)
+      ? Math.round((subtotalCalc / economiaAnualEstimada) * 10) / 10
+      : null;
+    const contaMensalAtual = quote.fichaCliente?.valorContaAtual ?? null;
+
     const html = gerarPropostaHtmlCRM({
       clienteNome: quote.contactName,
       clienteCidade: quote.fichaCliente?.instalacaoCidade ?? null,
       dataEmissao: new Date(quote.createdAt).toLocaleDateString('pt-BR'),
-      potenciaKwp: quote.fichaCliente?.potenciaKwp ?? null,
+      potenciaKwp: kwp,
       numPaineis: quote.fichaCliente?.numPaineis ?? null,
       painelW: quote.fichaCliente?.potenciaPainelW ?? null,
       modeloPainel: quote.fichaCliente?.modeloPainel ?? null,
@@ -351,6 +364,12 @@ export default function QuotePage() {
       logoUrl: eff.logoUrl || null,
       imagemFundoUrl: eff.bannerImageUrl || null,
       empresa: quote.companyName || 'Aureon Energix',
+      // Neuromarketing
+      economiaAnualEstimada,
+      contaMensalAtual,
+      paybackAnos,
+      geracaoMensalKwh,
+      validadeDias: 7,
     });
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -517,6 +536,13 @@ export default function QuotePage() {
                   <Link2 className="w-4 h-4" />Vincular OrçaFácil
                 </button>
               )}
+              <button
+                onClick={() => window.open(`/deals/${dealId}/quote2`, '_blank')}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-500 shadow-lg"
+                title="Abrir Modelo 2 (preview)"
+              >
+                Modelo 2 →
+              </button>
               <button
                 onClick={() => window.history.length > 1 ? window.history.back() : window.close()}
                 className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-lg"

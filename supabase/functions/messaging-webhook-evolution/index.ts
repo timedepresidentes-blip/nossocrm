@@ -230,6 +230,8 @@ async function triggerAIProcessing(params: {
   organizationId: string;
   messageText: string;
   messageId?: string;
+  mediaUrl?: string;
+  mediaType?: string;
 }): Promise<void> {
   const appUrl =
     Deno.env.get("CRM_APP_URL") ?? "https://nossocrm1-blush.vercel.app";
@@ -510,14 +512,19 @@ async function handleMessageUpsert(
     })
     .eq("id", conversationId);
 
-  // Aciona AI para mensagens de texto — await garante que o fetch completa
-  // antes do handler Deno retornar (sem await o runtime cancela a requisição)
-  if (content.type === "text" && content.text) {
+  // Aciona AI para texto, imagens e documentos (conta de luz via WhatsApp)
+  const isTextMsg = content.type === "text" && !!content.text;
+  const isMediaMsg = (content.type === "image" || content.type === "document") && !!content.mediaUrl;
+  if (isTextMsg || isMediaMsg) {
     await triggerAIProcessing({
       conversationId,
       organizationId: channel.organization_id,
-      messageText: content.text,
+      messageText: isTextMsg
+        ? content.text!
+        : `[${content.type === "image" ? "IMAGEM" : "DOCUMENTO"} enviado pelo cliente]`,
       messageId: externalMessageId,
+      mediaUrl: isMediaMsg ? content.mediaUrl : undefined,
+      mediaType: isMediaMsg ? (content.mimeType || (content.type === "image" ? "image/jpeg" : "application/pdf")) : undefined,
     }).catch((err) => console.error("[Evolution] AI trigger error:", err));
   }
 }

@@ -107,7 +107,7 @@ const MODULO_KEYWORDS: Array<{ nome: string; kw: string[] }> = [
 const INVERSOR_KEYWORDS: Array<{ nome: string; kw: string[] }> = [
   { nome: 'Enphase',  kw: ['enphase', 'iq7', 'iq8'] },
   { nome: 'Nep',      kw: ['nep micro', 'bdt'] },
-  { nome: 'Auxsol',   kw: ['auxsol'] },
+  { nome: 'Auxsol',   kw: ['auxsol', 'invau'] },
   { nome: 'Hoymiles', kw: ['hoymiles', 'hm-', 'hms-', 'hmd-'] },
   { nome: 'Huawei',   kw: ['huawei', 'sun2000'] },
   { nome: 'Fox ESS',  kw: ['fox ess', 'foxess', 'fox-ess', 'foxxes', 'fox ess'] },

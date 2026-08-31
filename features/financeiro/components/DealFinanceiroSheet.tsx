@@ -140,7 +140,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
 
   const [orgCfg, setOrgCfg] = useState<OrgCostSettings | null>(null);
   const [custoNf, setCustoNf] = useState<number | undefined>(undefined);
-  const [custoNfTipo, setCustoNfTipo] = useState<'kit' | 'servico' | 'cliente'>('kit');
+  const [custoNfTipo, setCustoNfTipo] = useState<'kit' | 'servico' | 'cliente'>('servico');
   const [custoEngenharia, setCustoEngenharia] = useState<number | undefined>(undefined);
   const [custoInstalacao, setCustoInstalacao] = useState<number>(0);
   const [custoCorrugado, setCustoCorrugado] = useState<number | undefined>(undefined);
@@ -148,6 +148,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
   const [custoFornecedor, setCustoFornecedor] = useState<number | undefined>(undefined);
   const [voucherBancoPct, setVoucherBancoPct] = useState<number | undefined>(undefined);
   const [comissaoValor, setComissaoValor] = useState<number | undefined>(undefined);
+  const [vendaPropria, setVendaPropria] = useState<boolean>(true);
   const [custosExtras, setCustosExtras] = useState<CustoExtra[]>([]);
   const [custosPagos, setCustosPagos] = useState<CustosPagos>({});
   const [receita, setReceita] = useState<number>(0);
@@ -172,7 +173,7 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
     setCustoNf(deal.custoNf);
     const tipoValido = (['kit', 'servico', 'cliente'] as const).includes(deal.custoNfTipo as 'kit' | 'servico' | 'cliente')
       ? deal.custoNfTipo as 'kit' | 'servico' | 'cliente'
-      : 'kit';
+      : 'servico';
     setCustoNfTipo(tipoValido);
     setCustoEngenharia(deal.custoEngenharia);
     setCustoInstalacao(deal.custoInstalacao ?? 0);
@@ -180,7 +181,8 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
     setCustoEletroduto(deal.custoEletroduto);
     setCustoFornecedor(deal.custoFornecedor);
     setVoucherBancoPct(deal.voucherBancoPct);
-    setComissaoValor(deal.comissaoValor);
+    setComissaoValor(deal.vendaPropria ? 0 : deal.comissaoValor);
+    setVendaPropria(deal.vendaPropria ?? false);
     setCustosExtras(deal.custosExtras || []);
     setCustosPagos(deal.custosPagos || {});
     // Usa deal.value; se for 0, tenta fichaCliente.valorTotal como fallback
@@ -279,7 +281,8 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
           custoEletroduto,
           custoFornecedor,
           voucherBancoPct,
-          comissaoValor,
+          comissaoValor: vendaPropria ? 0 : comissaoValor,
+          vendaPropria,
           custosExtras,
           custoTotal: custoTotalCalc,
           lucroBruto,
@@ -462,7 +465,24 @@ export function DealFinanceiroSheet({ deal, isOpen, onClose }: Props) {
           />
           <FieldRow label="Corrugado" value={custoCorrugado} onChange={setCustoCorrugado} pago={custosPagos.corrugado} onTogglePago={() => togglePago('corrugado')} />
           <FieldRow label="Eletroduto" value={custoEletroduto} onChange={setCustoEletroduto} pago={custosPagos.eletroduto} onTogglePago={() => togglePago('eletroduto')} />
-          <FieldRow label="Comissão" value={comissaoValor} onChange={setComissaoValor} pago={custosPagos.comissao} onTogglePago={() => togglePago('comissao')} />
+          {/* Toggle Própria / Vendedor */}
+          <div className="flex gap-1.5 pt-1">
+            {([
+              { value: false, label: 'Por vendedor' },
+              { value: true,  label: 'Venda própria' },
+            ] as const).map(({ value, label }) => (
+              <button key={String(value)} type="button"
+                onClick={() => { setVendaPropria(value); if (value) setComissaoValor(0); }}
+                className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-semibold transition-colors ${
+                  vendaPropria === value
+                    ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-200'
+                    : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'
+                }`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <FieldRow label="Comissão" value={vendaPropria ? 0 : comissaoValor} onChange={v => { if (!vendaPropria) setComissaoValor(v); }} pago={custosPagos.comissao} onTogglePago={() => togglePago('comissao')} />
 
           {/* Custos Extras */}
           <div className="pt-3">

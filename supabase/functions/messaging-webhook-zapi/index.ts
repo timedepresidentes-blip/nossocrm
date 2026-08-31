@@ -222,6 +222,8 @@ async function triggerAIProcessing(params: {
   organizationId: string;
   messageText: string;
   messageId?: string;
+  mediaUrl?: string;
+  mediaType?: string;
 }): Promise<void> {
   const appUrl = Deno.env.get("CRM_APP_URL") ?? "https://nossocrm1-blush.vercel.app";
   const internalSecret = Deno.env.get("INTERNAL_API_SECRET") ?? "314d1b5f953d6dd536f4a1740856ad6238d53be6cb77d234893ef3dceef96d78";
@@ -240,6 +242,8 @@ async function triggerAIProcessing(params: {
         organizationId: params.organizationId,
         messageText: params.messageText,
         messageId: params.messageId,
+        mediaUrl: params.mediaUrl,
+        mediaType: params.mediaType,
       }),
     });
 
@@ -723,15 +727,20 @@ async function handleInboundMessage(
     .eq("id", conversationId);
 
   // Trigger AI Agent processing (async, fire-and-forget)
-  // Only process text messages for AI response
-  if (content.type === "text" && content.text) {
+  // Processa texto, imagens e documentos (conta de luz via WhatsApp)
+  const isTextMsg = content.type === "text" && !!content.text;
+  const isMediaMsg = (content.type === "image" || content.type === "document") && !!content.mediaUrl;
+  if (isTextMsg || isMediaMsg) {
     triggerAIProcessing({
       conversationId,
       organizationId: channel.organization_id,
-      messageText: content.text,
+      messageText: isTextMsg
+        ? content.text!
+        : `[${content.type === "image" ? "IMAGEM" : "DOCUMENTO"} enviado pelo cliente]`,
       messageId: externalMessageId,
+      mediaUrl: isMediaMsg ? content.mediaUrl : undefined,
+      mediaType: isMediaMsg ? (content.mimeType || (content.type === "image" ? "image/jpeg" : "application/pdf")) : undefined,
     }).catch((err) => {
-      // Log but don't fail the webhook
       console.error("[Webhook] AI processing trigger error:", err);
     });
   }

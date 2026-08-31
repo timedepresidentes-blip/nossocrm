@@ -53,6 +53,7 @@ import {
   Plus,
   MessageSquare,
   FileText,
+  ExternalLink,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { StageProgressBar } from '../StageProgressBar';
@@ -60,6 +61,7 @@ import { ActivityRow } from '@/features/activities/components/ActivityRow';
 import { formatPriorityPtBr } from '@/lib/utils/priority';
 import { BriefingDrawer } from '@/features/deals/components/BriefingDrawer';
 import { AIExtractedFields } from '@/features/deals/components/AIExtractedFields';
+import { ProjetoTimelinePanel } from '@/features/deals/cockpit/ProjetoTimelinePanel';
 
 interface DealDetailModalProps {
   dealId: string | null;
@@ -151,7 +153,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const [aiResult, setAiResult] = useState<{ suggestion: string; score: number } | null>(null);
   const [emailDraft, setEmailDraft] = useState<string | null>(null);
   const [newNote, setNewNote] = useState('');
-  const [activeTab, setActiveTab] = useState<'timeline' | 'products' | 'info'>('timeline');
+  const [activeTab, setActiveTab] = useState<'timeline' | 'products' | 'info' | 'projeto'>('timeline');
   const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [objection, setObjection] = useState('');
@@ -591,6 +593,15 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                   <FileText size={14} />
                   <span className="hidden sm:inline">Preparar</span>
                 </button>
+                {deal.isWon && (
+                  <button
+                    onClick={() => { router.push(`/deals/${deal.id}/cockpit`); onClose(); }}
+                    className="ml-2 text-slate-400 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors"
+                    title="Abrir linha do tempo do projeto"
+                  >
+                    <ExternalLink size={20} />
+                  </button>
+                )}
                 <button
                   onClick={() => setDeleteId(deal.id)}
                   className="ml-2 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
@@ -876,6 +887,14 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                   >
                     IA Insights
                   </button>
+                  {deal.isWon && (
+                    <button
+                      onClick={() => setActiveTab('projeto')}
+                      className={`text-sm font-bold h-14 border-b-2 transition-colors ${activeTab === 'projeto' ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
+                    >
+                      Projeto
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1238,6 +1257,15 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                         </div>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {activeTab === 'projeto' && deal.isWon && (
+                  <div className="animate-in fade-in slide-in-from-bottom-4">
+                    <ProjetoTimelinePanel
+                      dealId={deal.id}
+                      timeline={deal.projetoTimeline}
+                    />
                   </div>
                 )}
 

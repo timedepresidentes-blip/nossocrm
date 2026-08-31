@@ -68,34 +68,34 @@ export function ProjetoTimelinePanel({ dealId, timeline = {} }: Props) {
   }
 
   return (
-    <div className="rounded-xl border border-white/8 bg-white/3 overflow-hidden">
+    <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/3 overflow-hidden shadow-sm">
       {/* Header */}
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="flex w-full items-center gap-2.5 px-4 py-3 text-left hover:bg-white/3 transition-colors"
+        className="flex w-full items-center gap-2.5 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
       >
-        <CalendarClock className="h-4 w-4 text-cyan-400 shrink-0" />
-        <span className="flex-1 text-sm font-semibold text-slate-100">Linha do Tempo</span>
+        <CalendarClock className="h-4 w-4 text-emerald-500 dark:text-cyan-400 shrink-0" />
+        <span className="flex-1 text-sm font-semibold text-slate-700 dark:text-slate-100">Linha do Tempo do Projeto</span>
 
         {/* Progress pill */}
         <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
           completedCount === PROJETO_STEPS.length
-            ? 'bg-emerald-500/20 text-emerald-300'
-            : 'bg-white/8 text-slate-400'
+            ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+            : 'bg-slate-100 dark:bg-white/8 text-slate-500 dark:text-slate-400'
         }`}>
           {completedCount}/{PROJETO_STEPS.length}
         </span>
 
-        {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" />}
-        {open ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+        {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
+        {open ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
       </button>
 
       {/* Progress bar */}
       {open && completedCount > 0 && (
-        <div className="h-0.5 bg-white/5 mx-4">
+        <div className="h-0.5 bg-slate-100 dark:bg-white/5 mx-4">
           <div
-            className="h-full bg-emerald-500/60 transition-all duration-500 rounded-full"
+            className="h-full bg-emerald-500 dark:bg-emerald-500/60 transition-all duration-500 rounded-full"
             style={{ width: `${(completedCount / PROJETO_STEPS.length) * 100}%` }}
           />
         </div>
@@ -117,10 +117,10 @@ export function ProjetoTimelinePanel({ dealId, timeline = {} }: Props) {
                 <div className="flex flex-col items-center">
                   <div className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors ${
                     done
-                      ? 'border-emerald-500/60 bg-emerald-500/15'
-                      : 'border-white/10 bg-white/3'
+                      ? 'border-emerald-400 dark:border-emerald-500/60 bg-emerald-50 dark:bg-emerald-500/15'
+                      : 'border-slate-300 dark:border-white/10 bg-slate-50 dark:bg-white/3'
                   }`}>
-                    <Icon className={`h-3.5 w-3.5 ${done ? 'text-emerald-400' : 'text-slate-500'}`} />
+                    <Icon className={`h-3.5 w-3.5 ${done ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`} />
                     {done && (
                       <div className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 flex items-center justify-center">
                         <svg viewBox="0 0 8 8" className="h-1.5 w-1.5 text-white" fill="currentColor">
@@ -130,14 +130,14 @@ export function ProjetoTimelinePanel({ dealId, timeline = {} }: Props) {
                     )}
                   </div>
                   {!isLast && (
-                    <div className={`w-px flex-1 mt-1 mb-1 min-h-[16px] ${done ? 'bg-emerald-500/30' : 'bg-white/6'}`} />
+                    <div className={`w-px flex-1 mt-1 mb-1 min-h-[16px] ${done ? 'bg-emerald-300 dark:bg-emerald-500/30' : 'bg-slate-200 dark:bg-white/6'}`} />
                   )}
                 </div>
 
                 {/* Right: label + actions */}
                 <div className={`flex flex-1 items-start justify-between gap-2 py-0.5 ${isLast ? '' : 'pb-3'}`}>
                   <div>
-                    <div className={`text-xs font-medium ${done ? 'text-slate-200' : 'text-slate-400'}`}>
+                    <div className={`text-xs font-medium ${done ? 'text-slate-800 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400'}`}>
                       {step.label}
                     </div>
 
@@ -145,7 +145,7 @@ export function ProjetoTimelinePanel({ dealId, timeline = {} }: Props) {
                       <button
                         type="button"
                         onClick={() => startEdit(step.key)}
-                        className="text-[10px] text-emerald-400 hover:text-emerald-300 transition-colors mt-0.5"
+                        className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors mt-0.5"
                       >
                         {fmt(date!)}
                       </button>
@@ -157,20 +157,20 @@ export function ProjetoTimelinePanel({ dealId, timeline = {} }: Props) {
                           type="date"
                           value={dateInput}
                           onChange={e => setDateInput(e.target.value)}
-                          className="rounded bg-white/6 border border-white/10 px-1.5 py-0.5 text-[10px] text-slate-200 outline-none focus:ring-1 focus:ring-cyan-500/40"
+                          className="rounded bg-slate-100 dark:bg-white/6 border border-slate-300 dark:border-white/10 px-1.5 py-0.5 text-[10px] text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-emerald-500/40"
                           autoFocus
                         />
                         <button
                           type="button"
                           onClick={() => commitEdit(step.key)}
-                          className="text-[10px] font-semibold text-cyan-400 hover:text-cyan-300"
+                          className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
                         >
                           OK
                         </button>
                         <button
                           type="button"
                           onClick={() => setEditingDate(null)}
-                          className="text-[10px] text-slate-500 hover:text-slate-400"
+                          className="text-[10px] text-slate-400 hover:text-slate-500"
                         >
                           ✕
                         </button>
@@ -183,7 +183,7 @@ export function ProjetoTimelinePanel({ dealId, timeline = {} }: Props) {
                       <button
                         type="button"
                         onClick={() => mark(step.key)}
-                        className="opacity-0 group-hover:opacity-100 rounded-md bg-white/5 px-2 py-0.5 text-[10px] font-medium text-slate-400 hover:bg-white/8 hover:text-slate-200 transition-all"
+                        className="opacity-0 group-hover:opacity-100 rounded-md bg-slate-100 dark:bg-white/5 px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400 hover:bg-emerald-50 dark:hover:bg-white/8 hover:text-emerald-600 dark:hover:text-slate-200 transition-all"
                       >
                         Marcar
                       </button>
@@ -193,7 +193,7 @@ export function ProjetoTimelinePanel({ dealId, timeline = {} }: Props) {
                         type="button"
                         onClick={() => clear(step.key)}
                         title="Desfazer"
-                        className="opacity-0 group-hover:opacity-100 rounded-md p-0.5 text-slate-600 hover:text-slate-400 transition-all"
+                        className="opacity-0 group-hover:opacity-100 rounded-md p-0.5 text-slate-400 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-all"
                       >
                         <RotateCcw className="h-3 w-3" />
                       </button>

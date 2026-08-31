@@ -27,6 +27,7 @@ export interface DealCostData {
   lucroBruto: number;
   margemPct: number;
   custosPagos: CustosPagos;
+  vendaPropria: boolean;
 }
 
 export const dealCostsService = {
@@ -42,10 +43,10 @@ export const dealCostsService = {
 
       if (error) return { data: null, error };
       const defaults: DealCostData = {
-        custoNf: 0, custoNfTipo: 'kit', custoEngenharia: 0, custoInstalacao: 0,
+        custoNf: 0, custoNfTipo: 'servico', custoEngenharia: 0, custoInstalacao: 0,
         custoCorrugado: 0, custoEletroduto: 0, custoFornecedor: 0, voucherBancoPct: 0,
         custosExtras: [], custoTotal: 0, comissaoValor: 0, lucroBruto: 0, margemPct: 0,
-        custosPagos: {},
+        custosPagos: {}, vendaPropria: true,
       };
       if (!data) return { data: defaults, error: null };
 
@@ -53,7 +54,7 @@ export const dealCostsService = {
       return {
         data: {
           custoNf: Number(row.custo_nf ?? 0),
-          custoNfTipo: (['servico', 'cliente'].includes(row.custo_nf_tipo) ? row.custo_nf_tipo : 'kit') as 'kit' | 'servico' | 'cliente',
+          custoNfTipo: (['kit', 'servico', 'cliente'].includes(row.custo_nf_tipo) ? row.custo_nf_tipo : 'servico') as 'kit' | 'servico' | 'cliente',
           custoEngenharia: Number(row.custo_engenharia ?? 0),
           custoInstalacao: Number(row.custo_instalacao ?? 0),
           custoCorrugado: Number(row.custo_corrugado ?? 0),
@@ -66,6 +67,7 @@ export const dealCostsService = {
           comissaoValor: Number(row.comissao_valor ?? 0),
           lucroBruto: Number(row.lucro_bruto ?? 0),
           margemPct: Number(row.margem_pct ?? 0),
+          vendaPropria: row.venda_propria === true,
         },
         error: null,
       };
@@ -88,6 +90,7 @@ export const dealCostsService = {
       if (updates.custoFornecedor !== undefined) payload.custo_fornecedor = updates.custoFornecedor;
       if (updates.voucherBancoPct !== undefined) payload.voucher_banco_pct = updates.voucherBancoPct;
       if (updates.custosPagos !== undefined) payload.custos_pagos = updates.custosPagos;
+      if (updates.vendaPropria !== undefined) payload.venda_propria = updates.vendaPropria;
       if (updates.custosExtras !== undefined) payload.custos_extras = updates.custosExtras;
       if (updates.custoTotal !== undefined) payload.custo_total = updates.custoTotal;
       if (updates.comissaoValor !== undefined) payload.comissao_valor = updates.comissaoValor;

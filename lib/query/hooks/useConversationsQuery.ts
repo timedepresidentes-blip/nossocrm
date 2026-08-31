@@ -462,9 +462,9 @@ export function useMarkConversationRead() {
       // Optimistically set unread to 0
       queryClient.setQueriesData(
         { queryKey: queryKeys.messagingConversations.all },
-        (old: ConversationView[] | undefined) => {
-          if (!old) return old;
-          return old.map((conv) =>
+        (old: unknown) => {
+          if (!Array.isArray(old)) return old;
+          return (old as ConversationView[]).map((conv) =>
             conv.id === conversationId ? { ...conv, unreadCount: 0 } : conv
           );
         }

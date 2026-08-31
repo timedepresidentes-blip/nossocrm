@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2, ChevronDown, ChevronUp, ClipboardList,
-  Download, ExternalLink, FileSpreadsheet, FileText, Loader2, RefreshCw, Save, Send, ScanSearch, Upload, XCircle,
+  Download, ExternalLink, FileSpreadsheet, FileText, Loader2, RefreshCw, Save, Send, ScanSearch, Upload, XCircle, Zap,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { autoFillDealCosts } from '@/lib/supabase/autoFillDealCosts';
@@ -23,6 +23,8 @@ export interface FichaClienteData {
   valorTotal: number | null; formaPagamento: string | null; condicoesPagamento: string | null;
   prazoEntrega: string | null; consumoMensalKwh: number | null; valorContaAtual: number | null;
   distribuidora: string | null; observacoes: string | null;
+  garantiaInversor: string | null;
+  garantiaPainel: string | null;
 }
 
 interface Props {
@@ -58,6 +60,7 @@ function empty(): FichaClienteData {
     modeloInversor: null, tipoInversor: null, qtdInversores: null, tipoEstrutura: null,
     valorTotal: null, formaPagamento: null, condicoesPagamento: null, prazoEntrega: null,
     consumoMensalKwh: null, valorContaAtual: null, distribuidora: null, observacoes: null,
+    garantiaInversor: null, garantiaPainel: null,
   };
 }
 
@@ -99,6 +102,18 @@ export const FichaClientePanel: React.FC<Props> = ({
   const [pdfExtractMsg, setPdfExtractMsg] = useState<'ok' | 'error' | null>(null);
   const [pdfExtractError, setPdfExtractError] = useState<string>('');
 
+  // Extração via conta de luz da distribuidora
+  const billFileRef = useRef<HTMLInputElement>(null);
+  const [extractingBill, setExtractingBill] = useState(false);
+  const [billExtractMsg, setBillExtractMsg] = useState<'ok' | 'error' | null>(null);
+  const [billExtractError, setBillExtractError] = useState('');
+
+  // Extração via orçamento do fornecedor de kit solar
+  const supplierFileRef = useRef<HTMLInputElement>(null);
+  const [extractingSupplier, setExtractingSupplier] = useState(false);
+  const [supplierExtractMsg, setSupplierExtractMsg] = useState<'ok' | 'error' | null>(null);
+  const [supplierExtractError, setSupplierExtractError] = useState('');
+
   // Seletor de orçamento OrçaFácil
   interface OrcItem {
     id: string; cliente_nome: string; potencia_kwp: number; valor_final: number | null;
@@ -108,7 +123,7 @@ export const FichaClientePanel: React.FC<Props> = ({
     modelo_painel?: string | null; modelo_inversor?: string | null;
     tipo_inversor?: string | null; qtd_inversores?: number | null;
     tipo_estrutura?: string | null; forma_pagamento?: string | null;
-    distribuidora_nome?: string | null;
+    distribuidora_nome?: string | null; garantia_inversor?: string | null;
   }
   const [orcList, setOrcList] = useState<OrcItem[]>([]);
   const [showOrcPicker, setShowOrcPicker] = useState(false);
@@ -198,6 +213,108 @@ export const FichaClientePanel: React.FC<Props> = ({
     }
   };
 
+  // Extração via orçamento do fornecedor de kit solar
+  const handleExtrairOrcamentoFornecedor = async (file: File) => {
+    setExtractingSupplier(true);
+    setSupplierExtractMsg(null);
+    setSupplierExtractError('');
+    try {
+      const base64 = await toBase64(file);
+      const res = await fetch('/api/ai/tasks/quote/solar-extract', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          supplierQuoteBase64: base64,
+          supplierQuoteMimeType: file.type || 'application/pdf',
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error?.message || `HTTP ${res.status}`);
+      const s = body.supplierData;
+      if (s) {
+        const panelLabel = [s.panelBrand, s.panelModel].filter(Boolean).join(' ') || null;
+        const inverterLabel = [s.inverterBrand, s.inverterModel].filter(Boolean).join(' ') || null;
+        const tipoInversorMapped = s.inverterType === 'micro' ? 'Microinversor' : s.inverterType === 'string' ? 'String' : null;
+        setFicha(prev => ({
+          ...prev,
+          potenciaKwp:     s.systemPowerKwp   ?? prev.potenciaKwp,
+          numPaineis:      s.panelQty         ?? prev.numPaineis,
+          modeloPainel:    panelLabel          ?? prev.modeloPainel,
+          potenciaPainelW: s.panelWatts        ?? prev.potenciaPainelW,
+          modeloInversor:  inverterLabel       ?? prev.modeloInversor,
+          tipoInversor:    tipoInversorMapped  ?? prev.tipoInversor,
+          qtdInversores:   s.inverterQty       ?? prev.qtdInversores,
+          tipoEstrutura:   s.structureType     ?? prev.tipoEstrutura,
+          valorTotal:      s.kitTotalPrice     ?? prev.valorTotal,
+          garantiaInversor: s.warranty         ?? prev.garantiaInversor,
+          observacoes:     s.observations
+            ? [prev.observacoes, s.observations].filter(Boolean).join('\n')
+            : prev.observacoes,
+        }));
+        setSupplierExtractMsg('ok');
+      } else {
+        throw new Error('Nenhum dado extraído do orçamento');
+      }
+    } catch (e: unknown) {
+      setSupplierExtractError(e instanceof Error ? e.message : 'Erro de rede');
+      setSupplierExtractMsg('error');
+    } finally {
+      setExtractingSupplier(false);
+      setTimeout(() => setSupplierExtractMsg(null), 8000);
+      if (supplierFileRef.current) supplierFileRef.current.value = '';
+    }
+  };
+
+  // Extração via conta de luz da distribuidora (sem conversa)
+  const handleExtrairContaLuz = async (file: File) => {
+    setExtractingBill(true);
+    setBillExtractMsg(null);
+    setBillExtractError('');
+    try {
+      const base64 = await toBase64(file);
+      const res = await fetch('/api/ai/tasks/quote/solar-extract', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          billImageBase64: base64,
+          billImageMimeType: file.type || 'application/pdf',
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error?.message || `HTTP ${res.status}`);
+      const ext = body.extracted;
+      if (ext) {
+        console.log('[conta-luz] dados extraídos:', ext);
+        setFicha(prev => ({
+          ...prev,
+          consumoMensalKwh:  ext.kwhMonth          != null ? ext.kwhMonth          : prev.consumoMensalKwh,
+          valorContaAtual:   ext.currentBillValue   != null ? ext.currentBillValue   : prev.valorContaAtual,
+          distribuidora:     ext.distributor        != null ? ext.distributor        : prev.distribuidora,
+          enderecoRua:       ext.clientStreet       != null ? ext.clientStreet       : prev.enderecoRua,
+          enderecoBairro:    ext.clientNeighborhood != null ? ext.clientNeighborhood : prev.enderecoBairro,
+          enderecoCep:       ext.clientCep          != null ? ext.clientCep          : prev.enderecoCep,
+          enderecoCidade:    ext.city               != null ? ext.city               : prev.enderecoCidade,
+          instalacaoCidade:  ext.city               != null ? ext.city               : prev.instalacaoCidade,
+          enderecoEstado:    ext.state              != null ? ext.state              : prev.enderecoEstado,
+          potenciaKwp:       ext.kwpRecomendado     != null ? ext.kwpRecomendado     : prev.potenciaKwp,
+          observacoes:       ext.observations
+            ? [prev.observacoes, ext.observations].filter(Boolean).join('\n')
+            : prev.observacoes,
+        }));
+        setBillExtractMsg('ok');
+      } else {
+        throw new Error('Nenhum dado extraído da conta');
+      }
+    } catch (e: unknown) {
+      setBillExtractError(e instanceof Error ? e.message : 'Erro de rede');
+      setBillExtractMsg('error');
+    } finally {
+      setExtractingBill(false);
+      setTimeout(() => setBillExtractMsg(null), 8000);
+      if (billFileRef.current) billFileRef.current.value = '';
+    }
+  };
+
   // Abre o seletor de orçamentos: busca a lista e exibe
   const handleAbrirSeletorOrc = async () => {
     if (showOrcPicker) { setShowOrcPicker(false); return; }
@@ -270,6 +387,9 @@ export const FichaClientePanel: React.FC<Props> = ({
         valorTotal:       o.valor_final           ?? ficha.valorTotal,
         formaPagamento:   o.forma_pagamento       ?? ficha.formaPagamento,
         distribuidora:    o.distribuidora_nome    ?? ficha.distribuidora,
+        garantiaInversor: o.garantia_inversor
+          ? o.garantia_inversor.replace(/\s*anos?\s*/i, '').trim() + ' anos'
+          : ficha.garantiaInversor,
       };
       setFicha(fichaAtualizada);
 
@@ -1033,8 +1153,8 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
   <tr>
     <td>${f.modeloInversor ? f.modeloInversor.split(' ')[0] : '___'}</td>
     <td>${f.modeloInversor ?? '___________________________'}</td>
-    <td>${invfab?.garantiaFornecedor ?? '—'}</td>
-    <td>${invfab?.garantiaFabrica ?? '5 anos'}</td>
+    <td>1 ano</td>
+    <td>${f.garantiaInversor || invfab?.garantiaFabrica || '5 anos'}</td>
   </tr>
 </table>
 
@@ -1045,8 +1165,8 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
   <tr>
     <td>${f.modeloPainel ? f.modeloPainel.split(' ')[0] : '___'}</td>
     <td>${f.modeloPainel ?? '___________________________'}</td>
-    <td>${modfab?.garantiaFornecedor ?? '—'}</td>
-    <td>${modfab?.garantiaFabrica ?? '12 anos'}</td>
+    <td>1 ano</td>
+    <td>${f.garantiaPainel || modfab?.garantiaFabrica || '12 anos'}</td>
     <td>${modfab?.garantiaDesempenho ?? '25 anos'}</td>
   </tr>
 </table>
@@ -1180,6 +1300,74 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
                   {extracting ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                   {extracting ? 'Extraindo...' : 'Extrair da conversa (IA)'}
                 </button>
+
+                {/* Extração via orçamento do fornecedor de kit solar */}
+                <input
+                  ref={supplierFileRef}
+                  type="file"
+                  accept=".pdf,application/pdf,image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void handleExtrairOrcamentoFornecedor(file);
+                    e.target.value = '';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => supplierFileRef.current?.click()}
+                  disabled={extractingSupplier}
+                  className="flex items-center gap-1.5 rounded-lg border border-teal-500/30 bg-teal-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-teal-300 hover:bg-teal-500/15 disabled:opacity-50"
+                  title="Anexe o orçamento do fornecedor de kit solar (PDF ou imagem) para extrair painel, inversor, potência e valor"
+                >
+                  {extractingSupplier ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                  {extractingSupplier ? 'Lendo orçamento...' : 'Orçamento fornecedor (IA)'}
+                </button>
+                {supplierExtractMsg === 'ok' && (
+                  <span className="flex items-center gap-1 text-[10px] text-emerald-400">
+                    <CheckCircle2 className="h-3 w-3" /> Orçamento extraído!
+                  </span>
+                )}
+                {supplierExtractMsg === 'error' && (
+                  <span className="flex flex-col gap-0.5 text-[10px] text-rose-400">
+                    <span className="flex items-center gap-1"><XCircle className="h-3 w-3 shrink-0" /> Falha ao ler o orçamento.</span>
+                    {supplierExtractError && <span className="pl-4 text-rose-300/70">{supplierExtractError}</span>}
+                  </span>
+                )}
+
+                {/* Extração via conta de luz da distribuidora */}
+                <input
+                  ref={billFileRef}
+                  type="file"
+                  accept=".pdf,application/pdf,image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void handleExtrairContaLuz(file);
+                    e.target.value = '';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => billFileRef.current?.click()}
+                  disabled={extractingBill}
+                  className="flex items-center gap-1.5 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-yellow-300 hover:bg-yellow-500/15 disabled:opacity-50"
+                  title="Anexe a conta de luz da distribuidora (PDF ou imagem) para extrair consumo, distribuidora e dimensionamento"
+                >
+                  {extractingBill ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                  {extractingBill ? 'Lendo conta...' : 'Conta de luz (IA)'}
+                </button>
+                {billExtractMsg === 'ok' && (
+                  <span className="flex items-center gap-1 text-[10px] text-emerald-400">
+                    <CheckCircle2 className="h-3 w-3" /> Conta extraída!
+                  </span>
+                )}
+                {billExtractMsg === 'error' && (
+                  <span className="flex flex-col gap-0.5 text-[10px] text-rose-400">
+                    <span className="flex items-center gap-1"><XCircle className="h-3 w-3 shrink-0" /> Falha ao ler a conta.</span>
+                    {billExtractError && <span className="pl-4 text-rose-300/70">{billExtractError}</span>}
+                  </span>
+                )}
 
                 <button
                   type="button"
@@ -1494,6 +1682,12 @@ ${logo ? `<div style="text-align:center;margin-bottom:14px"><img src="${logo}" a
                   <Field label="Tipo inversor" value={toStr(f.tipoInversor)} onChange={v => setField('tipoInversor', v)} />
                   <Field label="Qtd inversores" value={toStr(f.qtdInversores)} onChange={v => setField('qtdInversores', v)} />
                   <Field label="Estrutura" value={toStr(f.tipoEstrutura)} onChange={v => setField('tipoEstrutura', v)} />
+                </div>
+
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold mt-2">Garantias de fábrica</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Gar. fábrica inversor" value={toStr(f.garantiaInversor)} onChange={v => setField('garantiaInversor', v)} />
+                  <Field label="Gar. fábrica painel" value={toStr(f.garantiaPainel)} onChange={v => setField('garantiaPainel', v)} />
                 </div>
 
                 <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold mt-2">Condições comerciais</p>
