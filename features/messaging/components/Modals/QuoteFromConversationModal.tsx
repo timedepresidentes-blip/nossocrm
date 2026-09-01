@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { orgSettingsService, OrgCostSettings } from '@/lib/supabase/orgSettings';
 import { dealCostsService, calcEngCost, calcComissaoPct, calcNfCost } from '@/lib/supabase/dealCosts';
 import type { ConversationView } from '@/lib/messaging/types';
+import { supabase } from '@/lib/supabase/client';
 
 interface SolarExtracted {
   kwhMonth: number | null;
@@ -368,10 +369,22 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
           voucherBancoPct: voucherBancoPctNum,
           custosExtras: extrasParaSalvar,
         });
+
+        // Salva dados extraídos pela IA em ficha_cliente para o quote2 exibir
+        const kwpFinal = parseFloat(kwpManual || '0') || extracted?.kwpRecomendado || null;
+        const ficha: Record<string, unknown> = {};
+        if (contactName && contactName !== 'Contato') ficha.nomeCompleto = contactName;
+        if (kwpFinal && kwpFinal > 0) ficha.potenciaKwp = kwpFinal;
+        if (extracted?.currentBillValue) ficha.contaAtualMensal = extracted.currentBillValue;
+        if (extracted?.city) ficha.instalacaoCidade = extracted.state ? `${extracted.city} - ${extracted.state}` : extracted.city;
+        if (extracted?.observations) ficha.observacoes = extracted.observations;
+        if (extracted?.kwhMonth) ficha.geracaoMensalKwh = null; // será calculado pela página
+        if (Object.keys(ficha).length > 0 && supabase) {
+          await supabase.from('deals').update({ ficha_cliente: ficha }).eq('id', dealId);
+        }
       }
 
       // Salva custos fixos e adicionais como novo padrão da organização (fire and forget)
-      // Fornecedor e instalação são específicos por deal — não sobem para o padrão
       const novoPadrao: Partial<import('@/lib/supabase/orgSettings').OrgCostSettings> = {};
       const corrugadoNum = parseFlt(custoCorrugado);
       const eletrodutoNum = parseFlt(custoEletroduto);
@@ -379,13 +392,17 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
       if (corrugadoNum > 0) novoPadrao.custoCorrugado = corrugadoNum;
       if (eletrodutoNum > 0) novoPadrao.custoEletroduto = eletrodutoNum;
       if (tipoVenda === 'vendedor' && comissaoNum > 0) novoPadrao.custoComissaoPct = comissaoNum;
-      // Custos adicionais nomeados viram padrão da org (o operador edita a lista pelo próprio modal)
       novoPadrao.custosAdicionaisFixos = custosAdicionais
         .filter(e => e.nome.trim() && parseFlt(e.valor) > 0)
         .map(e => ({ nome: e.nome.trim(), valor: parseFlt(e.valor) }));
       orgSettingsService.updateCostSettings(novoPadrao).catch(console.warn);
 
-      window.open(buildOrcafacilUrl(dealId), '_blank');
+      // Abre quote2 se o deal foi criado, senão OrçaFácil como fallback
+      if (dealId) {
+        window.open(`/deals/${dealId}/quote2`, '_blank');
+      } else {
+        window.open(buildOrcafacilUrl(dealId), '_blank');
+      }
       onClose();
     } catch (e: unknown) {
       setError((e as Error)?.message || 'Erro ao abrir OrçaFácil.');
@@ -829,7 +846,7 @@ export function QuoteFromConversationModal({ isOpen, onClose, conversation }: Qu
           <button type="button" onClick={handleAbrirOrcafacil} disabled={isCreating}
             className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold rounded-xl bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white">
             {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
-            {isCreating ? 'Abrindo…' : 'Abrir no OrçaFácil'}
+            {isCreating ? 'Gerando…' : 'Gerar Proposta'}
           </button>
         </div>
       </div>
