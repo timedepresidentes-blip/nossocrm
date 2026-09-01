@@ -1104,7 +1104,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                     <div className="flex justify-end">
                       <button
                         type="button"
-                        onClick={() => window.open(`/deals/${deal.id}/quote`, '_blank')}
+                        onClick={() => window.open(`/deals/${deal.id}/quote2`, '_blank')}
                         className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-500 text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors"
                       >
                         <FileText size={15} />
