@@ -153,9 +153,57 @@ function extractTextContent(content: Record<string, unknown>): string {
   if (typeof content?.caption === 'string') return `[Imagem] ${content.caption}`;
   const type = content?.type as string | undefined;
   if (type === 'image') return '[Foto enviada pelo cliente]';
-  if (type === 'audio') return '[Áudio enviado]';
+  if (type === 'audio') return '[Áudio do cliente — transcrito acima]';
   if (type === 'document') return '[Documento enviado]';
   return '[Mensagem sem texto]';
+}
+
+// Baixa qualquer URL de mídia (data:, meta:ID, http) e retorna base64 + mime
+async function downloadMediaUrl(
+  url: string,
+  fallbackMime: string,
+  channelId?: string,
+  supabaseClient?: Parameters<typeof import('@supabase/supabase-js').createClient>[0] extends string ? ReturnType<typeof import('@supabase/supabase-js').createClient> : never,
+): Promise<{ base64: string; mime: string } | null> {
+  if (!url) return null;
+  try {
+    if (url.startsWith('data:')) {
+      const comma = url.indexOf(',');
+      if (comma === -1) return null;
+      const header = url.substring(5, comma);
+      const mime = header.split(';')[0] || fallbackMime;
+      return { base64: url.substring(comma + 1), mime };
+    }
+    if (url.startsWith('meta:') && channelId && supabaseClient) {
+      const mediaId = url.slice(5);
+      const { data: ch } = await (supabaseClient as ReturnType<typeof import('@supabase/supabase-js').createClient>)
+        .from('messaging_channels').select('credentials').eq('id', channelId).maybeSingle();
+      const creds = ch?.credentials as Record<string, unknown> | null;
+      const token = (creds?.accessToken ?? creds?.access_token) as string | undefined;
+      if (!token) return null;
+      const infoRes = await fetch(`https://graph.facebook.com/v25.0/${mediaId}`, {
+        headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000),
+      });
+      if (!infoRes.ok) return null;
+      const info = await infoRes.json() as { url?: string };
+      if (!info.url) return null;
+      const mediaRes = await fetch(info.url, {
+        headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000),
+      });
+      if (!mediaRes.ok) return null;
+      const mime = mediaRes.headers.get('content-type') || fallbackMime;
+      const buf = await mediaRes.arrayBuffer();
+      return { base64: Buffer.from(new Uint8Array(buf)).toString('base64'), mime };
+    }
+    // URL direta (Z-API, Evolution, etc.)
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return null;
+    const mime = res.headers.get('content-type') || fallbackMime;
+    const buf = await res.arrayBuffer();
+    return { base64: Buffer.from(new Uint8Array(buf)).toString('base64'), mime };
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(req: Request) {
@@ -187,12 +235,21 @@ export async function POST(req: Request) {
       return json({ error: { code: 'MISSING_PARAM', message: 'Forneça conversationId ou a imagem da conta de energia.' } }, 400);
     }
 
-    // Formata texto da conversa e detecta mídia armazenada (conta de luz)
+    // Formata texto da conversa, coleta áudios e detecta conta de luz
     let conversationText = '';
     let conversationMediaBase64: string | null = null;
     let conversationMediaMime = 'image/jpeg';
+    const audioFiles: Array<{ base64: string; mime: string }> = [];
 
     if (conversationId) {
+      // Busca canal para resolução de mídias Meta
+      const { data: convRow } = await supabase
+        .from('messaging_conversations')
+        .select('channel_id')
+        .eq('id', conversationId)
+        .maybeSingle();
+      const channelId = convRow?.channel_id as string | undefined;
+
       const { data: messages } = await supabase
         .from('messaging_messages')
         .select('id, direction, content, content_type, created_at')
@@ -209,6 +266,19 @@ export async function POST(req: Request) {
           })
           .join('\n');
 
+        // Coleta áudios do cliente para transcrição multimodal
+        for (const m of messages) {
+          if (m.direction !== 'inbound') continue;
+          const c = m.content as Record<string, unknown>;
+          const isAudio = m.content_type === 'audio' || c?.type === 'audio';
+          if (!isAudio) continue;
+          const url = c?.mediaUrl as string | undefined;
+          if (!url) continue;
+          const fallbackMime = (c?.mimeType as string) || 'audio/ogg';
+          const downloaded = await downloadMediaUrl(url, fallbackMime, channelId, supabase as never);
+          if (downloaded) audioFiles.push(downloaded);
+        }
+
         // Encontra a conta de luz mais recente enviada pelo cliente (imagem ou PDF)
         if (!billImageBase64) {
           const mediaMsg = [...messages]
@@ -223,66 +293,11 @@ export async function POST(req: Request) {
             const storedUrl = c?.mediaUrl as string | undefined;
             const storedMime = (c?.mimeType as string) ||
               (mediaMsg.content_type === 'document' ? 'application/pdf' : 'image/jpeg');
-
             if (storedUrl) {
-              if (storedUrl.startsWith('data:')) {
-                // Evolution: data URI já em base64
-                const commaIdx = storedUrl.indexOf(',');
-                if (commaIdx !== -1) {
-                  const header = storedUrl.substring(5, commaIdx);
-                  const mimePart = header.split(';')[0];
-                  conversationMediaBase64 = storedUrl.substring(commaIdx + 1);
-                  conversationMediaMime = mimePart || storedMime;
-                }
-              } else if (storedUrl.startsWith('meta:')) {
-                // Meta/WhatsApp Business API: ID de mídia — baixar via Graph API
-                const mediaId = storedUrl.slice(5);
-                try {
-                  const { data: conv } = await supabase
-                    .from('messaging_conversations')
-                    .select('channel_id')
-                    .eq('id', conversationId)
-                    .maybeSingle();
-                  if (conv?.channel_id) {
-                    const { data: ch } = await supabase
-                      .from('messaging_channels')
-                      .select('credentials')
-                      .eq('id', conv.channel_id)
-                      .maybeSingle();
-                    const token = ((ch?.credentials as Record<string, unknown> | null)?.accessToken
-                      ?? (ch?.credentials as Record<string, unknown> | null)?.access_token) as string | undefined;
-                    if (token) {
-                      const infoRes = await fetch(`https://graph.facebook.com/v25.0/${mediaId}`, {
-                        headers: { Authorization: `Bearer ${token}` },
-                        signal: AbortSignal.timeout(10000),
-                      });
-                      if (infoRes.ok) {
-                        const info = await infoRes.json() as { url?: string };
-                        if (info.url) {
-                          const mediaRes = await fetch(info.url, {
-                            headers: { Authorization: `Bearer ${token}` },
-                            signal: AbortSignal.timeout(20000),
-                          });
-                          if (mediaRes.ok) {
-                            const buf = await mediaRes.arrayBuffer();
-                            conversationMediaBase64 = Buffer.from(new Uint8Array(buf)).toString('base64');
-                            conversationMediaMime = storedMime;
-                          }
-                        }
-                      }
-                    }
-                  }
-                } catch { /* falha no download Meta — continua sem mídia */ }
-              } else {
-                // Z-API / outro: tenta baixar via fetch
-                try {
-                  const res = await fetch(storedUrl, { signal: AbortSignal.timeout(10000) });
-                  if (res.ok) {
-                    const buf = await res.arrayBuffer();
-                    conversationMediaBase64 = Buffer.from(new Uint8Array(buf)).toString('base64');
-                    conversationMediaMime = storedMime;
-                  }
-                } catch { /* URL expirada ou sem acesso — continua sem imagem */ }
+              const downloaded = await downloadMediaUrl(storedUrl, storedMime, channelId, supabase as never);
+              if (downloaded) {
+                conversationMediaBase64 = downloaded.base64;
+                conversationMediaMime = downloaded.mime;
               }
             }
           }
@@ -319,16 +334,28 @@ export async function POST(req: Request) {
 
     let result;
 
-    if (effectiveBillBase64) {
-      const mime = effectiveBillMime.toLowerCase();
-      const isPdf = mime.includes('pdf');
-      const billContentPart = isPdf
-        ? { type: 'file' as const, data: effectiveBillBase64, mediaType: 'application/pdf' as const }
-        : { type: 'image' as const, image: `data:${mime};base64,${effectiveBillBase64}` };
+    // Monta partes de conteúdo: áudios + conta de luz + texto
+    const hasAudio = audioFiles.length > 0;
+    const hasMedia = !!effectiveBillBase64 || hasAudio;
 
-      const conversaText = conversationText
-        ? `Além da conta de energia, o contexto da conversa com o cliente:\n\n${conversationText}${productsContext}`
-        : `Analise esta conta de energia e extraia os dados para dimensionamento solar.${productsContext}`;
+    if (hasMedia) {
+      const audioParts = audioFiles.map(a => {
+        // Gemini aceita audio/ogg, audio/mp3, audio/wav, audio/aac, audio/flac
+        const mime = (a.mime.startsWith('audio/') ? a.mime : 'audio/ogg') as 'audio/ogg' | 'audio/mp3' | 'audio/wav' | 'audio/aac' | 'audio/flac';
+        return { type: 'file' as const, data: a.base64, mediaType: mime };
+      });
+
+      const billPart = effectiveBillBase64
+        ? (effectiveBillMime.toLowerCase().includes('pdf')
+            ? { type: 'file' as const, data: effectiveBillBase64, mediaType: 'application/pdf' as const }
+            : { type: 'image' as const, image: `data:${effectiveBillMime};base64,${effectiveBillBase64}` })
+        : null;
+
+      const audioInstruction = hasAudio
+        ? `Há ${audioFiles.length} áudio(s) do cliente acima. Transcreva o conteúdo de cada áudio e use as informações para o dimensionamento.\n\n`
+        : '';
+
+      const conversaText = `${audioInstruction}Conversa e contexto do cliente:\n\n${conversationText}${productsContext}\n\nExtraia os dados técnicos para dimensionamento solar.`;
 
       result = await generateText({
         model,
@@ -338,7 +365,8 @@ export async function POST(req: Request) {
         messages: [{
           role: 'user',
           content: [
-            billContentPart,
+            ...audioParts,
+            ...(billPart ? [billPart] : []),
             { type: 'text' as const, text: conversaText },
           ],
         }],
